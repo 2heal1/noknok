@@ -1,0 +1,25 @@
+services:
+  agentcall:
+    build:
+      context: ..
+    command: ["gateway", "--host", "0.0.0.0", "--public-url", "https://${AGENTCALL_DOMAIN:?Set AGENTCALL_DOMAIN}"]
+    environment:
+      AGENTCALL_SERVER_KEY: ${AGENTCALL_SERVER_KEY:-}
+    restart: unless-stopped
+    # The communication service has no persistent volume and no public host port.
+  https:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      AGENTCALL_DOMAIN: ${AGENTCALL_DOMAIN:?Set AGENTCALL_DOMAIN}
+    volumes:
+      - ./Caddyfile.gateway:/etc/caddy/Caddyfile:ro
+      - tls-data:/data
+      - tls-config:/config
+    restart: unless-stopped
+volumes:
+  # TLS certificates only; no NokNok contacts, subscriptions or transcripts.
+  tls-data:
+  tls-config:

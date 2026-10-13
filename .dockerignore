@@ -1,0 +1,10 @@
+.git
+.agentcall*
+node_modules
+*.tgz
+*.log
+.env
+.env.*
+output
+.deploy
+.noknok*

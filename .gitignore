@@ -1,0 +1,13 @@
+node_modules/
+.agentcall/
+.agentcall-*/
+*.tgz
+*.log
+.DS_Store
+coverage/
+.env
+.env.*
+output/
+.deploy/
+.noknok/
+.noknok-*/

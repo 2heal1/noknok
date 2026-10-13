@@ -1,0 +1,387 @@
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { redactInvitations } from './invitation.mjs';
+
+const MAX_BODY_BYTES = 128 * 1024;
+const MAX_TEXT_BYTES = 32 * 1024;
+const MAX_PARTICIPANTS = 32;
+const MAX_EVENTS = 2000;
+const MAX_ROOM_BYTES = 8 * 1024 * 1024;
+const MAX_MUTATIONS = 4096;
+const MESSAGE_TYPES = new Set(['message', 'request', 'result', 'progress', 'waiting_for_user']);
+const HEADERS = {
+  'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
+  'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+};
+
+class MeetingError extends Error {
+  constructor(status, code, message) { super(message); this.status = status; this.code = code; }
+}
+function fail(status, code, message) { throw new MeetingError(status, code, message); }
+function secret() { return randomBytes(32).toString('base64url'); }
+function equal(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string') return false;
+  const a = Buffer.from(left), b = Buffer.from(right);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+function token(req) {
+  const value = req.headers.authorization;
+  return typeof value === 'string' && value.startsWith('Bearer ') ? value.slice(7) : undefined;
+}
+function positive(value, fallback, label) {
+  const result = value ?? fallback;
+  if (!Number.isSafeInteger(result) || result < 1) throw new TypeError(`${label} must be a positive integer.`);
+  return result;
+}
+function string(body, field, { required = false, max = MAX_TEXT_BYTES, fallback } = {}) {
+  const value = body[field];
+  if (value === undefined && !required) return fallback;
+  if (typeof value !== 'string' || (required && !value.trim()) || Buffer.byteLength(value) > max) {
+    fail(400, 'invalid_request', `${field} must be ${required ? 'a nonempty' : 'a'} string of at most ${max} bytes.`);
+  }
+  return value;
+}
+function identity(body) {
+  const name = string(body, 'name', { required: true, max: 256 }).trim();
+  if (/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(name)) fail(400, 'invalid_request', 'name must be a single-line display name without control characters.');
+  const kind = body.kind === undefined ? 'agent' : body.kind;
+  if (!['agent', 'human'].includes(kind)) fail(400, 'invalid_request', 'kind must be agent or human.');
+  return { name, kind };
+}
+function requestId(body) { return string(body, 'requestId', { required: body.requestId !== undefined, max: 128 }); }
+function retryTokenHash(body, id) {
+  const value = body.retryToken;
+  if (id === undefined && value === undefined) return undefined;
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value)
+    || Buffer.from(value, 'base64url').toString('base64url') !== value
+    || equal(value, body.token) || equal(value, id)) {
+    fail(400, 'invalid_request', 'Idempotent creation or joining requires a separate private 32-byte base64url retryToken.');
+  }
+  return createHash('sha256').update(value).digest('hex');
+}
+function integerParam(parsed, name, fallback, max) {
+  const values = parsed.searchParams.getAll(name);
+  if (!values.length) return fallback;
+  if (values.length !== 1 || !/^\d+$/.test(values[0]) || !Number.isSafeInteger(Number(values[0])) || Number(values[0]) > max) {
+    fail(400, 'invalid_request', `${name} must be an integer between 0 and ${max}.`);
+  }
+  return Number(values[0]);
+}
+function iso(time) { return new Date(time).toISOString(); }
+function publicParticipant(participant) {
+  const { token: unused, ...result } = participant;
+  return result;
+}
+function write(res, status, body) {
+  if (res.destroyed || res.writableEnded) return;
+  res.writeHead(status, HEADERS);
+  res.end(JSON.stringify(body));
+}
+function fingerprint(payload) { return createHash('sha256').update(JSON.stringify(payload)).digest('hex'); }
+
+async function readBody(req) {
+  if (req.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+    fail(415, 'unsupported_media_type', 'Use Content-Type: application/json.');
+  }
+  if (Number(req.headers['content-length']) > MAX_BODY_BYTES) {
+    req.resume();
+    fail(413, 'body_too_large', 'Request body exceeds 128 KiB.');
+  }
+  const bytes = await new Promise((resolve, reject) => {
+    const parts = [];
+    let size = 0;
+    function detach() { req.off('data', data); req.off('end', end); req.off('error', error); req.off('aborted', aborted); }
+    function error(cause) { detach(); reject(cause); }
+    function aborted() { error(new Error('Request aborted.')); }
+    function end() { detach(); resolve(Buffer.concat(parts)); }
+    function data(chunk) {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        detach(); parts.length = 0; req.resume();
+        reject(new MeetingError(413, 'body_too_large', 'Request body exceeds 128 KiB.'));
+      } else parts.push(chunk);
+    }
+    req.on('data', data); req.once('end', end); req.once('error', error); req.once('aborted', aborted);
+  });
+  let result;
+  try { result = JSON.parse(bytes.toString('utf8')); } catch { fail(400, 'invalid_json', 'Request body must be valid JSON.'); }
+  if (!result || Array.isArray(result) || typeof result !== 'object') fail(400, 'invalid_request', 'Request body must be a JSON object.');
+  return result;
+}
+
+/** Capability-authenticated, invitation-based meeting relay. All state lives in memory. */
+export function createMeetings(options = {}) {
+  if (typeof options.getUrl !== 'function') throw new TypeError('getUrl is required.');
+  const meetingTtlMs = positive(options.meetingTtlMs, 7_200_000, 'meetingTtlMs');
+  const retentionMs = positive(options.retentionMs, 600_000, 'retentionMs');
+  const maxMeetings = positive(options.maxMeetings, 1000, 'maxMeetings');
+  if (options.serverKey !== undefined && (typeof options.serverKey !== 'string' || !options.serverKey)) throw new TypeError('serverKey must be a nonempty string.');
+  const rooms = new Map();
+  const creations = new Map();
+  let closing = false;
+
+  function summary(room) {
+    return {
+      id: room.id, purpose: room.purpose, context: room.context, state: room.state, hostId: room.hostId,
+      participants: [...room.participants.values()].map(publicParticipant), readyBy: [...room.readyBy],
+      createdAt: iso(room.createdAt), expiresAt: iso(room.expiresAt),
+      ...(room.closedAt === undefined ? {} : { closedAt: iso(room.closedAt) }),
+      purgeAt: iso((room.closedAt ?? room.expiresAt) + retentionMs), retentionMs,
+      ...(room.reason === undefined ? {} : { reason: room.reason }),
+      ...(room.summary === undefined ? {} : { summary: room.summary }),
+    };
+  }
+  function result(room, after = 0) {
+    return { meeting: summary(room), events: room.events.filter(event => event.seq > after), nextCursor: room.seq };
+  }
+  function readableResult(room, after, participant) {
+    const value = result(room, after);
+    if (participant.id !== 'viewer') return value;
+    const credentials = [room.inviteToken, ...[...room.participants.values()].map(item => item.token)];
+    function redact(item) {
+      if (typeof item === 'string') return credentials.reduce((text, credential) => text.replaceAll(credential, '[redacted credential]'), item);
+      if (Array.isArray(item)) return item.map(redact);
+      if (item && typeof item === 'object') return Object.fromEntries(Object.entries(item).map(([key, child]) => [key, redact(child)]));
+      return item;
+    }
+    return redact(redactInvitations(value));
+  }
+  function append(room, type, from, data, at = Date.now()) {
+    const event = { seq: ++room.seq, type, from, at: iso(at), data };
+    room.events.push(event);
+    room.bytes += Buffer.byteLength(JSON.stringify(event));
+    return event;
+  }
+  function wake(room) { for (const poll of [...room.polls]) poll.finish(); }
+  function closeRoom(room, state, reason, text, at = Date.now(), from = 'system') {
+    if (room.state !== 'active') return;
+    room.state = state;
+    room.closedAt = at;
+    room.reason = reason;
+    if (text !== undefined) room.summary = text;
+    return append(room, 'closed', from, { state, reason, ...(text === undefined ? {} : { text }) }, at);
+  }
+  function expire(room, now = Date.now()) {
+    // Expiry is anchored to creation, even if no requests arrive for hours.
+    if (room.state === 'active' && now >= room.expiresAt) {
+      closeRoom(room, 'expired', 'meeting_timeout', undefined, room.expiresAt);
+      wake(room);
+    }
+  }
+  function cleanup() {
+    const now = Date.now();
+    for (const [id, room] of rooms) {
+      expire(room, now);
+      if (room.closedAt !== undefined && now >= room.closedAt + retentionMs) {
+        wake(room);
+        rooms.delete(id);
+        if (room.creationId !== undefined) creations.delete(room.creationId);
+      }
+    }
+  }
+  function getRoom(id) {
+    cleanup();
+    const room = rooms.get(id);
+    if (!room) fail(404, 'meeting_not_found', 'Meeting does not exist or its retention period has elapsed.');
+    return room;
+  }
+  function authenticate(req, room, allowView = false) {
+    const credential = token(req);
+    for (const participant of room.participants.values()) if (equal(credential, participant.token)) return participant;
+    if (allowView && equal(credential, room.viewToken)) return { id: 'viewer' };
+    fail(401, 'unauthorized', `A valid ${allowView ? 'participant or read-only viewer' : 'participant'} Bearer token is required.`);
+  }
+  function active(room) {
+    expire(room);
+    if (room.state !== 'active') fail(409, 'meeting_closed', `Meeting is ${room.state}.`);
+  }
+  function capacity(room, payload, key) {
+    // Reserve one event and enough bytes for a final summary, even when full.
+    if (room.events.length >= MAX_EVENTS - 1 || room.bytes + Buffer.byteLength(JSON.stringify(payload)) + MAX_TEXT_BYTES + 8192 > MAX_ROOM_BYTES) {
+      fail(429, 'meeting_capacity_exceeded', 'Meeting message limit reached; the host can end it and start a new meeting.');
+    }
+    if (key !== undefined && room.mutations.size >= MAX_MUTATIONS) fail(429, 'meeting_capacity_exceeded', 'Meeting request limit reached.');
+  }
+  function replay(room, key, payload, recoveryHash) {
+    if (key === undefined || !room.mutations.has(key)) return undefined;
+    const saved = room.mutations.get(key);
+    // requestId identifies an operation, not an identity. Only a client that
+    // holds the private recovery capability may recover participant credentials.
+    if (saved.retryTokenHash !== undefined && !equal(saved.retryTokenHash, recoveryHash)) fail(401, 'invalid_retry_token', 'A valid private retryToken is required to recover this operation.');
+    if (saved.fingerprint !== fingerprint(payload)) fail(409, 'idempotency_conflict', 'requestId was already used with different input.');
+    return { ...saved.response, meeting: summary(room), nextCursor: room.seq };
+  }
+  function save(room, key, payload, response, recoveryHash) {
+    // Event objects are shared with the bounded transcript. Do not cache a full
+    // growing participant list for every message or readiness update.
+    const { meeting: unused, ...compact } = response;
+    if (key !== undefined) room.mutations.set(key, { fingerprint: fingerprint(payload), response: compact, ...(recoveryHash === undefined ? {} : { retryTokenHash: recoveryHash }) });
+    return response;
+  }
+  function mutationResult(room, event) { return { meeting: summary(room), ...(event ? { event } : {}), nextCursor: room.seq }; }
+  function viewUrl(room) { return `${options.getUrl()}/meeting#id=${room.id}&view=${room.viewToken}`; }
+
+  async function route(req, res, parsed) {
+    if (closing) fail(503, 'relay_closing', 'Relay is shutting down.');
+    if (parsed.pathname === '/v1/meetings') {
+      if (req.method !== 'POST') fail(405, 'method_not_allowed', 'Use POST to create a meeting.');
+      if (options.serverKey !== undefined && !equal(req.headers['x-agentcall-key'], options.serverKey)) fail(401, 'unauthorized', 'A valid X-Agentcall-Key is required to create meetings.');
+      const body = await readBody(req);
+      if (closing) fail(503, 'relay_closing', 'Relay is shutting down.');
+      const payload = { ...identity(body), purpose: string(body, 'purpose', { required: true, max: 8192 }), context: string(body, 'context', { max: 64 * 1024, fallback: '' }) };
+      const id = requestId(body);
+      const recoveryHash = retryTokenHash(body, id);
+      cleanup();
+      if (id !== undefined && creations.has(id)) {
+        const room = getRoom(creations.get(id));
+        return write(res, 200, replay(room, 'create', payload, recoveryHash));
+      }
+      if (rooms.size >= maxMeetings) fail(503, 'relay_capacity_exceeded', 'Relay meeting limit reached; retry after meetings expire.');
+      const now = Date.now();
+      const participant = { id: randomUUID(), name: payload.name, kind: payload.kind, role: 'host', joinedAt: iso(now), token: secret() };
+      const room = {
+        id: randomUUID(), state: 'active', purpose: payload.purpose, context: payload.context, hostId: participant.id,
+        participants: new Map([[participant.id, participant]]), inviteToken: secret(), viewToken: secret(),
+        createdAt: now, expiresAt: now + meetingTtlMs, readyBy: new Set(),
+        events: [], seq: 0, bytes: Buffer.byteLength(JSON.stringify(payload)), polls: new Set(), mutations: new Map(), creationId: id,
+      };
+      append(room, 'started', 'system', { participant: publicParticipant(participant) }, now);
+      rooms.set(room.id, room);
+      const response = {
+        meeting: summary(room), participant: { ...participant },
+        invitationUrl: `${options.getUrl()}/meeting#id=${room.id}&invite=${room.inviteToken}`, viewUrl: viewUrl(room),
+      };
+      if (id !== undefined) { creations.set(id, room.id); save(room, 'create', payload, response, recoveryHash); }
+      return write(res, 201, response);
+    }
+    const match = /^\/v1\/meetings\/([a-zA-Z0-9-]+)(?:\/(invitation|join|events|messages|ready|leave|end))?$/.exec(parsed.pathname);
+    if (!match) fail(404, 'not_found', 'Route not found.');
+    const [, meetingId, operation] = match;
+    const room = getRoom(meetingId);
+    if (operation === 'invitation') {
+      if (!equal(token(req), room.inviteToken)) fail(401, 'invalid_invitation', 'A valid invitation Bearer token is required.');
+      if (req.method !== 'GET') fail(405, 'method_not_allowed', 'Invitation details are read-only.');
+      return write(res, 200, { meeting: summary(room) });
+    }
+    if (operation === 'join') {
+      if (req.method !== 'POST') fail(405, 'method_not_allowed', 'Use POST to join a meeting.');
+      const body = await readBody(req);
+      getRoom(meetingId);
+      if (!equal(string(body, 'token', { required: true, max: 256 }), room.inviteToken)) fail(401, 'invalid_invitation', 'Invitation token is invalid.');
+      const payload = identity(body);
+      const id = requestId(body);
+      const recoveryHash = retryTokenHash(body, id);
+      const key = id === undefined ? undefined : `join:${id}`;
+      const repeated = replay(room, key, payload, recoveryHash);
+      if (repeated) return write(res, 200, repeated);
+      active(room);
+      if (room.participants.size >= MAX_PARTICIPANTS) fail(429, 'meeting_full', 'At most 32 participants can join a meeting.');
+      capacity(room, payload, key);
+      const participant = { id: randomUUID(), ...payload, role: 'participant', joinedAt: iso(Date.now()), token: secret() };
+      room.participants.set(participant.id, participant);
+      room.readyBy.clear();
+      append(room, 'joined', 'system', { participant: publicParticipant(participant) });
+      const response = save(room, key, payload, { meeting: summary(room), participant: { ...participant }, viewUrl: viewUrl(room) }, recoveryHash);
+      wake(room);
+      return write(res, 200, response);
+    }
+
+    const readable = req.method === 'GET' && (operation === undefined || operation === 'events');
+    const participant = authenticate(req, room, readable);
+    if (readable && operation === undefined) return write(res, 200, readableResult(room, 0, participant));
+    if (readable && operation === 'events') {
+      const after = integerParam(parsed, 'after', 0, Number.MAX_SAFE_INTEGER);
+      const waitMs = integerParam(parsed, 'waitMs', 25_000, 25_000);
+      if (after > room.seq) fail(400, 'invalid_cursor', 'after is beyond the last event sequence.');
+      const body = readableResult(room, after, participant);
+      if (body.events.length || waitMs === 0 || room.state !== 'active') return write(res, 200, body);
+      if (room.polls.size >= 64 || [...room.polls].filter(poll => poll.participantId === participant.id).length >= 4) fail(429, 'too_many_polls', 'At most four simultaneous waits per credential and 64 per meeting are allowed.');
+      let timer;
+      const poll = {
+        participantId: participant.id,
+        finish() {
+          if (!room.polls.delete(poll)) return;
+          clearTimeout(timer); res.off('close', disconnected);
+          if (closing) write(res, 503, { error: { code: 'relay_closing', message: 'Relay is shutting down.' } });
+          else if (Date.now() >= (room.closedAt ?? room.expiresAt) + retentionMs) write(res, 404, { error: { code: 'meeting_not_found', message: 'Meeting does not exist or its retention period has elapsed.' } });
+          else write(res, 200, readableResult(room, after, participant));
+        },
+      };
+      function disconnected() { room.polls.delete(poll); clearTimeout(timer); }
+      room.polls.add(poll);
+      res.once('close', disconnected);
+      timer = setTimeout(() => { expire(room); poll.finish(); }, Math.min(waitMs, Math.max(1, room.expiresAt - Date.now())));
+      return;
+    }
+
+    if (req.method !== 'POST' || !['messages', 'ready', 'leave', 'end'].includes(operation)) fail(405, 'method_not_allowed', 'Method is not supported for this route.');
+    if (operation === 'end' && participant.role !== 'host') fail(403, 'host_required', 'Only the meeting host can end the meeting.');
+    if (operation === 'leave' && participant.role === 'host') fail(409, 'host_must_end', 'The host must end the meeting instead of leaving.');
+    const body = await readBody(req);
+    getRoom(meetingId);
+    const id = requestId(body);
+    const key = id === undefined ? undefined : `${participant.id}:${operation}:${id}`;
+    let payload;
+    if (operation === 'messages') {
+      const type = body.type === undefined ? 'message' : body.type;
+      if (!MESSAGE_TYPES.has(type)) fail(400, 'invalid_request', `type must be one of: ${[...MESSAGE_TYPES].join(', ')}.`);
+      payload = { type, text: string(body, 'text', { required: true }) };
+      if (body.replyTo !== undefined) {
+        if (!Number.isSafeInteger(body.replyTo) || body.replyTo < 1) fail(400, 'invalid_request', 'replyTo must reference an existing message sequence.');
+        payload.replyTo = body.replyTo;
+      }
+      if (body.to !== undefined) payload.to = string(body, 'to', { required: true, max: 128 });
+    } else if (operation === 'ready') {
+      if (typeof body.ready !== 'boolean') fail(400, 'invalid_request', 'ready must be a boolean.');
+      payload = { ready: body.ready };
+    } else if (operation === 'end') {
+      payload = { text: string(body, 'text'), reason: string(body, 'reason', { max: 4096, fallback: 'host_ended' }) };
+    } else payload = {};
+    const repeated = replay(room, key, payload);
+    if (repeated) return write(res, 200, repeated);
+    active(room);
+    if (participant.leftAt !== undefined) fail(403, 'participant_left', 'A participant who has left can read but cannot change the meeting.');
+    if (operation !== 'end') capacity(room, payload, key);
+    let event;
+    if (operation === 'messages') {
+      if (payload.replyTo !== undefined && !MESSAGE_TYPES.has(room.events.find(item => item.seq === payload.replyTo)?.type)) fail(400, 'invalid_request', 'replyTo must reference an existing message sequence.');
+      if (payload.to !== undefined) {
+        const target = room.participants.get(payload.to);
+        if (!target || target.leftAt !== undefined) fail(400, 'invalid_request', 'to must identify a current meeting participant.');
+      }
+      room.readyBy.clear();
+      const { type, ...data } = payload;
+      event = append(room, type, participant.id, data);
+    } else if (operation === 'ready') {
+      if (payload.ready) room.readyBy.add(participant.id); else room.readyBy.delete(participant.id);
+      event = append(room, 'ready', participant.id, payload);
+    } else if (operation === 'leave') {
+      participant.leftAt = iso(Date.now());
+      room.readyBy.clear();
+      event = append(room, 'left', 'system', { participant: publicParticipant(participant) });
+    } else event = closeRoom(room, 'ended', payload.reason, payload.text, Date.now(), participant.id);
+    const response = save(room, key, payload, mutationResult(room, event));
+    wake(room);
+    return write(res, 200, response);
+  }
+
+  const timer = setInterval(cleanup, Math.max(10, Math.min(1000, meetingTtlMs, retentionMs)));
+  timer.unref();
+  return {
+    async handle(req, res, parsed) {
+      if (parsed.pathname !== '/v1/meetings' && !parsed.pathname.startsWith('/v1/meetings/')) return false;
+      try { await route(req, res, parsed); }
+      catch (error) {
+        if (error instanceof MeetingError) write(res, error.status, { error: { code: error.code, message: error.message } });
+        else write(res, 500, { error: { code: 'internal_error', message: 'Unexpected meeting relay error.' } });
+      }
+      return true;
+    },
+    close() {
+      if (closing) return;
+      closing = true;
+      clearInterval(timer);
+      for (const room of rooms.values()) wake(room);
+      rooms.clear(); creations.clear();
+    },
+  };
+}

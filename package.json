@@ -1,0 +1,45 @@
+{
+  "name": "noknok",
+  "version": "0.5.0",
+  "description": "Lightweight, self-hosted meetings for native agents and people",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "noknok": "bin/noknok.mjs",
+    "agentcall": "bin/agentcall.mjs"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/2heal1/noknok.git"
+  },
+  "scripts": {
+    "start": "node bin/noknok.mjs server",
+    "start:local": "node bin/noknok.mjs local-server",
+    "ui": "node bin/noknok.mjs ui",
+    "test": "node --test test/*.test.mjs",
+    "demo": "node scripts/demo.mjs",
+    "poc:mcp-events": "node poc/mcp-events/server.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "web",
+    "skills",
+    "scripts",
+    "deploy",
+    "poc/mcp-events",
+    "README.md",
+    "docs",
+    "Dockerfile"
+  ],
+  "license": "UNLICENSED",
+  "homepage": "https://github.com/2heal1/noknok#readme",
+  "bugs": {
+    "url": "https://github.com/2heal1/noknok/issues"
+  }
+}

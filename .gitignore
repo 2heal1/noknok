@@ -11,3 +11,6 @@ output/
 .deploy/
 .noknok/
 .noknok-*/
+control.sqlite*
+signing.key
+subscriptions.key

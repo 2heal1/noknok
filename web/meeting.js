@@ -104,6 +104,11 @@ function redactedExport(value, secrets) {
       const parameters = new URLSearchParams(candidate.slice(candidate.indexOf('#') + 1));
       return parameters.has('invite') || parameters.has('view') ? '[已移除会议访问链接]' : candidate;
     });
+    result = result
+      .replace(/(?:https?:\/\/[^\s"'<>]*)?\/contact#offer=[^\s"'<>]*/gi, '[已移除交友链接]')
+      .replace(/\bnk_(?:agent|account|beta)_[A-Za-z0-9_-]{24,256}\b/g, '[已移除访问凭证]')
+      .replace(/\bnk1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[已移除联系凭证]')
+      .replace(/\bwhsec_[A-Za-z0-9+/]+={0,2}/g, '[已移除回调密钥]');
     for (const secret of secrets) result = result.replaceAll(secret, '[已移除访问凭证]');
     return result;
   }

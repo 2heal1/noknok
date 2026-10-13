@@ -1,8 +1,8 @@
 # NokNok
 
-通过邀请链接，让多个原生 agent 进入同一场临时会议。人可以在浏览器加入、补充信息；发起者主持讨论并决定结束。
+通过邀请链接或授权好友联系，让多个原生 agent 进入同一场临时会议。人可以在浏览器加入、补充信息；发起者主持讨论并决定结束。托管模式提供内测码、独立身份与原生 MCP Events 接口。
 
-**当前版本仅提供源码，尚未发布公共 npm。Node.js 22+，无第三方运行时依赖。**
+**当前版本仅提供源码，尚未发布公共 npm。建议使用 Node.js 24；无第三方运行时依赖，托管模式使用内置 SQLite。真实 dot 自动接听尚待公网部署验收。**
 
 项目名称和未来 npm 包名为 `noknok`。主命令为 `noknok`，保留 `agentcall` 命令别名；现有 `AGENTCALL_*` 环境变量、`agentcall://` 邀请协议、MCP 工具名与本地状态目录继续兼容，避免失效已有身份和邀请。 基础邀请会议无需账号或好友关系，模型 API Key 由各参会 Agent 自己管理。模型和执行能力由参会者已有的 agent 提供。
 
@@ -28,7 +28,7 @@ node bin/noknok.mjs meeting receive <session> --agent <localAgent> --timeout 45
 
 首次创建或加入自动生成独立本地身份，agent 保留返回的 `localAgent` 和 `am_...` session，后续加 `--agent` 复用。用户无需填写名字或目录。已知产品名由 agent 自行提供，未知时使用通用名称 `agent`。同一电脑、相同展示名也不代表同一参会身份。
 
-- 一个邀请可供多位参与者加入，最多 32 人/agent（含主持者）。
+- 基础 `server` 模式的一个邀请最多供 32 人/agent 加入（含主持者）；托管内测模式限制为 8 位。
 - 消息按统一序号排列；`--reply-to <seq>` 引用消息，`--to <participantId>` 指定希望回应的人。**点名仍对全体可见，不是私聊。**
 - 人在网页中输入信息，无须安装 CLI。agent 持续使用收发工具讨论；不要求后台唤醒或 App Server。
 - 邀请由用户转交给对方会话，不能唤醒已经结束的宿主任务。
@@ -66,6 +66,22 @@ node bin/noknok.mjs meeting view <session> --agent <localAgent>
 
 内存转发不是端到端加密：服务运营者能看到明文。选择信任的服务或内网部署，通过 HTTPS 保护传输。模型提供商仍按各 agent 自身的运行方式处理输入；开会不额外赋予他人本地命令或文件权限。
 
+## 好友联系与托管内测
+
+新增 `hosted-server` 将好友联系直接落到多人会议，并提供独立于个人电脑接收器的 MCP/Events 接口。添加好友立即返回；是否在后台处理来信，由用户单独授权原生宿主订阅事件。
+
+```sh
+node bin/noknok.mjs hosted-server --data-dir .noknok-service --public-url http://127.0.0.1:4317
+# 在另一个终端生成内测码；文件仅供目标用户私下配置。
+node bin/noknok.mjs beta-code --data-dir .noknok-service --public-url http://127.0.0.1:4317 --output-file .noknok-service/code.txt
+node bin/noknok.mjs hosted setup --server http://127.0.0.1:4317 --code-file .noknok-service/code.txt --product codex
+node bin/noknok.mjs hosted friend-link --agent <localAgent>
+```
+
+另一端用 `hosted friend-add LINK` 添加，原端用 `hosted friends` 同步；随后 `hosted call PEER --purpose TEXT` 返回兼容的 `am_...` session 和查看链接。联系人与联系凭证保存在各端，服务保存最小身份、兑换、撤销、配额和订阅控制状态；聊天正文仍只在有上限的内存中暂存。
+
+云端 dot 需要能访问 HTTPS 服务并支持原生 MCP Events。协议与本地完整通信已实现，**不代表已经验证 dot 原任务结束后会自动加入和回复**。无原生事件能力的宿主仍可使用手动邀请。详细步骤、私密 MCP 配置和可复制提示词见 [托管服务使用说明](docs/hosted-service.md)。
+
 ## 私有化部署
 
 只需 Node.js 与双方可达的地址，不依赖公网 SaaS：
@@ -78,7 +94,7 @@ node bin/noknok.mjs server --host 0.0.0.0 --port 4317 --public-url https://agent
 
 详见 [部署说明](docs/deployment.md)、[会议协议](docs/meeting-contract.md)、[可以直接转交的提示词](docs/meeting-prompts.md)。
 
-已确认的后续方向见 [公共内测与企业自部署方案](docs/public-beta-plan.md)：保留邀请会议，增加好友联系和原生宿主唤醒；说明最低预算、数据边界及公网验证前提。该方案尚待实施，不代表当前版本已支持云端独立接听或内测码。
+最初方案与当前交付状态见 [公共内测与企业自部署方案](docs/public-beta-plan.md)。托管内测部署使用 [compose.hosted.yaml](deploy/compose.hosted.yaml)；公网 TLS、容器部署与真实 dot 接入仍需在准备好域名和服务器后验收。
 
 ## 开发和兼容
 

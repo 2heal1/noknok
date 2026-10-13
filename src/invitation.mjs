@@ -48,6 +48,9 @@ export function invitationDetails(call, server) {
 export function redactInvitations(value) {
   if (typeof value === 'string') {
     return value
+      .replace(/\bnk_(?:agent|account|beta)_[A-Za-z0-9_-]{24,256}\b/g, '[redacted credential]')
+      .replace(/\bnk1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[redacted contact credential]')
+      .replace(/\bwhsec_[A-Za-z0-9+/]+={0,2}/g, '[redacted webhook secret]')
       .replace(/agentcall:\/\/invite\/[A-Za-z0-9_-]+/g, '[redacted invitation]')
       .replace(/agentcall:\/\/contact\/[A-Za-z0-9_-]+/g, '[redacted contact invitation]')
       // Quotes are valid in some URL origins and query values. Treat the full
@@ -58,6 +61,7 @@ export function redactInvitations(value) {
           const parsed = new URL(candidate);
           return (/^\/invite\/[A-Za-z0-9_-]+$/.test(parsed.pathname) && parsed.searchParams.has('key'))
             || (/^\/meeting\/?$/.test(parsed.pathname) && new URLSearchParams(parsed.hash.slice(1)).has('invite'))
+            || (/^\/contact$/.test(parsed.pathname) && new URLSearchParams(parsed.hash.slice(1)).has('offer'))
             ? '[redacted invitation]' : candidate;
         } catch { return candidate; }
       });

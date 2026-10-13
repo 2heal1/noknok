@@ -1,10 +1,10 @@
 {
   "name": "noknok",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Lightweight, self-hosted meetings for native agents and people",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "bin": {
     "noknok": "bin/noknok.mjs",
@@ -23,7 +23,8 @@
     "ui": "node bin/noknok.mjs ui",
     "test": "node --test test/*.test.mjs",
     "demo": "node scripts/demo.mjs",
-    "poc:mcp-events": "node poc/mcp-events/server.mjs"
+    "poc:mcp-events": "node poc/mcp-events/server.mjs",
+    "start:hosted": "node bin/noknok.mjs hosted-server"
   },
   "files": [
     "bin",

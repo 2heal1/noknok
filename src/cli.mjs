@@ -10,12 +10,26 @@ import { sessionViewUrl } from './invitation.mjs';
 import { contactCommand, decodeContactLink } from './contacts.mjs';
 import { resolveAgentProfile } from './profiles.mjs';
 import { meetingCommand, decodeMeetingLink } from './meeting-client.mjs';
+import { hostedCommand, decodeHostedContact } from './hosted-client.mjs';
 
 const PACKAGE = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const DEFAULT_SERVER = 'http://127.0.0.1:4317';
 const SKILL_PATH = fileURLToPath(new URL('../skills/agentcall/SKILL.md', import.meta.url));
 
-const HELP = `${PACKAGE.name} ${PACKAGE.version} — lightweight meetings for agents and people (Node.js >=22)
+const HELP = `${PACKAGE.name} ${PACKAGE.version} — lightweight meetings for agents and people (Node.js >=22.13)
+
+Hosted beta (contacts plus optional native MCP Events):
+  noknok hosted setup --server URL --code-file FILE [--product PRODUCT]
+  noknok hosted friend-link|friends|inbox|subscription-status --agent HANDLE
+  noknok hosted friend-add LINK --agent HANDLE
+  noknok hosted friend-remove PEER --agent HANDLE
+  noknok hosted call PEER --purpose TEXT --agent HANDLE
+  noknok hosted accept INVITATION_ID --agent HANDLE
+  noknok hosted create --purpose TEXT --agent HANDLE
+  noknok hosted config --agent HANDLE  (prints private MCP credentials)
+Hosted setup stores credentials locally. Keep localAgent; never guess a profile.
+Friend addition returns immediately. Native Events subscription is a separate action.
+Hosted call/accept/create return am_ sessions compatible with meeting send/receive.
 
 Meetings (no account, contacts, or wake adapter required):
   agentcall meeting create --purpose TEXT [--context TEXT|--context-file FILE] [--product PRODUCT] [--server URL]
@@ -79,7 +93,14 @@ Options:
   --meeting-ttl-seconds N Absolute meeting lifetime in seconds (default: 7200; reads do not extend it)
   --help, --version      Show help/version
 
+Hosted service operator commands (Node.js 22.13+):
+  noknok hosted-server --data-dir DIR --public-url ORIGIN [--host 127.0.0.1] [--port 4317]
+  noknok beta-code --data-dir DIR --public-url ORIGIN [--uses 1] [--output-file PRIVATE_FILE]
+  noknok revoke-agent --data-dir DIR --public-url ORIGIN --agent-id ID
+
 Environment:
+  NOKNOK_DATA_DIR        Persistent hosted control state, never chat transcripts
+  NOKNOK_PUBLIC_URL      Canonical hosted HTTPS origin (HTTP loopback for tests)
   AGENTCALL_SERVER       Override the default relay (${DEFAULT_SERVER})
   AGENTCALL_HOME         Local state directory
   AGENTCALL_AGENT        Optional identity binding, equivalent to --agent HANDLE
@@ -110,10 +131,13 @@ identity also returns MCP configuration pinned to its managed profile. mcp does 
 `;
 
 const COMMAND_OPTIONS = {
+  'hosted-server': ['host', 'port', 'public-url', 'data-dir'],
+  'beta-code': ['public-url', 'data-dir', 'uses', 'expires-hours', 'output-file'],
+  'revoke-agent': ['public-url', 'data-dir', 'agent-id'],
   server: ['host', 'port', 'public-url', 'retention-seconds', 'meeting-ttl-seconds'],
   'local-server': ['port', 'retention-seconds', 'meeting-ttl-seconds'],
   gateway: ['host', 'port', 'public-url', 'retention-seconds', 'meeting-ttl-seconds'],
-  meeting: [],
+  meeting: [], hosted: [],
   identity: ['name', 'product', 'server'],
   'friend-link': ['name', 'product', 'server', 'request-id'],
   'friend-add': ['name', 'product', 'request-id'], friends: [], 'friend-remove': [],
@@ -127,6 +151,14 @@ const COMMAND_OPTIONS = {
   send: ['text', 'file', 'type', 'reply-to', 'request-id'],
   finish: ['text', 'file', 'request-id'], hangup: ['reason', 'request-id'],
   status: [], view: [], history: [], sessions: [], skill: ['path'],
+};
+
+const HOSTED_OPTIONS = {
+  setup: ['server', 'code-file', 'name', 'product'],
+  identity: [], 'friend-link': [], 'friend-add': [], friends: [], 'friend-remove': [],
+  call: ['purpose', 'context', 'context-file', 'name', 'request-id'],
+  create: ['purpose', 'context', 'context-file', 'name', 'request-id'],
+  accept: ['name', 'request-id'], inbox: [], 'subscription-status': [], config: [],
 };
 
 const MEETING_OPTIONS = {
@@ -164,7 +196,8 @@ function parse(argv) {
   if (!options.help && !options.version && command && command !== 'help') {
     if (!Object.hasOwn(COMMAND_OPTIONS, command)) throw fail('INVALID_COMMAND', `Unknown command '${command}'. Run agentcall --help.`);
     if (command === 'meeting' && !Object.hasOwn(MEETING_OPTIONS, args[0])) throw fail('INVALID_COMMAND', 'Use agentcall meeting create|join|send|receive|status|ready|end|leave|history|view|sessions.');
-    const allowed = new Set([...(command === 'meeting' ? MEETING_OPTIONS[args[0]] : COMMAND_OPTIONS[command]), 'state-dir', ...(['server', 'local-server', 'gateway', 'skill'].includes(command) ? [] : ['agent'])]);
+    if (command === 'hosted' && !Object.hasOwn(HOSTED_OPTIONS, args[0])) throw fail('INVALID_COMMAND', 'Use noknok hosted setup|identity|friend-link|friend-add|friends|friend-remove|call|create|accept|inbox|subscription-status|config.');
+    const allowed = new Set([...(command === 'hosted' ? HOSTED_OPTIONS[args[0]] : command === 'meeting' ? MEETING_OPTIONS[args[0]] : COMMAND_OPTIONS[command]), 'state-dir', ...(['server', 'local-server', 'gateway', 'skill'].includes(command) ? [] : ['agent'])]);
     for (const key of Object.keys(options)) if (!allowed.has(key)) throw fail('INVALID_ARGUMENT', `Unknown option --${key} for ${command}.`);
   }
   return { command, args, options };
@@ -280,7 +313,7 @@ const FIRST_USE_COMMANDS = new Set(['identity', 'friend-link', 'friend-add']);
 export async function main(argv, { signal, emit } = {}) {
   const parsed = parse(argv);
   const { command, args, options } = parsed;
-  if (options.help || options.version || !command || ['help', 'skill', 'server', 'local-server', 'gateway'].includes(command)) {
+  if (options.help || options.version || !command || ['help', 'skill', 'server', 'local-server', 'gateway', 'hosted-server', 'beta-code', 'revoke-agent'].includes(command)) {
     return execute(parsed, { signal, emit });
   }
   // Invalid invitations must not allocate a profile or follow an arbitrary URL.
@@ -292,10 +325,12 @@ export async function main(argv, { signal, emit } = {}) {
     expectArgs(args, 2);
     decodeMeetingLink(args[1]);
   }
+  if (command === 'hosted' && args[0] === 'friend-add') { expectArgs(args, 2); decodeHostedContact(args[1]); }
   const binding = await resolveAgentProfile({
     agent: options.agent ?? process.env.AGENTCALL_AGENT,
-    stateDir: options['state-dir'], create: FIRST_USE_COMMANDS.has(command) || command === 'mcp' || (command === 'meeting' && ['create', 'join'].includes(args[0])),
+    stateDir: options['state-dir'], create: (command === 'hosted' && args[0] === 'setup') || FIRST_USE_COMMANDS.has(command) || command === 'mcp' || (command === 'meeting' && ['create', 'join'].includes(args[0])),
   });
+  if (!binding && command === 'hosted') throw fail('AGENT_REQUIRED', 'Run hosted setup first, then reuse its exact --agent handle. Do not choose another agent profile from disk.');
   if (!binding && (CONTACT_COMMANDS.has(command) || ['mcp', 'receiver', 'receiver-run'].includes(command))) {
     throw fail('AGENT_REQUIRED', 'Reuse the localAgent handle returned by friend-link, friend-add or identity with --agent HANDLE. For first use, run friend-link or friend-add LINK. Never select another agent’s profile from the disk.');
   }
@@ -334,7 +369,40 @@ async function execute({ command, args, options }, { signal, emit, localAgent } 
     if (options.path !== undefined && options.path !== true) throw fail('INVALID_ARGUMENT', '--path is a flag and does not take a value.');
     return process.stdout.write(options.path ? `${SKILL_PATH}\n` : await readFile(SKILL_PATH, 'utf8'));
   }
+  if (['hosted-server', 'beta-code', 'revoke-agent'].includes(command)) {
+    expectArgs(args, 0);
+    const dataDir = options['data-dir'] || process.env.NOKNOK_DATA_DIR;
+    const publicUrl = options['public-url'] || process.env.NOKNOK_PUBLIC_URL;
+    if (!dataDir || !publicUrl) throw fail('INVALID_ARGUMENT', 'Provide --data-dir and --public-url, or NOKNOK_DATA_DIR/NOKNOK_PUBLIC_URL.');
+    if (command === 'hosted-server') {
+      const { startHostedDeployment } = await import('../deploy/hosted-server.mjs');
+      const app = await startHostedDeployment({ dataDir, publicUrl, host: options.host || '127.0.0.1', port: options.port === undefined ? undefined : number(options.port, 4317, '--port', 65535) });
+      try {
+        await output({ event: 'hosted_listening', url: app.url, origin: app.origin, transcriptStorage: 'bounded-memory', controlStorage: 'sqlite' });
+        if (!signal?.aborted) { if (signal) await once(signal, 'abort'); else await once(app.server, 'close'); }
+      } finally { await app.close(); }
+      return;
+    }
+    const { openHostedStore } = await import('./hosted-store.mjs');
+    const control = openHostedStore({ dataDir, realm: publicUrl });
+    try {
+      if (command === 'revoke-agent') {
+        if (!options['agent-id']) throw fail('INVALID_ARGUMENT', 'Provide --agent-id from the identity to revoke.');
+        control.revokeAgent(options['agent-id']); return output({ revoked: true, agentId: options['agent-id'] });
+      }
+      const uses = number(options.uses, 1, '--uses', 10);
+      const hours = number(options['expires-hours'], 168, '--expires-hours', 8760);
+      const minted = control.mintCode({ uses, expiresInMs: hours * 3600000 });
+      if (options['output-file']) {
+        const { writeFile } = await import('node:fs/promises');
+        await writeFile(options['output-file'], minted.code + '\n', { mode: 0o600, flag: 'wx' });
+        return output({ outputFile: resolve(options['output-file']), uses: minted.uses, expiresAt: minted.expiresAt });
+      }
+      return output(minted);
+    } finally { control.close(); }
+  }
   const store = new Store(options['state-dir']);
+  if (command === 'hosted') return output(await hostedCommand(args[0], args.slice(1), options, { signal, textInput }));
   if (command === 'meeting') return output(await meetingCommand(args[0], args.slice(1), options, { signal, textInput }));
   if (command === 'receiver') {
     expectArgs(args, 1);

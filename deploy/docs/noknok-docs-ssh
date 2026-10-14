@@ -1,0 +1,4 @@
+#!/bin/bash
+set -euo pipefail
+# Root-owned fixed code, running as the unprivileged noknok-docs account.
+exec /usr/bin/python3 /usr/local/lib/noknok-docs/publish.py

@@ -21,7 +21,7 @@ pnpm --filter @noknok/docs build
 pnpm --filter @noknok/docs preview --port 4178
 ```
 
-`dev` 和 `preview` 都绑定回环地址。构建产物位于 `apps/docs/doc_build`。部署时将整个产物目录发布到静态托管服务；不要把仓库根目录当成站点根目录。构建需要安装开发依赖，部署后的页面不需要 Node 服务或模型 API Key。
+`dev` 和 `preview` 都绑定回环地址。构建产物位于 `apps/docs/doc_build`。独立的 **Docs Deploy** 工作流会在文档与相关构建配置合入 main 后发布，也可通过 **Run workflow → main** 单独重部署；见[文档部署](docs-deployment.md)。它不依赖 npm 发版，不升级通信服务。构建需要安装开发依赖，部署后的页面不需要 Node 服务或模型 API Key。
 
 ## 修改位置
 

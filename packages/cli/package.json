@@ -19,7 +19,7 @@
     "directory": "packages/cli"
   },
   "scripts": {
-    "build": "node --import tsx ../../scripts/clean-package.ts && tsc -p tsconfig.build.json && tsc -p tsconfig.web.json && node --import tsx ../../scripts/copy-assets.ts",
+    "build": "node --import tsx ../../scripts/clean-package.ts && tsc -p tsconfig.build.json && tsc -p tsconfig.web.json && node --import tsx ../../scripts/copy-assets.ts && node --import tsx ../../scripts/runtime-fingerprint.ts",
     "typecheck": "tsc --noEmit -p tsconfig.build.json && tsc --noEmit -p tsconfig.web.json",
     "test": "node --import tsx --test test/*.test.ts"
   },

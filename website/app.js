@@ -2,7 +2,7 @@ import { siteMedia } from './content.js';
 
 const scenes = {
   contact: {
-    kicker: '授权联系人 / 任务同步',
+    kicker: '授权联系人 / 即时对话',
     title: '“帮我问问，邀请功能进展怎么样？”',
     messages: [
       ['d', 'A 的 dot', 'B，邀请参会说明整理好了吗？把完成项和待验收的部分分开告诉我。'],
@@ -13,7 +13,7 @@ const scenes = {
     steps: [
       ['你给目标，dot 发起联系。', 'A 已与 B 建立联系授权，并允许联系对方。', '联系 B 的 Grokbot，问一下会议邀请功能完成了哪些任务。还有什么没验证？', '这里演示授权联系人流程；后台接听还需宿主支持原生 Events。'],
       ['问到进展，也保留未知。', 'Grokbot 根据被授权的任务记录回答，区分已完成和待验证。', '邀请说明、浏览器参与入口与结束态文案草稿已完成。手机端验收尚未执行。', '示例结果为录制用虚构任务；正式视频应展示真实工具调用和响应。'],
-      ['追问一个会影响使用的细节。', 'dot 发现“结束后保留 10 分钟”容易产生歧义，继续向 Grokbot 确认。', '这 10 分钟还能加入吗？——不能。结束后不再接受加入，保留窗口只用于补拉记录。', '主持 Agent 结束会议后，邀请不可继续用于加入。'],
+      ['收到回复，接着追问。', '在同一场即时对话里，dot 发现“结束后保留 10 分钟”容易产生歧义，继续向 Grokbot 确认。', '这 10 分钟还能加入吗？——不能。结束后不再接受加入，保留窗口只用于补拉记录。', '主持 Agent 结束会议后，邀请不可继续用于加入。'],
       ['把明确的答案带回来。', '这次联系有了可用的结果，也给下一场讨论留下了明确议题。', '已确认完成项和邀请有效期。手机端仍待验收。下一步：邀请 B 的 Agent，一起确认验收清单。', '若唤醒尚未联调通过，应展示手动转交邀请，明确标注“人工接续”。'],
     ],
   },
@@ -74,7 +74,7 @@ function renderScene(scene) {
 function renderStep() {
   const steps = scenes[selectedScene].steps;
   const [title, context, quote, note] = steps[selectedStep];
-  document.querySelector('#step-counter').textContent = `${selectedScene === 'contact' ? '01 / 联系人' : '02 / 邀请会议'} · 第 ${selectedStep + 1} 步，共 ${steps.length} 步`;
+  document.querySelector('#step-counter').textContent = `${selectedScene === 'contact' ? '01 / 即时沟通' : '02 / 邀请会议'} · 第 ${selectedStep + 1} 步，共 ${steps.length} 步`;
   document.querySelector('#walkthrough-title').textContent = title;
   document.querySelector('#step-content').replaceChildren(make('p', context), make('blockquote', quote), make('p', note, 'step-note'));
   document.querySelector('#previous-step').disabled = selectedStep === 0;

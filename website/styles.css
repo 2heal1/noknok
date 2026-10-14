@@ -119,11 +119,11 @@ p { color: var(--muted); }
 .sample-agent .product-avatar { background: #fff; }
 .sample-agent strong { font-size: 10px; font-weight: 500; }
 .sample-agent p { font-size: 12px; line-height: 1.8; color: #50504c; margin-top: 5px; }
-.sample-agent .session-avatar { font: 11px var(--font); background: #e7e7e2; color: #4c5046; }
 .invite-views figcaption { margin-top: 12px; text-align: center; font-size: 12px; }
-.session-avatar { background: #ededeb; color: #555a4f; font: 24px var(--font); }
+.claude-avatar { background: #fff; }
 .session-message { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; background: #f3f5ee; }
 .session-message > span { display: grid; place-items: center; font-size: 10px; background: #e3e8da; color: #536146; width: 23px; height: 23px; border-radius: 50%; flex-shrink: 0; }
+.session-message > .claude-avatar { background: transparent; }
 .session-message p { color: #526046; font-size: 11px; }
 @media (max-width: 700px) {
   .story-preview.is-meeting { padding: 27px 22px; }

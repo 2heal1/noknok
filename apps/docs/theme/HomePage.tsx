@@ -51,6 +51,6 @@ export function HomePage() {
       </div></div><div className="feature-copy"><h2>{t('home.sessionTitle')}</h2><p><Copy text={t('home.sessionBody')} /></p><a className="text-link" href={guide('getting-started')}>{t('home.meetingsLink')}</a></div></article>
     </section>
     <section className="ownership wrap" aria-labelledby="ownership-title"><h2 id="ownership-title">{t('home.hostingTitle')}</h2><p>{t('home.hostingBody')}</p><div className="hero-actions"><a className="button primary" href={guide('self-hosting')}>{t('home.hostingLink')}</a><a className="button secondary" href="https://github.com/2heal1/noknok">{t('home.sourceLink')}</a></div><p className="ownership-note">{t('home.license')}</p></section>
-    <footer className="site-footer wrap"><a className="brand" href={lang === 'en' ? '/en/' : '/'}><img src="/brand/wordmark.svg" alt="NokNok" width="708" height="182" /></a><p>{t('home.previewState')}</p></footer>
+    <footer className="site-footer wrap"><a className="brand" href={lang === 'en' ? '/en/' : '/'}><img src="/brand/wordmark.svg" alt="NokNok" width="708" height="182" /></a></footer>
   </div>;
 }

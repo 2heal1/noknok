@@ -1,0 +1,61 @@
+.noknok-home .contact-preview {
+  width: min(800px, 100%);
+  padding: 30px 38px 36px;
+  color: #252823;
+  font: 14px/1.65 var(--font);
+}
+.noknok-home .contact-preview .contact-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  background: #fff;
+  border-radius: 50%;
+}
+.noknok-home .contact-preview .contact-avatar img {
+  display: block;
+  width: 76%;
+  height: 76%;
+  object-fit: contain;
+}
+.noknok-home .contact-preview .contact-presence {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 26px;
+  color: #696963;
+  font-size: 11px;
+  font-weight: 500;
+}
+.noknok-home .contact-preview .contact-presence-avatars { display: flex; align-items: center; }
+.noknok-home .contact-preview .contact-presence-avatars .contact-avatar { width: 24px; height: 24px; border: 2px solid #fff; }
+.noknok-home .contact-preview .contact-presence-avatars .contact-avatar + .contact-avatar { margin-left: -4px; }
+.noknok-home .contact-preview .story-messages { display: flex; flex-direction: column; gap: 28px; padding: 0; min-height: 0; }
+.noknok-home .contact-preview .contact-system-event { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; color: #92928a; font-size: 10px; }
+.noknok-home .contact-preview .contact-system-event time { font: 9px/1.8 'SFMono-Regular', Consolas, 'Liberation Mono', monospace; }
+.noknok-home .contact-preview .story-message { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 14px; align-items: start; }
+.noknok-home .contact-preview .contact-message-body { min-width: 0; }
+.noknok-home .contact-preview .contact-message-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 20px; margin-bottom: 5px; font-size: 12px; }
+.noknok-home .contact-preview .contact-message-heading strong { font-weight: 500; overflow-wrap: anywhere; }
+.noknok-home .contact-preview .contact-message-type { padding: 1px 6px; border-radius: 4px; background: #f6f6f3; color: #696963; font-size: 9px; white-space: nowrap; }
+.noknok-home .contact-preview .contact-message-heading time { margin-left: auto; color: #92928a; font: 9px/1.5 'SFMono-Regular', Consolas, 'Liberation Mono', monospace; white-space: nowrap; }
+.noknok-home .contact-preview .contact-message-details { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex-shrink: 0; color: #92928a; letter-spacing: 1px; }
+.noknok-home .contact-preview .contact-message-body p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; color: #50504c; font-size: 14px; line-height: 1.8; }
+@media (max-width: 700px) {
+  .noknok-home .contact-preview { padding: 26px 24px 30px; }
+}
+@media (max-width: 480px) {
+  .noknok-home .contact-preview { padding: 24px 20px 28px; }
+  .noknok-home .contact-preview .story-messages { gap: 25px; }
+  .noknok-home .contact-preview .story-message { grid-template-columns: 28px minmax(0, 1fr); gap: 11px; }
+  .noknok-home .contact-preview .contact-avatar { width: 28px; height: 28px; }
+  .noknok-home .contact-preview .contact-message-heading { gap: 5px; font-size: 11px; }
+  .noknok-home .contact-preview .contact-message-heading time { font-size: 8px; }
+  .noknok-home .contact-preview .contact-message-type { font-size: 8px; }
+  .noknok-home .contact-preview .contact-message-body p { font-size: 13px; }
+  .noknok-home .contact-preview .contact-system-event { font-size: 9px; }
+  .noknok-home .contact-preview .contact-system-event time { font-size: 8px; }
+}

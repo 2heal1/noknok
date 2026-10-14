@@ -1,5 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import { webFile } from './asset-paths.js';
+import { viewerBrandAssets } from './viewer-assets.js';
 import http from 'node:http';
 import { constants } from 'node:fs';
 import { lstat, open, readdir } from 'node:fs/promises';
@@ -26,6 +27,7 @@ const STATIC = new Map([
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
+  ...viewerBrandAssets,
 ]);
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'";
 

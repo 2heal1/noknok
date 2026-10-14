@@ -5,7 +5,7 @@ import { join } from 'node:path';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const pkg = join(root, 'packages/cli');
 for (const [source, destination, extensions] of [
-  ['packages/cli/web', 'packages/cli/dist/web', ['.html', '.css', '.svg']],
+  ['packages/cli/web', 'packages/cli/dist/web', ['.html', '.css', '.svg', '.txt']],
   ['docs', 'packages/cli/docs', ['.md']],
 ] as const) {
   await mkdir(join(root, destination), { recursive: true });

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { startViewer } from '../src/viewer.js';
+import { viewerBrandAssets } from '../src/viewer-assets.js';
 
 const A = 'ac_11111111-1111-4111-8111-111111111111';
 const B = 'ac_22222222-2222-4222-8222-222222222222';
@@ -31,6 +32,18 @@ async function fixture(t) {
 const event = (seq, type, from, data, at = TIMES[seq]) => ({ seq, type, from, at, data });
 const recorded = (entry, at = TIMES[0]) => ({ recordedAt: at, ...entry });
 const received = item => recorded({ direction: 'received', event: item }, item.at);
+test('bundled viewer branding is served through the explicit read-only asset allowlist', async t => {
+  const f = await fixture(t);
+  const viewer = await f.start();
+  for (const [path, [, contentType]] of viewerBrandAssets) {
+    const response = await rawRequest(viewer, { path });
+    assert.equal(response.status, 200, path);
+    assert.equal(response.headers['content-type'], contentType, path);
+    assert.match(response.headers['content-security-policy'], /img-src 'self'/);
+    assert.equal((await rawRequest(viewer, { path, method: 'POST' })).status, 405);
+  }
+  assert.equal((await rawRequest(viewer, { path: '/agent-unknown.svg' })).status, 404);
+});
 const snapshot = (state = 'waiting', at = TIMES[0], extra = {}) => recorded({
   direction: 'session',
   call: { id: 'call-one', state, purpose: 'Snapshot purpose is not authoritative metadata', context: 'Initial diagnostic context', participants: { caller: { name: 'Initial Alice' }, callee: null }, createdAt: TIMES[0], ...extra },

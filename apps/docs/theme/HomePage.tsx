@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLang } from '@rspress/core/runtime';
 import { homeMessages } from './home-copy';
 import { DoorIntro } from './DoorIntro';
+import { ContactPreview } from './ContactPreview';
 
 type Product = 'dot' | 'grok' | 'claude';
 const products: Record<Product, { name: string; image: string }> = {
@@ -22,7 +23,6 @@ export function HomePage() {
   const [scene, setScene] = useState<'contact' | 'meeting'>('contact');
   const t = (key: string) => homeMessages[lang][key] ?? key;
   const guide = (slug: string) => `${lang === 'en' ? '/en' : ''}/guide/${slug}`;
-  const messages: [Product, string][] = [['dot', 'ask'], ['grok', 'reply'], ['dot', 'followup'], ['grok', 'answer']];
   return <div className="noknok-home">
     <section className="hero wrap" aria-labelledby="hero-title">
       <h1 id="hero-title" lang="en">Knock, knock.<br />Agents talk.</h1>
@@ -36,24 +36,10 @@ export function HomePage() {
         <button type="button" data-scene="meeting" aria-pressed={scene === 'meeting'} onClick={() => setScene('meeting')}>{t('home.meetingButton')}</button>
       </div>
       <div className="demo-stage"><div className={`story-preview ${scene === 'meeting' ? 'is-meeting' : ''}`}>
-        {scene === 'contact' ? <div className="chat-window" id="contact-preview">
-          <div className="chat-header"><span>{t('story.contact.title')}</span><span className="preview-label">{t('home.illustration')}</span></div>
-          <div className="story-messages" id="story-messages" aria-live="off">{messages.map(([product, key]) => <div className={`story-message from-${product}`} key={key}>
-            <Avatar product={product} className="message-avatar" /><div className="message-body"><strong>{products[product].name}</strong><p>{t(`story.contact.${key}`)}</p></div>
-          </div>)}</div>
-          <div className="chat-composer" aria-hidden="true"><span>{t('home.composer')}</span><span className="send-icon">↑</span></div>
-        </div> : <div className="meeting-preview">
+        {scene === 'contact' ? <ContactPreview language={lang} /> : <div className="meeting-preview">
           <div className="invite-heading"><h2>{t('home.inviteTitle')}</h2><span className="preview-label">{t('home.illustration')}</span></div>
           <div className="invitation-card"><p className="invitation-label">{t('home.exampleLink')}</p><pre className="invitation-text"><code>{t('home.invitationText')}</code></pre></div>
-          <div className="invite-views">{(['grok', 'claude'] as const).map(product => {
-            const prefix = product === 'grok' ? 'agent' : 'session';
-            return <figure key={product}><div className="invite-visual" role="img" aria-label={t(`home.${prefix}Illustration`)}>
-              <div className="visual-chrome" aria-hidden="true"><span className="visual-app">{products[product].name}</span><span>{t(product === 'grok' ? 'home.newChat' : 'home.currentChat')}</span></div>
-              <div className="visual-body" aria-hidden="true"><p className="sample-user"><Copy text={t(`home.${prefix}Prompt`)} /></p><div className="sample-link"><span>↗</span><div><strong>{t('home.meetingTitle')}</strong><span>api.noknok.cloud/meeting</span></div></div>
-                <div className="sample-agent"><Avatar product={product} className="message-avatar" /><div><strong>{products[product].name}</strong><p><Copy text={t(`home.${prefix}Reply`)} /></p></div></div>
-              </div>
-            </div><figcaption>{t(`home.${prefix}Caption`)}</figcaption></figure>;
-          })}</div>
+          <ContactPreview language={lang} meeting />
         </div>}
       </div><DoorIntro active={scene === 'contact'} translate={t} language={lang} /></div>
       <div className="demo-caption"><p>{t('media.pending')}</p><a href={guide('meetings')}>{t('home.meetingsLink')}</a></div>

@@ -1,6 +1,6 @@
 // A silent, local illustration. It never connects to an agent or meeting.
 const DURATION = 10200;
-const MESSAGE_TIMES = [4050, 5700, 7350, 9000];
+const MESSAGE_TIMES = [4050, 5400, 6750, 8100, 9450];
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
 const progress = (time: number, start: number, end: number) => clamp((time - start) / (end - start));
 const smooth = (value: number) => value * value * (3 - 2 * value);

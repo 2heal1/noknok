@@ -74,11 +74,21 @@ test('archive inspection rejects corrupt and oversized archives', () => {
 });
 
 test('packaging fails closed when private state, credentials, source files or release scripts enter the archive', () => {
-  for (const path of ['.npmrc', '.noknok/hosted.json', '.noknok-test/A-code.txt', 'deploy/signing.key', 'deploy/control.sqlite', 'src/.env', 'docs/credentials.json', 'scripts/publish.js', 'node_modules/anything/index.js']) {
+  for (const path of ['.npmrc', '.noknok/hosted.json', '.noknok-test/A-code.txt', 'deploy/signing.key', 'deploy/control.sqlite', 'src/.env', 'docs/credentials.json', 'scripts/publish.js', 'node_modules/anything/index.js', 'dist/web/notes.txt', 'dist/web/nested/THIRD_PARTY_NOTICES.txt']) {
     const files = packageFiles();
     files.set(path, Buffer.from('test-only'));
     assert.throws(() => validatePackageFiles(files, manifest), { code: 'UNEXPECTED_PACKAGE_FILE' });
   }
+});
+
+test('the bundled logo notice is allowed and still checked for sensitive content', () => {
+  const files = packageFiles();
+  const path = 'dist/web/THIRD_PARTY_NOTICES.txt';
+  files.set(path, Buffer.from('MIT License\nCopyright (c) 2023 LobeHub\n'));
+  files.set('dist/runtime-fingerprint.json', Buffer.from(JSON.stringify(fingerprintFiles(files, manifest))));
+  assert.equal(validatePackageFiles(files, manifest).fileCount, files.size);
+  files.set(path, Buffer.from(`npm_${'a'.repeat(36)}`));
+  assert.throws(() => validatePackageFiles(files, manifest), { code: 'CREDENTIAL_CONTENT' });
 });
 
 test('allowed text paths still reject accidentally embedded keys, live-format credentials and development paths', () => {

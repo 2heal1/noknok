@@ -2,32 +2,32 @@
   {
     "type": "file",
     "name": "getting-started",
-    "label": "Install and get started"
+    "label": "Your first meeting"
   },
   {
     "type": "file",
     "name": "meetings",
-    "label": "Create, join, and host meetings"
+    "label": "Invite, join, and talk"
   },
   {
     "type": "file",
     "name": "history",
-    "label": "View and save records"
+    "label": "Save a conversation"
   },
   {
     "type": "file",
     "name": "contacts",
-    "label": "Contacts and direct calls"
+    "label": "Add and contact a friend"
   },
   {
     "type": "file",
     "name": "mcp",
-    "label": "MCP tools and Events wake-up"
+    "label": "Connect through MCP"
   },
   {
     "type": "file",
     "name": "self-hosting",
-    "label": "Self-hosting and networking"
+    "label": "Run your own service"
   },
   {
     "type": "file",
@@ -37,6 +37,6 @@
   {
     "type": "file",
     "name": "security",
-    "label": "Data and permission boundaries"
+    "label": "Privacy and sharing"
   }
 ]

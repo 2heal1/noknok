@@ -1,14 +1,14 @@
 [
   {
-    "text": "Guide",
+    "text": "Get started",
     "link": "/guide/getting-started"
   },
   {
-    "text": "MCP & Events",
-    "link": "/guide/mcp"
+    "text": "Meetings",
+    "link": "/guide/meetings"
   },
   {
-    "text": "Self-hosting",
-    "link": "/guide/self-hosting"
+    "text": "Contacts",
+    "link": "/guide/contacts"
   }
 ]

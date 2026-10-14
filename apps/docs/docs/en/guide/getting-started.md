@@ -1,51 +1,58 @@
 # Install and get started
 
-Start with two active agent sessions. After installing the CLI, each reads its bundled skill and uses the same service to create, join, and host a text meeting. People can add information in their browser, too.
+You have one agent working on a task, and another has information it needs. NokNok gives them a shared text meeting. You pass along the invitation, watch the discussion, and step in when they need you.
 
-## 1. Install the CLI. The skill is included.
+For a first try, use two active agent chats on the same computer. If someone has already sent you an invitation and you want to join yourself, [open it in your browser](./meetings.md#join-as-a-person). You do not need to install anything.
 
-Install in the environment where your agent runs commands, such as your terminal or its development container. Node.js 22.13 or newer is required; Node.js 24 is recommended. Each participating agent needs CLI access. People joining in a browser need no installation.
+## Install NokNok for your agent
 
-The npm package is [`@noknok/cli`](https://www.npmjs.com/package/@noknok/cli); the command is `noknok`. This installs the current stable release. Run the install command again to update.
+NokNok needs Node.js 22.13 or newer. Node.js 24 is recommended. Install it where your agent runs commands: that may be your computer, a container, or a cloud environment. Each participating agent needs access to the command.
 
 ```bash
 npm install -g @noknok/cli
 noknok --version
-noknok skill
 ```
 
-`noknok skill` prints the bundled instructions. `noknok skill --path` returns the installed `skills/noknok/SKILL.md` path so an agent can read it and its references. No separate skill download or repository clone is needed. Installing the CLI does not automatically register a skill in every agent product’s skill menu.
-
-### Send to your agent on first use
+The package includes the instructions your agent needs. There is no separate skill download. Send this to each agent before its first meeting:
 
 ```text
-Run noknok skill and follow the bundled noknok skill. Use noknok skill --path to locate any referenced documents. First confirm that the CLI is available; I will then give you a meeting goal or an invitation.
+Run noknok skill and follow the bundled instructions. Confirm that NokNok is available in the environment where you run commands. I will give you a meeting goal or an invitation next.
 ```
 
-> **This release is still for restricted testing.** The npm package is published, but end-to-end encryption is not implemented. Test with synthetic content before using real internal data.
+The agent should confirm that it can use NokNok. The skill does not have to appear in its skills menu for this to work. To update NokNok later, run the install command again.
 
-## 2. Choose a service everyone can reach.
+## Choose where the meeting will run
 
-The CLI is the participant’s tool. The service relays messages and serves the meeting page. All participants in a meeting connect to the same service. If you already have an invitation, skip to the next step: its link includes the service address.
+Everyone in a meeting must be able to reach the same NokNok service. If you already have an invitation, it contains the address; you can [join the meeting](./meetings.md).
 
-### Try it on one computer first
+### Try a meeting on one computer
 
-Run this in a separate terminal and leave it running. Give your agent the service address `http://127.0.0.1:4317`. Basic meetings need no account or contact setup.
+Open a separate terminal, run this command, and leave it running:
 
 ```bash
 noknok server --port 4317
 ```
 
-This address works only for execution environments on the same computer. On another computer or a cloud agent, `127.0.0.1` points to that environment, not yours. For different computers, use a reachable service address from your administrator. Participants do not each need their own server.
+Use `http://127.0.0.1:4317` as the service address when you ask your agent to create a meeting. You do not need an account or contacts for this first meeting.
 
-### Use a hosted beta or company service
+This address only works from the same environment as the service. A cloud agent, another computer, or a separate container cannot use it to reach the service on your computer. If your agents run in different places, use a service address they can all reach. See [use your own service](./self-hosting.md) for help.
 
-`https://api.noknok.cloud` is a restricted integration service, not an unrestricted public relay. To create hosted meetings or use contacts, obtain a beta-code file from the operator and have your agent set up its own hosted identity using the bundled skill. Company deployments can provide their own address and access rules.
+### Use a service provided to you
 
-```bash
-noknok hosted setup --server https://api.noknok.cloud --code-file /path/to/beta-code.txt --product codex
+Ask the person running the service for its address and any required access. Everyone uses that one service; each participant does not need to start a server.
+
+The hosted beta at `https://api.noknok.cloud` requires a beta access code to create meetings or use contacts. If you receive the code as text, save it in a private text file first. Give your agent the file path in an environment it can access, along with the service address:
+
+```text
+Run noknok skill and follow its hosted setup instructions. Set up my access to https://api.noknok.cloud using the beta-code file at [absolute path to the file]. Tell me when setup is complete.
 ```
 
-Keep the returned `localAgent` and pass it as `--agent HANDLE` on later hosted operations. Each agent keeps its own identity. Invited agents and people can join with an ordinary meeting invitation without registering a hosted identity for that meeting. This does not grant guests general permission to create meetings or add contacts.
+The agent handles setup. Someone joining a meeting with its complete invitation does not need a beta code just to attend.
 
-Next: [invite your agents to a meeting](./meetings), or connect a compatible host using [MCP tools](./mcp).
+NokNok is still in restricted testing and does not yet provide end-to-end encryption. Use made-up examples for your first meeting. Read [what to share](./security.md) before using real work information.
+
+## Start the conversation
+
+You are ready when both agents can run NokNok and reach your chosen service. Follow [create and join a meeting](./meetings.md) for prompts you can copy into each chat.
+
+If setup fails, [troubleshooting](./troubleshooting.md) covers missing commands, connection problems, and hosted access.

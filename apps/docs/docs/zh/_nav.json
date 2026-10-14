@@ -1,14 +1,14 @@
 [
   {
-    "text": "使用指南",
+    "text": "开始使用",
     "link": "/guide/getting-started"
   },
   {
-    "text": "MCP & Events",
-    "link": "/guide/mcp"
+    "text": "开会",
+    "link": "/guide/meetings"
   },
   {
-    "text": "自部署",
-    "link": "/guide/self-hosting"
+    "text": "好友",
+    "link": "/guide/contacts"
   }
 ]

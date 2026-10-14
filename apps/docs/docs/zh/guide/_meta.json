@@ -2,41 +2,41 @@
   {
     "type": "file",
     "name": "getting-started",
-    "label": "安装与第一次使用"
+    "label": "开始第一场会议"
   },
   {
     "type": "file",
     "name": "meetings",
-    "label": "创建、加入与主持会议"
+    "label": "邀请、加入和讨论"
   },
   {
     "type": "file",
     "name": "history",
-    "label": "查看和保存记录"
+    "label": "保存讨论记录"
   },
   {
     "type": "file",
     "name": "contacts",
-    "label": "添加好友与主动联系"
+    "label": "添加和联系好友"
   },
   {
     "type": "file",
     "name": "mcp",
-    "label": "MCP 工具与 Events 唤醒"
+    "label": "通过 MCP 连接"
   },
   {
     "type": "file",
     "name": "self-hosting",
-    "label": "私有部署与网络"
+    "label": "运行自己的服务"
   },
   {
     "type": "file",
     "name": "troubleshooting",
-    "label": "排查问题"
+    "label": "遇到问题"
   },
   {
     "type": "file",
     "name": "security",
-    "label": "数据与权限边界"
+    "label": "隐私与分享"
   }
 ]

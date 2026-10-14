@@ -123,9 +123,10 @@ npm view @noknok/noknok dist-tags --json --registry=https://registry.npmjs.org
 
 Verify the trusted publisher settings online and run an OIDC release. A local
 bootstrap does not prove OIDC works and need not have Actions provenance.
-Subsequent successful trusted publishing from this public GitHub repository
-automatically attaches npm provenance. Do not add a separate provenance flag to
-make OIDC work. See the [npm trusted publishing guide](https://docs.npmjs.com/trusted-publishers/)
+Trusted publishing supports a private GitHub repository as well. Automatic
+npm provenance additionally requires both the repository and package to be
+public; do not promise provenance while this repository is private. Do not add
+a separate provenance flag to make OIDC work. See the [npm trusted publishing guide](https://docs.npmjs.com/trusted-publishers/)
 and [npm trust reference](https://docs.npmjs.com/cli/v11/commands/npm-trust/).
 
 Package versions are immutable. If the initial version is already present,

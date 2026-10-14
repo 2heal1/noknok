@@ -403,7 +403,8 @@ test("statistics storage failure does not prevent registration or encrypted comm
 
 test("SQLite lock stays in the worker; bounded aggregates and retention remain correct", async (t) => {
   const dataDir = await mkdtemp(join(tmpdir(), "noknok-metrics-worker-"));
-  const metrics = createAdminMetrics(dataDir, 20);
+  // Drive the flush explicitly so periodic writes cannot race the observer.
+  const metrics = createAdminMetrics(dataDir, 10000);
   t.after(async () => {
     await metrics.close();
     await rm(dataDir, { recursive: true, force: true });
@@ -411,22 +412,31 @@ test("SQLite lock stays in the worker; bounded aggregates and retention remain c
   await until(() => metrics.snapshot().status === "ok");
   const db = new DatabaseSync(join(dataDir, "metrics.sqlite"));
   t.after(() => db.close());
+  // Only observer queries may wait; the measured event-loop window stays below.
+  db.exec("PRAGMA busy_timeout=1000");
   db.prepare("INSERT INTO daily VALUES (?,?,?)").run(
     "2000-01-01",
     "meetings",
     99
   );
   db.exec("BEGIN EXCLUSIVE");
-  metrics.record("meetings");
-  const before = performance.now();
-  await delay(30);
-  assert.ok(
-    performance.now() - before < 90,
-    "worker lock must not stall the main event loop"
+  try {
+    metrics.record("meetings");
+    metrics.flush();
+    const before = performance.now();
+    await delay(30);
+    assert.ok(
+      performance.now() - before < 90,
+      "worker lock must not stall the main event loop"
+    );
+  } finally {
+    db.exec("ROLLBACK");
+  }
+  // snapshot() includes pending counts, so wait for the committed row instead.
+  await until(() =>
+    db.prepare("SELECT count FROM daily WHERE metric=? AND day<>?")
+      .get("meetings", "2000-01-01")?.count === 1
   );
-  db.exec("ROLLBACK");
-  await until(() => metrics.snapshot().days.some((row) => row.meetings === 1));
-  await delay(80);
   assert.equal(
     db.prepare("SELECT count(*) n FROM daily WHERE day=?").get("2000-01-01")!.n,
     0

@@ -39,7 +39,6 @@
 .noknok-home .hero-install a { color: var(--ink); }
 .noknok-home .hero-install a:hover { text-decoration: underline; text-underline-offset: 4px; }
 .noknok-home .hero-install code { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; }
-.noknok-home .hero-install span { font-size: 11px; }
 .noknok-home .hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 28px; }
 .noknok-home .button { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 43px; padding: 11px 20px; border-radius: 28px; border: 1px solid var(--line); font-size: 13px; font-weight: 500; line-height: 1.5; transition: background .15s; }
 .noknok-home .button.primary { color: white; background: var(--ink); border-color: var(--ink); }

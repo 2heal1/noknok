@@ -1,14 +1,16 @@
+import { encryptedMeetingFixture } from './e2ee-fixture.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { invitationJoinLink } from './meeting-invitation-helper.js';
 import { setTimeout as delay } from 'node:timers/promises';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import { createMeetings } from '../src/meetings.js';
 import { startRelay } from '../src/relay.js';
 import { meetingInvitationText } from '../web/meeting-invitation.js';
-import { decodeMeetingLink } from '../src/meeting-client.js';
+import { decodeMeetingLink, withMeetingKey } from '../src/meeting-client.js';
+import { generateKey, encryptText, contentAAD } from '../src/e2ee.js';
 
 async function fixture(t, options = {}) {
   const relay = await startRelay({ port: 0, ...options });
@@ -20,13 +22,18 @@ async function fixture(t, options = {}) {
     if (!retryTokens.has(key)) retryTokens.set(key, randomBytes(32).toString('base64url'));
     return retryTokens.get(key);
   }
-  async function request(path, { method = 'GET', body, token, headers, signal } = {}) {
+  const encryption = encryptedMeetingFixture();
+  async function rawRequest(path, { method = 'GET', body, token, headers, signal } = {}) {
     const response = await fetch(`${relay.url}${path}`, {
       method, signal,
       headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     return { status: response.status, body: await response.json() };
+  }
+  async function request(path, options = {}) {
+    const response = await rawRequest(path, { ...options, body: await encryption.encode(path, options.body, options.token) });
+    return { ...response, body: await encryption.decode(response.body) };
   }
   async function create(overrides = {}, headers) {
     const response = await request('/v1/meetings', { method: 'POST', body: { name: 'agent-codex', purpose: 'Collect reproduction evidence', context: 'Ticket 42', retryToken: retryToken('create', overrides.requestId), ...overrides }, headers });
@@ -43,24 +50,38 @@ async function fixture(t, options = {}) {
   async function mutate(room, operation, token = room.participant.token, body = {}) {
     return request(`${room.path}/${operation}`, { method: 'POST', body, token });
   }
-  return { ...relay, request, create, join, mutate, retryToken };
+  return { ...relay, rawRequest, request, create, join, mutate, retryToken };
 }
 
-test('HTTP and browser invitations carry setup and complete links that join the same meeting', async t => {
+test('relay serves invitation assets while clients assemble complete encrypted handoffs', async t => {
   const f = await fixture(t);
-  const room = await f.create();
-  const forwarded = [room.invitationText, meetingInvitationText(room.invitationUrl, undefined, 'zh')];
-  for (const invitationText of forwarded) {
-    const link = invitationJoinLink({ ...room, invitationText });
+  const key = generateKey(), encryptionId = randomUUID();
+  const response = await f.rawRequest('/v1/meetings', { method: 'POST', body: {
+    name: 'Host', encryption: { v: 1, id: encryptionId },
+    purpose: await encryptText(key, 'Private goal', contentAAD(encryptionId, 'started', 'system', 'purpose')),
+    context: await encryptText(key, '', contentAAD(encryptionId, 'started', 'system', 'context')),
+  } });
+  assert.equal(response.status, 201);
+  const room = response.body;
+  assert.equal(room.invitationText, undefined, 'The relay cannot produce a complete invitation without the locally held key.');
+  assert.ok(!JSON.stringify(room).includes(key));
+  const invitationUrl = withMeetingKey(room.invitationUrl, key, encryptionId);
+  const viewUrl = withMeetingKey(room.viewUrl, key, encryptionId);
+  for (const invitationText of [meetingInvitationText(invitationUrl, viewUrl), meetingInvitationText(invitationUrl, undefined, 'zh')]) {
+    const link = invitationJoinLink({ ...room, invitationUrl, invitationText });
     const decoded = decodeMeetingLink(link);
-    const joined = await f.request(`/v1/meetings/${decoded.id}/join`, { method: 'POST', body: { token: decoded.token, name: 'Invited agent', kind: 'agent' } });
+    assert.equal(decoded.key, key);
+    assert.equal(decoded.encryptionId, encryptionId);
+    const joined = await f.rawRequest(`/v1/meetings/${decoded.id}/join`, { method: 'POST', body: { token: decoded.token, name: 'Invited agent', kind: 'agent' } });
     assert.equal(joined.status, 200);
     assert.equal(joined.body.meeting.id, room.meeting.id);
   }
-  const asset = await fetch(`${f.url}/meeting-invitation.js`);
-  assert.equal(asset.status, 200);
-  assert.match(asset.headers.get('content-type'), /javascript/);
-  assert.match(await asset.text(), /export function meetingInvitationText/);
+  for (const file of ['meeting-invitation', 'e2ee']) {
+    const asset = await fetch(`${f.url}/${file}.js`);
+    assert.equal(asset.status, 200);
+    assert.match(asset.headers.get('content-type'), /javascript/);
+    assert.match(await asset.text(), /export (?:async )?function/);
+  }
 });
 
 test('meetings have independent host, reusable invitation and read-only capabilities', async t => {
@@ -184,7 +205,7 @@ test('private retry tokens are required and validated before creating idempotent
   assert.equal((await f.join(room)).meeting.participants.length, 2, 'non-idempotent joins remain available without retry credentials');
 });
 
-test('read-only views cannot join or mutate, and pasted capabilities are redacted', async t => {
+test('read-only views cannot join or mutate and the relay preserves opaque ciphertext', async t => {
   const f = await fixture(t);
   const room = await f.create();
   await f.mutate(room, 'messages', room.participant.token, { text: `Invite ${room.invitationUrl} and credential ${room.participant.token}` });
@@ -195,11 +216,11 @@ test('read-only views cannot join or mutate, and pasted capabilities are redacte
   const join = await f.request(`${room.path}/join`, { method: 'POST', body: { token: room.viewToken, name: 'Intruder' } });
   assert.equal(join.status, 401);
   for (const suffix of ['', '/events?waitMs=0']) {
-    const response = await f.request(`${room.path}${suffix}`, { token: room.viewToken });
+    const response = await f.rawRequest(`${room.path}${suffix}`, { token: room.viewToken });
     const serialized = JSON.stringify(response.body);
     assert.equal(serialized.includes(room.inviteToken), false);
     assert.equal(serialized.includes(room.participant.token), false);
-    assert.match(serialized, /redacted/);
+    assert.match(serialized, /nkenc1/);
   }
   const host = await f.request(room.path, { token: room.participant.token });
   assert.equal(host.body.events[1].data.text.includes(room.invitationUrl), true);
@@ -281,7 +302,7 @@ test('an early expiry timer keeps the poll open until the meeting actually expir
     await meetings.handle(req, res, new URL(path, 'http://localhost'));
     return res;
   }
-  const created = await request('/v1/meetings', { name: 'Host', purpose: 'Expiry boundary' });
+  const created = await request('/v1/meetings', await encryptedMeetingFixture().encode('/v1/meetings', { name: 'Host', purpose: 'Expiry boundary' }));
   assert.equal(created.status, 201);
   const room = created.body;
   const waiting = await request(`/v1/meetings/${room.meeting.id}/events?after=1&waitMs=25000`, undefined, room.participant.token);

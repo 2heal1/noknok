@@ -12,6 +12,7 @@ import { startRelay } from '../src/relay.js';
 import { api } from '../src/client.js';
 import { decodeMeetingLink, MeetingStore } from '../src/meeting-client.js';
 import { main } from '../src/cli.js';
+import { generateKey, encryptText, contentAAD } from '../src/e2ee.js';
 
 const runFile = promisify(execFile);
 const cli = fileURLToPath(new URL('../dist/bin/noknok.js', import.meta.url));
@@ -44,7 +45,7 @@ test('three agents and a human discuss; only host ends; every local transcript s
   await Promise.all([
     f.meeting('send', peer, ['--text', 'Open settings and press Save', '--reply-to', String(question.event.seq)]),
     f.meeting('send', third, ['--text', 'Confirmed on the staging build', '--reply-to', String(question.event.seq)]),
-    api(f.relay.url, `/v1/meetings/${link.id}/messages`, { method: 'POST', token: human.participant.token, body: { text: 'The URL is https://example.test/repro', requestId: randomUUID() } }),
+    api(f.relay.url, `/v1/meetings/${link.id}/messages`, { method: 'POST', token: human.participant.token, body: { text: await encryptText(link.key!, 'The URL is https://example.test/repro', contentAAD(link.encryptionId!, 'message', human.participant.id, 'text')), requestId: randomUUID() } }),
   ]);
   for (const member of [host, peer, third]) await f.meeting('ready', member);
   const before = await f.meeting('status', host);
@@ -207,7 +208,7 @@ test('a newer archived send is not marked delivered by an older receive response
   const host = await f.meeting('create', null, ['--purpose', 'Exercise reordered responses']);
   const store = new MeetingStore(join(f.directory, 'profiles', host.localAgent));
   const saved = await store.load(host.session);
-  const send = text => api(f.relay.url, `/v1/meetings/${host.meetingId}/messages`, { method: 'POST', token: saved.token, body: { text, requestId: randomUUID() } });
+  const send = async text => api(f.relay.url, `/v1/meetings/${host.meetingId}/messages`, { method: 'POST', token: saved.token, body: { text: await encryptText(saved.encryptionKey, text, contentAAD(saved.encryption.id, 'message', saved.participant.id, 'text')), requestId: randomUUID() } });
   await send('First incoming event');
   await api(f.relay.url, `/v1/meetings/${host.meetingId}/ready`, { method: 'POST', token: saved.token, body: { ready: true, requestId: randomUUID() } });
   const earlierSnapshot = await api(f.relay.url, `/v1/meetings/${host.meetingId}/events?after=0&waitMs=0`, { token: saved.token });
@@ -262,19 +263,22 @@ test('local history retains full bodies across relay tombstones and reports genu
   const directory = await mkdtemp(join(tmpdir(), 'noknok-body-archive-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const store = new MeetingStore(directory), id = `am_${randomUUID()}`, meetingId = randomUUID();
-  const meeting = { id: meetingId, purpose: 'Saved goal', context: 'Saved context', state: 'active' };
-  await store.create(id, 'http://localhost', { meeting, participant: { id: 'host', token: 'private-token' } });
-  const event = { seq: 1, type: 'started', from: 'host', at: '2026-10-14T00:00:00Z', data: { purpose: meeting.purpose, context: meeting.context }, bodyState: 'pending' };
+  const credentials = { key: generateKey(), encryptionId: randomUUID() };
+  const encryption = { v: 1, id: credentials.encryptionId };
+  const seal = (text, type, from, field) => encryptText(credentials.key, text, contentAAD(encryption.id, type, from, field));
+  const meeting = { id: meetingId, encryption, purpose: await seal('Saved goal', 'started', 'system', 'purpose'), context: await seal('Saved context', 'started', 'system', 'context'), state: 'active' };
+  await store.create(id, 'http://localhost', { meeting, viewUrl: `http://localhost/meeting#id=${meetingId}&view=private-view-token`, participant: { id: 'host', token: 'private-token' } }, undefined, credentials);
+  const event = { seq: 1, type: 'started', from: 'system', at: '2026-10-14T00:00:00Z', data: { purpose: meeting.purpose, context: meeting.context }, bodyState: 'pending' };
   await store.archive(id, { meeting, events: [event], nextCursor: 1 });
   const { data, ...metadata } = event;
-  const archived = await store.archive(id, { meeting: { id: meetingId, state: 'ended' }, events: [{ ...metadata, bodyState: 'delivered' }, { seq: 2, type: 'message', from: 'other', at: event.at, bodyState: 'expired' }], nextCursor: 2 });
-  assert.deepEqual(archived.events[0].data, data);
+  const archived = await store.archive(id, { meeting: { id: meetingId, encryption, state: 'ended' }, events: [{ ...metadata, bodyState: 'delivered' }, { seq: 2, type: 'message', from: 'other', at: event.at, bodyState: 'expired' }], nextCursor: 2 });
+  assert.deepEqual(archived.events[0].data, { purpose: 'Saved goal', context: 'Saved context' });
   assert.equal(archived.meeting.purpose, 'Saved goal');
   assert.equal(archived.meeting.context, 'Saved context');
   assert.equal(archived.archiveCursor, 2, 'Metadata tombstones advance the polling cursor.');
   assert.equal(archived.historyComplete, false, 'A complete metadata cursor does not imply complete content.');
   assert.deepEqual(archived.missingContentSequences, [2]);
-  const restored = await store.archive(id, { meeting: { id: meetingId }, events: [{ ...archived.events[1], bodyState: 'pending', data: { text: 'A delayed response still carries the body' } }], nextCursor: 2 });
+  const restored = await store.archive(id, { meeting: { id: meetingId, encryption }, events: [{ ...archived.events[1], bodyState: 'pending', data: { text: await seal('A delayed response still carries the body', 'message', 'other', 'text') } }], nextCursor: 2 });
   assert.equal(restored.historyComplete, true);
   assert.equal(restored.events[1].bodyState, 'expired', 'A stale body response must not revert the observed delivery state.');
 });

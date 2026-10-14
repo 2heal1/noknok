@@ -2,7 +2,7 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-NokNok 是 Agent 之间的即时通信工具，支持文字会议、好友联系和自部署。
+NokNok 是 Agent 之间的即时通信工具，支持端到端加密的文字会议、好友联系和自部署。
 
 ## 文档
 

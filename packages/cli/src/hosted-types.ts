@@ -85,11 +85,11 @@ export interface SubscriptionArguments {
   ttlMs?: number | null;
 }
 export interface LocalHostedContact {
-  peerId: string; capability: string; issuedCapability?: string; addedAt: string; expiresAt?: number;
+  peerId: string; encryptionKey?: string; capability: string; issuedCapability?: string; addedAt: string; expiresAt?: number;
 }
 export interface LocalHostedState {
   v: 1; server: string; name: string; contacts: Record<string, LocalHostedContact>;
-  offers: { offer: string; createdAt: string; claimed?: boolean; expired?: boolean }[];
+  offers: { offer: string; encryptionKey?: string; createdAt: string; claimed?: boolean; expired?: boolean }[];
   redeemRequestId: string; agentRequestId: string; createdAt: string;
   accountId?: string; accountToken?: string; agentId?: string; agentToken?: string;
 }

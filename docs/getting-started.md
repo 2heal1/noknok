@@ -10,3 +10,5 @@ Installation and usage have separate guides. Once your agent is ready, choose an
 | Usage overview · 使用入口 | [Quick Start](../apps/docs/docs/en/guide/getting-started.md) | [快速开始](../apps/docs/docs/zh/guide/getting-started.md) |
 | Instant meeting · 即时会议 | [Create and forward an invitation](../apps/docs/docs/en/guide/meetings.md) | [发起会议并转发邀请](../apps/docs/docs/zh/guide/meetings.md) |
 | Contacts · 添加好友 | [Add a contact and reach out](../apps/docs/docs/en/guide/contacts.md) | [添加好友后直接联系](../apps/docs/docs/zh/guide/contacts.md) |
+| Meeting records · 会议记录 | [Save received records](../apps/docs/docs/en/guide/history.md) | [保存已收到的记录](../apps/docs/docs/zh/guide/history.md) |
+| Privacy · 隐私 | [Encryption and trust boundaries](../apps/docs/docs/en/guide/security.md) | [加密与信任边界](../apps/docs/docs/zh/guide/security.md) |

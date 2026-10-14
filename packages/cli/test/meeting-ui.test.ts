@@ -1,6 +1,8 @@
+import { generateKey, encryptText, contentAAD } from '../web/e2ee.js';
+import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MeetingCache, mergeEvents, parseMeetingLink, randomId, randomRetryToken, transcriptOf, saveAndAcknowledge, hasIncompleteHistory } from '../web/meeting.js';
+import { MeetingRequestCache, MeetingCache, mergeEvents, parseMeetingLink, randomId, randomRetryToken, transcriptOf, saveAndAcknowledge, hasIncompleteHistory, decryptMeetingPayload } from '../web/meeting.js';
 import { redactInvitations } from '../src/invitation.js';
 
 test('viewing and exporting redact hosted contact grants and credentials without mutating evidence', () => {
@@ -15,7 +17,12 @@ test('viewing and exporting redact hosted contact grants and credentials without
 });
 
 test('explicit viewer links remain read-only and opaque ids grant no join capability', () => {
-  assert.deepEqual(parseMeetingLink('#id=room-1&view=read-secret&invite=join-secret'), { id: 'room-1', mode: 'view', token: 'read-secret' });
+  const key = generateKey(), encryptionId = randomUUID();
+  assert.deepEqual(parseMeetingLink(`#id=room-1&view=read-secret&invite=join-secret&key=${key}&e2ee=${encryptionId}`), { id: 'room-1', mode: 'view', token: 'read-secret', key, encryptionId });
+  assert.equal(parseMeetingLink('#id=room-1&view=read-secret'), null);
+  assert.equal(parseMeetingLink(`#id=room-1&key=${key}&e2ee=${encryptionId}`), null);
+  assert.equal(parseMeetingLink(`#id=room-1&view=read-secret&key=${key}&key=${key}&e2ee=${encryptionId}`), null);
+  assert.equal(parseMeetingLink(`#id=room-1&invite=join-secret&key=invalid&e2ee=${encryptionId}`), null);
   assert.deepEqual(parseMeetingLink('#id=room-1'), { id: 'room-1', mode: 'saved' });
   assert.equal(parseMeetingLink('#id=../another-path&invite=secret'), null);
 });
@@ -177,4 +184,87 @@ test('browser retains durable receipts for retry when confirmation fails', async
   await assert.rejects(saveAndAcknowledge(record, { save: async value => (saved = structuredClone(value)), acknowledge: async () => { throw new Error('network lost'); } }), /network lost/);
   assert.equal(saved.events[0].data.text, 'Retain this');
   assert.deepEqual(saved.pendingDeliveryReceipts, record.pendingDeliveryReceipts);
+});
+
+
+test('browser authenticates encrypted response before exposing bodies and rejects tamper, downgrade and replay', async () => {
+  const key = generateKey(), encryptionId = randomUUID();
+  const identity = { id: 'room-1', key, encryptionId };
+  const encryption = { v: 1, id: encryptionId };
+  const text = await encryptText(key, 'Confidential browser message', contentAAD(encryptionId, 'message', 'host', 'text', 'peer', 2));
+  const source = { meeting: { id: identity.id, encryption, hostId: 'host', state: 'active' }, events: [{ seq: 3, type: 'message', from: 'host', data: { text, to: 'peer', replyTo: 2 } }], deliveryReceipts: [{ seq: 3, token: 'ack' }] };
+  const result = await decryptMeetingPayload(source, identity);
+  assert.equal(result.payload.events[0].data.text, 'Confidential browser message');
+  assert.equal(source.events[0].data.text, text, 'wire response is never mutated');
+  assert.equal(Object.keys(result.encryptedEvents).length, 1);
+  await decryptMeetingPayload(source, { ...identity, encryptedEvents: result.encryptedEvents });
+  for (const modify of [
+    value => { value.meeting.encryption.id = randomUUID(); },
+    value => { delete value.meeting.encryption; },
+    value => { value.events[0].data.text = 'plaintext'; },
+    value => { value.events[0].data.text = text.slice(0, -3) + 'AAA'; },
+    value => { delete value.events[0].data.text; },
+    value => { value.events[0].data.to = 'other'; },
+    value => { value.events[0].data.replyTo = 1; },
+    value => { value.events[0].from = 'other'; },
+    value => { value.events[0].type = 'result'; },
+    value => { value.events[0].seq = 4; },
+  ]) {
+    const changed = structuredClone(source); modify(changed);
+    await assert.rejects(decryptMeetingPayload(changed, { ...identity, encryptedEvents: result.encryptedEvents }), /端到端加密/);
+  }
+  await assert.rejects(decryptMeetingPayload(source, { ...identity, key: generateKey() }), /端到端加密/);
+  assert.equal(result.payload.events[0].data.text, 'Confidential browser message');
+});
+
+test('browser decrypts invitation content and closing summary and permits only the server timeout reason', async () => {
+  const key = generateKey(), encryptionId = randomUUID(), id = 'room-2';
+  const encrypted = (type, from, field, value) => encryptText(key, value, contentAAD(encryptionId, type, from, field));
+  const purpose = await encrypted('started', 'system', 'purpose', 'Private goal');
+  const context = await encrypted('started', 'system', 'context', 'Private context');
+  const text = await encrypted('closed', 'host', 'text', 'Private summary');
+  const reason = await encrypted('closed', 'host', 'reason', 'Private reason');
+  const source = { meeting: { id, encryption: { v: 1, id: encryptionId }, hostId: 'host', state: 'ended', purpose, context, summary: text, reason }, events: [
+    { seq: 1, type: 'started', from: 'system', data: { purpose, context } },
+    { seq: 2, type: 'closed', from: 'host', data: { text, reason, state: 'ended' } },
+  ] };
+  const { payload } = await decryptMeetingPayload(source, { id, key, encryptionId });
+  assert.equal(payload.meeting.purpose, 'Private goal');
+  assert.equal(payload.meeting.summary, 'Private summary');
+  assert.equal(payload.events[1].data.reason, 'Private reason');
+  for (const broken of [{ seq: 1, type: 'started', from: 'system', data: { context } }, { seq: 2, type: 'closed', from: 'host', data: { text } }]) {
+    await assert.rejects(decryptMeetingPayload({ ...source, events: [broken] }, { id, key, encryptionId }), /端到端加密/);
+  }
+  const expired = { meeting: { id, encryption: { v: 1, id: encryptionId }, state: 'expired', reason: 'meeting_timeout' }, events: [{ seq: 3, type: 'closed', from: 'system', data: { state: 'expired', reason: 'meeting_timeout' } }] };
+  await decryptMeetingPayload(expired, { id, key, encryptionId });
+  expired.events[0].data.reason = 'host_ended';
+  await assert.rejects(decryptMeetingPayload(expired, { id, key, encryptionId }), /端到端加密/);
+});
+
+
+test('browser tabs merge replay protection and reject a ciphertext moved to another sequence', () => {
+  const backing = new MemoryStorage(), first = new MeetingCache(backing), second = new MeetingCache(backing);
+  first.save(localRoom('A', { encryptedEvents: { digestA: 2 } }), '');
+  second.save(localRoom('A', { encryptedEvents: { digestB: 3 } }), '');
+  assert.deepEqual(first.read().rooms[0].encryptedEvents, { digestA: 2, digestB: 3 });
+  assert.throws(() => second.save(localRoom('A', { encryptedEvents: { digestA: 4 } }), ''), /端到端加密/);
+  assert.deepEqual(first.read().rooms[0].encryptedEvents, { digestA: 2, digestB: 3 });
+});
+
+
+test('browser persists exact nonce and request id before sending and restores them after reload', async () => {
+  const backing = new MemoryStorage(), first = new MeetingRequestCache(backing);
+  let preparations = 0;
+  const prepare = async () => ({ text: `ciphertext-${++preparations}`, requestId: randomUUID() });
+  const initial = await first.prepare('room:participant', '/messages', { text: 'Retry me' }, prepare);
+  assert.ok([...backing.values.values()].some(value => value.includes(initial.body.requestId)));
+  const reloaded = new MeetingRequestCache(backing);
+  const retry = await reloaded.prepare('room:participant', '/messages', { text: 'Retry me' }, prepare);
+  assert.deepEqual(retry, initial);
+  assert.equal(preparations, 1);
+  reloaded.complete(retry);
+  const next = await reloaded.prepare('room:participant', '/messages', { text: 'Retry me' }, prepare);
+  assert.notEqual(next.body.requestId, initial.body.requestId);
+  backing.beforeSet = () => { throw new Error('Storage unavailable'); };
+  await assert.rejects(reloaded.prepare('room:participant', '/messages', { text: 'Unsaved' }, prepare), /Storage unavailable/);
 });

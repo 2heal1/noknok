@@ -8,13 +8,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { main } from '../src/cli.js';
-import { decodeHostedContact, hostedOrigin } from '../src/hosted-client.js';
+import { decodeHostedContact, hostedOrigin, contactKeyAAD } from '../src/hosted-client.js';
+import { generateKey, isEncryptedText, encryptText } from '../src/e2ee.js';
 import { MeetingStore } from '../src/meeting-client.js';
 
 const accountToken = 'account_abcdefghijklmnopqrstuvwxyz0123456789';
 const agentToken = 'agent_abcdefghijklmnopqrstuvwxyz0123456789';
 const offer = 'offer_abcdefghijklmnopqrstuvwxyz0123456789';
 const capability = 'capability_abcdefghijklmnopqrstuvwxyz0123456789';
+const contactKey = generateKey();
 const issuedCapability = 'issued_abcdefghijklmnopqrstuvwxyz0123456789';
 
 async function fixture(t) {
@@ -22,10 +24,10 @@ async function fixture(t) {
   const stateDir = join(directory, 'agent');
   const codePath = join(directory, 'code');
   await writeFile(codePath, 'beta-test-code', { mode: 0o600 });
-  const calls = [], mutations = { dropRedeem: 0, dropRegister: 0, claim: false, redirect: false };
+  const calls = [], mutations = { dropRedeem: 0, dropRegister: 0, claim: false, redirect: false, invitations: [] };
   const meetingId = randomUUID(), participantId = randomUUID(), participantToken = 'participant_abcdefghijklmnopqrstuvwxyz012345';
-  let url;
-  const room = () => ({ meeting: { id: meetingId, purpose: 'Collect reproduction steps', state: 'active', participants: [], createdAt: new Date().toISOString() },
+  let url, encryptedMeeting;
+  const room = () => ({ meeting: { id: meetingId, ...encryptedMeeting, state: 'active', participants: [], createdAt: new Date().toISOString() },
     participant: { id: participantId, name: 'agent-dot', kind: 'agent', role: 'host', token: participantToken },
     viewUrl: `${url}/meeting#id=${meetingId}&view=${'v'.repeat(32)}`, invitationUrl: `${url}/meeting#id=${meetingId}&invite=${'i'.repeat(32)}` });
   const server = createServer(async (req, res) => {
@@ -47,12 +49,13 @@ async function fixture(t) {
       return send({ meeting: room().meeting, events: [], nextCursor: 0 });
     }
     if (req.url === '/mcp') {
-      const { name } = body.params;
+      const { name, arguments: args } = body.params;
+      if (args.purpose_ciphertext) encryptedMeeting = { purpose: args.purpose_ciphertext, context: args.context_ciphertext, encryption: { v: 1, id: args.encryption_id } };
       const data = name === 'noknok_friend_link' ? { link: `${url}/contact#offer=${offer}`, offer }
         : name === 'noknok_friend_add' ? { contact: { peerId: 'agent-b', capability }, issuedCapability }
         : name === 'noknok_friend_claim' ? { accepted: mutations.claim, ...(mutations.claim ? { contact: { peerId: 'agent-b', capability }, issuedCapability } : {}) }
         : name === 'noknok_identity' ? { agentId: 'agent-a', accountId: 'account-a' }
-        : name === 'noknok_inbox' ? { invitations: [] }
+        : name === 'noknok_inbox' ? { invitations: mutations.invitations }
         : name === 'noknok_subscription_status' ? { subscribed: false, receiving: false }
         : name === 'noknok_friend_revoke' ? { revoked: true }
         : { ...room(), invitationId: 'invitation-one', notification: { queued: true } };
@@ -94,8 +97,12 @@ test('hosted setup saves scoped credentials privately and does not disclose them
   assert.equal(f.calls.length, before);
   const config = await f.run(['config']);
   assert.equal(config.private, true);
-  assert.equal(config.mcpConfig.mcpServers.noknok.url, `${f.url}/mcp`);
-  assert.equal(config.mcpConfig.mcpServers.noknok.headers.Authorization, `Bearer ${agentToken}`);
+  assert.equal(config.remoteMcpMode, 'ciphertext-only-and-events');
+  assert.equal(config.mcpConfig.mcpServers.noknok.command, process.execPath);
+  assert.ok(config.mcpConfig.mcpServers.noknok.args.includes('mcp'));
+  assert.ok(!JSON.stringify(config.mcpConfig).includes(agentToken));
+  assert.equal(config.eventsMcpConfig.mcpServers.noknok_events.url, `${f.url}/mcp`);
+  assert.equal(config.eventsMcpConfig.mcpServers.noknok_events.headers.Authorization, `Bearer ${agentToken}`);
 });
 
 test('setup resumes lost redemption and agent-registration replies using secrets saved before sending', async t => {
@@ -121,10 +128,12 @@ test('setup resumes lost redemption and agent-registration replies using secrets
 test('friend add returns without waiting or subscribing, stores capabilities locally, and revokes only the issued grant', async t => {
   const f = await fixture(t);
   await f.setup();
-  const added = await f.run(['friend-add', `${f.url}/contact#offer=${offer}`]);
+  const added = await f.run(['friend-add', `${f.url}/contact#offer=${offer}&key=${contactKey}`]);
   assert.equal(added.added, true);
   assert.equal(JSON.stringify(added).includes(capability), false);
   assert.equal((await f.saved()).contacts['agent-b'].issuedCapability, issuedCapability);
+  assert.equal((await f.saved()).contacts['agent-b'].encryptionKey, contactKey);
+  assert.ok(!JSON.stringify(f.calls).includes(contactKey));
   const methods = f.calls.filter(call => call.path === '/mcp').map(call => call.body.params.name);
   assert.deepEqual(methods, ['noknok_friend_add']);
   const friends = await f.run(['friends']);
@@ -153,7 +162,7 @@ test('cross-origin contacts and changed setup servers never receive an existing 
   const f = await fixture(t);
   await f.setup();
   const before = f.calls.length;
-  await assert.rejects(f.run(['friend-add', `https://other.example/contact#offer=${offer}`]), { code: 'SERVER_MISMATCH' });
+  await assert.rejects(f.run(['friend-add', `https://other.example/contact#offer=${offer}&key=${contactKey}`]), { code: 'SERVER_MISMATCH' });
   await assert.rejects(f.run(['setup', '--server', 'https://other.example']), { code: 'SERVER_MISMATCH' });
   assert.equal(f.calls.length, before);
   for (const value of ['http://intranet.example', 'https://example.test/path', 'https://user:pass@example.test']) assert.throws(() => hostedOrigin(value));
@@ -163,13 +172,16 @@ test('cross-origin contacts and changed setup servers never receive an existing 
 test('hosted calls save regular am_ meetings and preserve explicit retry identity', async t => {
   const f = await fixture(t);
   await f.setup();
-  await f.run(['friend-add', `${f.url}/contact#offer=${offer}`]);
+  await f.run(['friend-add', `${f.url}/contact#offer=${offer}&key=${contactKey}`]);
   const call = ['call', 'agent-b', '--purpose', 'Collect reproduction steps', '--request-id', 'same-call'];
   const first = await f.run(call);
   assert.match(first.session, /^am_/);
   const saved = await new MeetingStore(f.stateDir).load(first.session);
   assert.equal(saved.meetingId, f.room().meeting.id);
   assert.equal(saved.token, f.room().participant.token);
+  assert.equal(invitationJoinLink(first), saved.invitationUrl);
+  assert.ok(first.invitationText.includes(saved.viewUrl));
+  assert.ok(!first.invitationText.includes('Collect reproduction steps'), 'The share text carries setup and links, not retained meeting content.');
   assert.equal(first.participant.token, undefined);
   const second = await f.run(call);
   assert.equal(second.session, first.session);
@@ -182,7 +194,14 @@ test('hosted calls save regular am_ meetings and preserve explicit retry identit
     assert.equal(call.authorization, `Bearer ${agentToken}`);
     assert.equal(call.body.params.arguments.capability, capability);
     assert.equal(call.body.params.arguments.request_id, 'same-call');
+    assert.ok(isEncryptedText(call.body.params.arguments.purpose_ciphertext));
+    assert.ok(isEncryptedText(call.body.params.arguments.encrypted_key));
+    assert.ok(!JSON.stringify(call).includes('Collect reproduction steps'));
+    assert.ok(!JSON.stringify(call).includes(saved.encryptionKey));
+    assert.ok(!JSON.stringify(call).includes(contactKey));
   }
+  assert.deepEqual(calls[0].body.params.arguments, calls[1].body.params.arguments);
+  await assert.rejects(f.run(['call', 'agent-b', '--purpose', 'Changed', '--request-id', 'same-call']), { code: 'IDEMPOTENCY_CONFLICT' });
 });
 
 test('hosted client refuses redirects instead of forwarding account credentials', async t => {
@@ -239,6 +258,13 @@ test('real hosted service connects two CLI agents, archives their discussion, an
   assert.equal(inbox.invitations.length, 1);
   const joined = await b('hosted', 'accept', inbox.invitations[0].id);
   assert.equal(joined.meetingId, call.meetingId);
+  const localA = await new MeetingStore(join(directory, 'a')).load(call.session);
+  const localB = await new MeetingStore(join(directory, 'b')).load(joined.session);
+  assert.equal(localA.encryptionKey, localB.encryptionKey);
+  const relaySnapshot = JSON.stringify(server.meetings.inspect(call.meetingId));
+  assert.ok(!relaySnapshot.includes(localA.encryptionKey));
+  assert.ok(!relaySnapshot.includes('Collect reproduction URL and steps'));
+  assert.equal(new URLSearchParams(new URL(call.invitationUrl).hash.slice(1)).get('key'), localA.encryptionKey);
   await b('meeting', 'send', joined.session, '--text', 'Open /reports and select last week to reproduce.', '--request-id', 'real-cli-message');
   const received = await a('meeting', 'receive', call.session, '--timeout', '0');
   assert.ok(received.events.some(event => event.data?.text === 'Open /reports and select last week to reproduce.'));
@@ -249,4 +275,26 @@ test('real hosted service connects two CLI agents, archives their discussion, an
   assert.equal(closed.meeting.state, 'ended');
   await b('hosted', 'friend-remove', setupA.agentId);
   await assert.rejects(a('hosted', 'call', setupB.agentId, '--purpose', 'Should be rejected', '--request-id', 'real-cli-revoked'), error => /REVOKED/i.test(error.code));
+});
+
+
+test('legacy contacts cannot start calls and tampered wrapped invitations cannot join', async t => {
+  const f = await fixture(t);
+  await f.setup();
+  await f.run(['friend-add', `${f.url}/contact#offer=${offer}&key=${contactKey}`]);
+  const state = await f.saved();
+  delete state.contacts['agent-b'].encryptionKey;
+  await writeFile(join(f.stateDir, 'hosted.json'), JSON.stringify(state));
+  const before = f.calls.length;
+  await assert.rejects(f.run(['call', 'agent-b', '--purpose', 'Blocked']), { code: 'CONTACT_ENCRYPTION_REQUIRED' });
+  assert.equal(f.calls.length, before);
+  state.contacts['agent-b'].encryptionKey = contactKey;
+  await writeFile(join(f.stateDir, 'hosted.json'), JSON.stringify(state));
+  const encryptionId = randomUUID(), key = generateKey();
+  const encryptedKey = await encryptText(contactKey, JSON.stringify({ key, encryptionId }), contactKeyAAD('agent-b', 'agent-a', encryptionId));
+  f.mutations.invitations = [{ id: 'incoming', from: 'agent-b', encryptionId: randomUUID(), encryptedKey }];
+  await assert.rejects(f.run(['accept', 'incoming']), { code: 'INVALID_ENCRYPTED_INVITATION' });
+  assert.ok(!f.calls.some(call => call.body?.params?.name === 'noknok_meeting_join'));
+  assert.ok(!JSON.stringify(f.calls).includes(key));
+  assert.throws(() => decodeHostedContact(`${f.url}/contact#offer=${offer}`), { code: 'INVALID_CONTACT' });
 });

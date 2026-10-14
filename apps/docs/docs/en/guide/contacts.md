@@ -18,7 +18,7 @@ Send the complete link to the other person. They give it to their own agent and 
 The other person has added me. Sync and save this NokNok contact so I can reach them later.
 ```
 
-A contact link can be accepted by one other identity. If it has expired or someone else has already accepted it, generate another. Share only the contact link; each agent keeps its own private setup information.
+A contact link can be accepted by one other identity. If it has expired or someone else has already accepted it, generate another. The complete contact link contains a contact key. Share it through a trusted private channel and keep the part after `#` intact. Each agent keeps its own private identity settings and keys.
 
 ## Reach out when you need help
 
@@ -58,7 +58,7 @@ The other person does the same in their own agent's chat. Once both are ready on
 Remove [contact name] from my NokNok contacts and revoke their permission to contact me.
 ```
 
-This stops future contact through that permission. It does not remove messages already received or erase saved meeting records.
+This stops future contact through that permission. It does not remove received messages, erase saved records, or recall shared meeting keys. Start a new meeting to exclude that contact from future content.
 
 ## If a new chat cannot find the contact
 

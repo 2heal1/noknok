@@ -1,10 +1,13 @@
 import type { MeetingOptions, MeetingRoom, MeetingRequest, MeetingParticipant, MeetingEvent } from './runtime-types.js';
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { redactInvitations } from './invitation.js';
-import { meetingInvitationText } from '../web/meeting-invitation.js';
+import { isEncryptedText } from './e2ee.js';
 
 const MAX_BODY_BYTES = 128 * 1024;
-const MAX_TEXT_BYTES = 32 * 1024;
+// AES-GCM adds a 16-byte tag, a 12-byte IV and base64url framing.
+const wireBytes = (bytes: number) => 24 + Math.ceil((bytes + 16) * 4 / 3);
+const MAX_TEXT_BYTES = wireBytes(32 * 1024);
+const CLOSE_RESERVE_BYTES = MAX_TEXT_BYTES + wireBytes(4096) + 8192;
 const MAX_PARTICIPANTS = 32;
 const MAX_EVENTS = 2000;
 const MAX_ROOM_BYTES = 8 * 1024 * 1024;
@@ -43,6 +46,19 @@ function string(body, field, { required = false, max = MAX_TEXT_BYTES, fallback 
     fail(400, 'invalid_request', `${field} must be ${required ? 'a nonempty' : 'a'} string of at most ${max} bytes.`);
   }
   return value;
+}
+function encryptedString(body, field, { required = false, nonempty = false, max = 32 * 1024 }: { required?: boolean; nonempty?: boolean; max?: number } = {}) {
+  const value = string(body, field, { required, max: wireBytes(max) });
+  if (value !== undefined && !isEncryptedText(value, max)) fail(400, 'encryption_required', `${field} must be an authenticated end-to-end encrypted string.`);
+  if (value !== undefined && nonempty && Buffer.from(value.split('.')[2], 'base64url').length === 16) fail(400, 'invalid_request', `${field} cannot be empty.`);
+  return value;
+}
+function encryption(body) {
+  const value = body.encryption;
+  if (!value || value.v !== 1 || typeof value.id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value.id)) {
+    fail(400, 'encryption_required', 'Meeting creation requires encryption version 1 and a client-generated UUID v4 encryption id.');
+  }
+  return { v: 1 as const, id: value.id };
 }
 function identity(body) {
   const name = string(body, 'name', { required: true, max: 256 })!.trim();
@@ -139,7 +155,7 @@ export function createMeetings(options: MeetingOptions) {
     const started = room.events[0]?.data;
     const closed = room.state === 'active' ? undefined : [...room.events].reverse().find(event => event.type === 'closed')?.data;
     return {
-      id: room.id, ...(started ? { purpose: started.purpose, context: started.context } : {}), state: room.state, hostId: room.hostId,
+      id: room.id, encryption: room.encryption, ...(started ? { purpose: started.purpose, context: started.context } : {}), state: room.state, hostId: room.hostId,
       participants: [...room.participants.values()].map(publicParticipant), readyBy: [...room.readyBy],
       createdAt: iso(room.createdAt), expiresAt: iso(room.expiresAt),
       ...(room.closedAt === undefined ? {} : { closedAt: iso(room.closedAt) }),
@@ -262,8 +278,8 @@ export function createMeetings(options: MeetingOptions) {
   }
   function capacity(room, payload, key: string | undefined = undefined, extraMetadataBytes = 0) {
     // Reserve one event and enough bytes for a final summary, even when full.
-    const extra = Buffer.byteLength(JSON.stringify(payload)) + MAX_TEXT_BYTES + 8192 + extraMetadataBytes;
-    const total = [...rooms.values()].reduce((sum, item) => sum + item.bytes + MAX_TEXT_BYTES + 8192, 0);
+    const extra = Buffer.byteLength(JSON.stringify(payload)) + CLOSE_RESERVE_BYTES + extraMetadataBytes;
+    const total = [...rooms.values()].reduce((sum, item) => sum + item.bytes + CLOSE_RESERVE_BYTES, 0);
     if (room.events.length >= maxEvents - 1 || room.bytes + extra > maxRoomBytes || total + extra > maxTotalBytes) {
       fail(429, 'meeting_capacity_exceeded', 'Meeting message limit reached; the host can end it and start a new meeting.');
     }
@@ -295,7 +311,7 @@ export function createMeetings(options: MeetingOptions) {
       if (options.serverKey !== undefined && !equal(req.headers['x-noknok-key'], options.serverKey)) fail(401, 'unauthorized', 'A valid X-Noknok-Key is required to create meetings.');
       const body = await readBody(req);
       if (closing) fail(503, 'relay_closing', 'Relay is shutting down.');
-      const payload = { ...identity(body), purpose: string(body, 'purpose', { required: true, max: 8192 }), context: string(body, 'context', { max: 64 * 1024, fallback: '' }) };
+      const payload = { ...identity(body), encryption: encryption(body), purpose: encryptedString(body, 'purpose', { required: true, nonempty: true, max: 8192 }), context: encryptedString(body, 'context', { required: true, max: 64 * 1024 }) };
       const actor = options.authorizeCreate?.(req, body);
       const rawId = requestId(body);
       const id = rawId === undefined ? undefined : actor ? `${actor.accountId}:${rawId}` : rawId;
@@ -309,13 +325,13 @@ export function createMeetings(options: MeetingOptions) {
       if (rooms.size >= maxMeetings) fail(503, 'relay_capacity_exceeded', 'Relay meeting limit reached; retry after meetings expire.');
       if (actor && [...rooms.values()].filter(room => room.ownerId === actor.accountId && room.state === 'active').length >= maxOwnerMeetings) fail(429, 'owner_meeting_limit', 'Account has too many open meetings.');
       const creationBytes = Buffer.byteLength(JSON.stringify(payload)) + 4096;
-      const totalBytes = [...rooms.values()].reduce((sum, room) => sum + room.bytes + MAX_TEXT_BYTES + 8192, 0);
-      if (creationBytes + MAX_TEXT_BYTES + 8192 > maxRoomBytes || totalBytes + creationBytes + MAX_TEXT_BYTES + 8192 > maxTotalBytes) fail(503, 'relay_memory_limit', 'Relay memory budget reached.');
+      const totalBytes = [...rooms.values()].reduce((sum, room) => sum + room.bytes + CLOSE_RESERVE_BYTES, 0);
+      if (creationBytes + CLOSE_RESERVE_BYTES > maxRoomBytes || totalBytes + creationBytes + CLOSE_RESERVE_BYTES > maxTotalBytes) fail(503, 'relay_memory_limit', 'Relay memory budget reached.');
       options.beforeCreate?.(actor);
       const now = Date.now();
       const participant: MeetingParticipant = { id: randomUUID(), name: payload.name, kind: payload.kind, role: 'host', joinedAt: iso(now), token: secret(), ...(actor ? { authId: actor.agentId } : {}) };
       const room: MeetingRoom = {
-        id: randomUUID(), state: 'active', hostId: participant.id, ...(actor ? { ownerId: actor.accountId, ownerAgentId: actor.agentId } : {}),
+        id: randomUUID(), encryption: payload.encryption, state: 'active', hostId: participant.id, ...(actor ? { ownerId: actor.accountId, ownerAgentId: actor.agentId } : {}),
         participants: new Map([[participant.id, participant]]), inviteToken: secret(), viewToken: secret(),
         createdAt: now, expiresAt: now + meetingTtlMs, readyBy: new Set(),
         events: [], seq: 0, bytes: Buffer.byteLength(JSON.stringify(publicParticipant(participant))), polls: new Set(), mutations: new Map(), creationId: id,
@@ -326,7 +342,7 @@ export function createMeetings(options: MeetingOptions) {
       const invitationUrl = `${options.getUrl()}/meeting#id=${room.id}&invite=${room.inviteToken}`;
       const response = {
         ...result(room), participant: { ...participant },
-        invitationUrl, viewUrl: viewUrl(room), invitationText: meetingInvitationText(invitationUrl, viewUrl(room)),
+        invitationUrl, viewUrl: viewUrl(room),
       };
       if (id !== undefined) { creations.set(id, room.id); save(room, 'create', payload, response, recoveryHash); }
       return reply(res, 201, withReceipts(room, response, participant));
@@ -447,7 +463,7 @@ export function createMeetings(options: MeetingOptions) {
     if (operation === 'messages') {
       const type = body.type === undefined ? 'message' : body.type;
       if (!MESSAGE_TYPES.has(type)) fail(400, 'invalid_request', `type must be one of: ${[...MESSAGE_TYPES].join(', ')}.`);
-      payload = { type, text: string(body, 'text', { required: true }) };
+      payload = { type, text: encryptedString(body, 'text', { required: true, nonempty: true }) };
       if (body.replyTo !== undefined) {
         if (!Number.isSafeInteger(body.replyTo) || body.replyTo < 1) fail(400, 'invalid_request', 'replyTo must reference an existing message sequence.');
         payload.replyTo = body.replyTo;
@@ -457,7 +473,7 @@ export function createMeetings(options: MeetingOptions) {
       if (typeof body.ready !== 'boolean') fail(400, 'invalid_request', 'ready must be a boolean.');
       payload = { ready: body.ready };
     } else if (operation === 'end') {
-      payload = { text: string(body, 'text'), reason: string(body, 'reason', { max: 4096, fallback: 'host_ended' }) };
+      payload = { text: encryptedString(body, 'text'), reason: encryptedString(body, 'reason', { required: true, max: 4096 }) };
     } else payload = {};
     const repeated = replay(room, key, payload);
     if (repeated) return reply(res, 200, withReceipts(room, repeated, participant));

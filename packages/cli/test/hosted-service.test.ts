@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { invitationJoinLink } from './meeting-invitation-helper.js';
 import { mkdtemp, rm, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +7,8 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startHostedService } from '../src/hosted-service.js';
+import { generateKey, encryptText, contentAAD, isEncryptedText } from '../src/e2ee.js';
+import { decryptMeetingResult } from '../src/meeting-crypto.js';
 import { hostedDeploymentConfig } from '../src/deploy/hosted-server.js';
 
 const PACKAGE = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
@@ -15,6 +16,7 @@ const secret = () => randomBytes(32).toString('base64url');
 async function fixture(t, options = {}) {
   const dataDir = await mkdtemp(join(tmpdir(), 'noknok-service-'));
   const delivered = [];
+  const encryptedRequests = new Map(), roomKeys = new Map(), participants = new Map(), wireResults = [];
   const start = () => startHostedService({ dataDir, publicUrl: 'http://127.0.0.1:4317', port: 0,
     eventOptions: { workerIntervalMs: 60_000, retryBaseMs: 1 },
     webhookPost: async (url, request) => {
@@ -26,8 +28,22 @@ async function fixture(t, options = {}) {
   let service = await start();
   t.after(async () => { await service.close(); await rm(dataDir, { recursive: true, force: true }); });
   async function raw(path, { token, method = 'POST', value } = {}) {
+    // Test clients encrypt before crossing the HTTP boundary, including direct REST.
+    if (value && path === '/v1/meetings' && !value.encryption) {
+      const key = generateKey(), encryptionId = randomUUID();
+      value = { ...value, encryption: { v: 1, id: encryptionId },
+        purpose: await encryptText(key, value.purpose, contentAAD(encryptionId, 'started', 'system', 'purpose')),
+        context: await encryptText(key, '', contentAAD(encryptionId, 'started', 'system', 'context')) };
+    }
+    const match = /^\/v1\/meetings\/([^/]+)\/messages$/.exec(path);
+    if (match && value && !isEncryptedText(value.text)) {
+      const credentials = roomKeys.get(match[1]);
+      value = { ...value, text: await encryptText(credentials.key, value.text, contentAAD(credentials.encryptionId, value.type || 'message', participants.get(token), 'text', value.to, value.replyTo)) };
+    }
     const response = await fetch(service.origin + path, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' }, ...(value ? { body: JSON.stringify(value) } : {}) });
-    const body = await response.json(); return { status: response.status, body };
+    const body = await response.json();
+    if (body.participant?.token) participants.set(body.participant.token, body.participant.id);
+    return { status: response.status, body };
   }
   async function register() {
     const { code } = service.store.mintCode();
@@ -44,9 +60,42 @@ async function fixture(t, options = {}) {
     return result.body.result;
   }
   async function tool(actor, name, args = {}) {
+    let credentials;
+    const cacheKey = JSON.stringify([actor.agentId, name, args]);
+    if (['call', 'meeting_create'].includes(name)) {
+      let prepared = encryptedRequests.get(cacheKey);
+      if (!prepared) {
+        credentials = { key: generateKey(), encryptionId: randomUUID() };
+        const { purpose, context = '', ...metadata } = args;
+        prepared = { credentials, args: { ...metadata, encryption_id: credentials.encryptionId,
+          purpose_ciphertext: await encryptText(credentials.key, purpose, contentAAD(credentials.encryptionId, 'started', 'system', 'purpose')),
+          context_ciphertext: await encryptText(credentials.key, context, contentAAD(credentials.encryptionId, 'started', 'system', 'context')),
+          ...(name === 'call' ? { encrypted_key: await encryptText(generateKey(), JSON.stringify(credentials), 'test-client-key-wrap') } : {}) } };
+        encryptedRequests.set(cacheKey, prepared);
+      }
+      credentials = prepared.credentials; args = prepared.args;
+    } else if (['meeting_send', 'meeting_end'].includes(name)) {
+      let prepared = encryptedRequests.get(cacheKey);
+      if (!prepared) {
+        credentials = roomKeys.get(args.meeting_id);
+        const { text, reason = 'host_ended', ...metadata } = args;
+        const type = name === 'meeting_end' ? 'closed' : args.type || 'message';
+        const from = participants.get(`${actor.agentId}:${args.meeting_id}`);
+        prepared = { args: { ...metadata,
+          ...(text === undefined ? {} : { text_ciphertext: await encryptText(credentials.key, text, contentAAD(credentials.encryptionId, type, from, 'text', args.to, args.reply_to)) }),
+          ...(name === 'meeting_end' ? { reason_ciphertext: await encryptText(credentials.key, reason, contentAAD(credentials.encryptionId, type, from, 'reason')) } : {}) } };
+        encryptedRequests.set(cacheKey, prepared);
+      }
+      args = prepared.args;
+    }
     const result = await rpc(actor, 'tools/call', { name: `noknok_${name}`, arguments: args });
     if (result.isError) throw Object.assign(new Error(result.structuredContent.error.message), result.structuredContent.error);
-    return result.structuredContent;
+    const data = result.structuredContent;
+    wireResults.push(data);
+    if (data.participant) participants.set(`${actor.agentId}:${data.meeting.id}`, data.participant.id);
+    if (!data.meeting) return data;
+    if (credentials) roomKeys.set(data.meeting.id, credentials);
+    return decryptMeetingResult(data, roomKeys.get(data.meeting.id));
   }
   async function pair(a, b) {
     const offer = await tool(b, 'friend_link');
@@ -59,7 +108,7 @@ async function fixture(t, options = {}) {
     return rpc(actor, 'events/subscribe', { name: 'noknok.activity', arguments: { recipient_id: actor.agentId }, delivery: {
       mode: 'webhook', url: `https://receiver.example.com/${actor.agentId}`, secret: `whsec_${randomBytes(32).toString('base64')}` }, cursor: null });
   }
-  return { get service() { return service; }, dataDir, delivered, raw, register, rpc, tool, pair, subscribe,
+  return { get service() { return service; }, dataDir, delivered, wireResults, roomKeys, raw, register, rpc, tool, pair, subscribe,
     async restart() { await service.close(); service = await start(); } };
 }
 
@@ -116,7 +165,7 @@ test('friend meeting uses authenticated recipient, delivers minimal event and su
   assert.ok(!JSON.stringify(inbox).includes('invite='));
   const joined = await f.tool(b, 'meeting_join', { invitation_id: call.invitationId, name: 'agent-doubaowork' });
   assert.equal(joined.meeting.id, call.meeting.id);
-  const inviteToken = new URLSearchParams(new URL(invitationJoinLink(call)).hash.slice(1)).get('invite');
+  const inviteToken = new URLSearchParams(new URL(call.invitationUrl).hash.slice(1)).get('invite');
   const human = await f.raw(`/v1/meetings/${call.meeting.id}/join`, { value: { token: inviteToken, name: 'Reporter', kind: 'human' } });
   assert.equal(human.status, 200);
   const sent = await f.tool(b, 'meeting_send', { meeting_id: call.meeting.id, text: 'Steps: open preview and select retry.', request_id: 'reply-1' });
@@ -180,7 +229,7 @@ test('owner and global budgets apply to MCP and direct REST; purge removes cache
   assert.equal(raw.status, 429);
   await f.tool(b, 'meeting_create', { purpose: 'Other account', request_id: 'two' });
   await assert.rejects(f.tool(b, 'meeting_create', { purpose: 'Full', request_id: 'three' }), error => error.code === 'relay_capacity_exceeded');
-  await f.tool(b, 'meeting_join', { link: invitationJoinLink(room) });
+  await f.tool(b, 'meeting_join', { link: room.invitationUrl });
   const token = new URLSearchParams(new URL(room.invitationUrl).hash.slice(1)).get('invite');
   assert.equal((await f.raw(`/v1/meetings/${room.meeting.id}/join`, { value: { name: 'Human', kind: 'human', token } })).status, 429);
   await f.tool(a, 'meeting_end', { meeting_id: room.meeting.id, request_id: 'end' });
@@ -344,9 +393,7 @@ test('native pending bodies expire without ACK, including cached creation metada
   await delay(60);
   const read = await f.tool(a, 'meeting_read', { meeting_id: created.meeting.id });
   const retry = await f.tool(a, 'meeting_create', args);
-  invitationJoinLink(retry);
-  assert.ok(!retry.invitationText.includes(args.purpose), 'Forwardable retry metadata must not retain an expired goal.');
-  assert.ok(!retry.invitationText.includes(args.context), 'Forwardable retry metadata must not retain expired background.');
+  assert.equal(retry.invitationText, undefined, 'The relay must not emit an incomplete handoff without the client-held encryption key.');
   for (const snapshot of [read, retry, f.service.meetings.inspect(created.meeting.id)]) {
     assert.ok(!JSON.stringify(snapshot).includes(args.purpose));
     assert.ok(!JSON.stringify(snapshot).includes(args.context));
@@ -398,4 +445,44 @@ test('revocation during native MCP uploads prevents joining and exposing pending
     assert.ok(!JSON.stringify(rejected.body).includes('never-disclose-to-revoked-agent'));
     assert.equal(f.service.meetings.inspect(room.meeting.id).participants.length, 1);
   }
+});
+
+
+test('remote MCP rejects plaintext fields, malformed ciphertext and key-bearing links', async t => {
+  const f = await fixture(t);
+  const a = await f.register(), b = await f.register();
+  const tools = await f.rpc(a, 'tools/list');
+  const create = tools.tools.find(item => item.name === 'noknok_meeting_create');
+  assert.ok(create.inputSchema.required.includes('purpose_ciphertext'));
+  assert.equal(create.inputSchema.properties.purpose, undefined);
+  await assert.rejects(f.rpc(a, 'tools/call', { name: 'noknok_meeting_create', arguments: { purpose: 'must remain local', request_id: 'plain' } }), error => error.code === -32602);
+  await assert.rejects(f.rpc(a, 'tools/call', { name: 'noknok_meeting_create', arguments: { purpose_ciphertext: 'nkenc1.fake', context_ciphertext: 'nkenc1.fake', encryption_id: randomUUID(), request_id: 'malformed' } }).then(result => {
+    if (result.isError) throw Object.assign(new Error(result.structuredContent.error.message), result.structuredContent.error);
+  }), error => error.code === 'encryption_required');
+  const room = await f.tool(a, 'meeting_create', { purpose: 'secret encrypted purpose', request_id: 'encrypted' });
+  const key = f.roomKeys.get(room.meeting.id).key;
+  await assert.rejects(f.tool(b, 'meeting_join', { link: `${room.invitationUrl}&key=${key}` }), error => error.code === 'key_must_remain_local');
+  await assert.rejects(f.rpc(a, 'tools/call', { name: 'noknok_meeting_send', arguments: { meeting_id: room.meeting.id, text: 'plaintext', request_id: 'plain-send' } }), error => error.code === -32602);
+  await assert.rejects(f.rpc(a, 'tools/call', { name: 'noknok_meeting_end', arguments: { meeting_id: room.meeting.id, request_id: 'no-encrypted-reason' } }), error => error.code === -32602);
+  const relayText = JSON.stringify(f.wireResults);
+  assert.ok(!relayText.includes('secret encrypted purpose'));
+  assert.ok(!relayText.includes(key));
+  assert.ok(isEncryptedText(f.wireResults.find(result => result.meeting?.id === room.meeting.id).meeting.purpose));
+});
+
+test('wrapped room keys appear only in the targeted recipient inbox and join', async t => {
+  const f = await fixture(t);
+  const a = await f.register(), b = await f.register(), outsider = await f.register();
+  const friend = await f.pair(a, b);
+  const call = await f.tool(a, 'call', { peer_id: b.agentId, capability: friend.contact.capability, purpose: 'Targeted encrypted call', request_id: 'targeted' });
+  const inbox = await f.tool(b, 'inbox');
+  assert.ok(isEncryptedText(inbox.invitations[0].encryptedKey));
+  assert.equal(inbox.invitations[0].encryptionId, call.meeting.encryption.id);
+  assert.equal((await f.tool(a, 'inbox')).outgoing[0].encryptedKey, undefined);
+  assert.equal((await f.tool(outsider, 'inbox')).invitations.length, 0);
+  await assert.rejects(f.tool(outsider, 'meeting_join', { invitation_id: call.invitationId }), /No invitation/);
+  const joined = await f.tool(b, 'meeting_join', { invitation_id: call.invitationId });
+  assert.equal(joined.encryptedKey, inbox.invitations[0].encryptedKey);
+  await f.tool(b, 'friend_revoke', { capability: friend.claimed.issuedCapability });
+  assert.equal((await f.tool(b, 'inbox')).invitations[0].encryptedKey, undefined);
 });

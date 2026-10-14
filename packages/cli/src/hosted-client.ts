@@ -3,10 +3,12 @@ import type { LocalHostedState } from './hosted-types.js';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { executablePath } from './asset-paths.js';
 import { api, fail, normalizeServer } from './client.js';
 import { MeetingStore, decodeMeetingLink, acknowledgeMeeting, archivedMeetingResult } from './meeting-client.js';
 import { meetingInvitationText } from '../web/meeting-invitation.js';
+import { generateKey, validKey, encryptText, decryptText, contentAAD } from './e2ee.js';
 
 const secret = () => randomBytes(32).toString('base64url');
 const credential = value => typeof value === 'string' && /^[A-Za-z0-9_.~-]{16,16384}$/.test(value);
@@ -21,14 +23,16 @@ export function hostedOrigin(value: string): string {
   return url.origin;
 }
 
-export function decodeHostedContact(value: unknown) {
+export function decodeHostedContact(value: unknown, requireEncryption = true) {
   try {
     if (typeof value !== 'string' || value.length > 20000 || /[\s\\]/u.test(value)) throw new Error();
     const url = new URL(value), params = new URLSearchParams(url.hash.slice(1));
-    if (url.pathname !== '/contact' || url.search || url.username || url.password || params.size !== 1 || !credential(params.get('offer'))) throw new Error();
-    return { server: hostedOrigin(url.origin), offer: params.get('offer') };
-  } catch { throw fail('INVALID_CONTACT', 'Use a complete NokNok contact link with an offer in its fragment.'); }
+    if (url.pathname !== '/contact' || url.search || url.username || url.password || params.size !== (params.has('key') ? 2 : 1) || !credential(params.get('offer')) || (requireEncryption && !validKey(params.get('key'))) || (params.has('key') && !validKey(params.get('key')))) throw new Error();
+    return { server: hostedOrigin(url.origin), offer: params.get('offer'), key: params.get('key') || undefined, relayLink: `${url.origin}/contact#offer=${encodeURIComponent(params.get('offer')!)}` };
+  } catch { throw fail('INVALID_CONTACT', 'Use a complete encrypted NokNok contact link with offer and key in its fragment. Re-add legacy contacts using a new link.'); }
 }
+
+export const contactKeyAAD = (sender: string, recipient: string, encryptionId: string) => JSON.stringify(['noknok-contact-key', 1, sender, recipient, encryptionId]);
 
 function nameFrom(options: CliOptions): string {
   let product = options.product ?? process.env.NOKNOK_PRODUCT;
@@ -73,8 +77,10 @@ class HostedStore {
       return await operation(state, async value => {
         const temporary = `${this.path}.${randomUUID()}.tmp`;
         try {
-          await writeFile(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600, flag: 'wx' });
+          await writeFile(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600, flag: 'wx', flush: true });
           await rename(temporary, this.path);
+          const directory = await open(this.directory, 'r');
+          try { await directory.sync(); } finally { await directory.close(); }
         } finally { await unlink(temporary).catch(() => {}); }
       });
     } finally { await release(); }
@@ -111,19 +117,22 @@ function publicContacts(state: LocalHostedState) {
 
 async function archiveMeeting(store, state, result, pending, signal) {
   if (!result.meeting || !result.participant || !credential(result.participant.token) || !identifier(result.participant.id)) throw fail('INVALID_RESPONSE', 'Hosted service returned an invalid meeting.');
-  const view = decodeMeetingLink(result.viewUrl, 'view');
+  const view = decodeMeetingLink(result.viewUrl, 'view', false);
   if (view.id !== result.meeting.id || view.server !== state.server) throw fail('INVALID_RESPONSE', 'Hosted service returned an inconsistent meeting view.');
   if (result.invitationUrl) {
-    const invitation = decodeMeetingLink(result.invitationUrl);
+    const invitation = decodeMeetingLink(result.invitationUrl, 'invite', false);
     if (invitation.id !== result.meeting.id || invitation.server !== state.server) throw fail('INVALID_RESPONSE', 'Hosted service returned an inconsistent meeting invitation.');
   }
-  const { saved, restored } = await store.meetings.create(pending.session, state.server, result, signal);
+  for (const link of [result.viewUrl, result.invitationUrl].filter(Boolean)) {
+    if (new URLSearchParams(new URL(link).hash.slice(1)).has('key')) throw fail('INVALID_RESPONSE', 'Relay returned a key-bearing link.');
+  }
+  const { saved, restored } = await store.meetings.create(pending.session, state.server, result, signal, { key: pending.encryptionKey, encryptionId: pending.encryption.id });
   await acknowledgeMeeting(store.meetings, await store.meetings.archive(saved.id, { ...result, events: result.events || [] }, { signal }), { signal });
   const initial = await api(state.server, `/v1/meetings/${saved.meetingId}/events?after=0&waitMs=0`, { token: saved.token, signal });
   const local = await acknowledgeMeeting(store.meetings, await store.meetings.archive(saved.id, initial, { signal }), { signal });
   const archived = archivedMeetingResult(initial, local);
   return { session: saved.id, meetingId: saved.meetingId, requestId: pending.requestId, restored, participant: saved.participant,
-    meeting: archived.meeting, viewUrl: result.viewUrl, ...(result.invitationUrl ? { invitationUrl: result.invitationUrl, invitationText: meetingInvitationText(result.invitationUrl, result.viewUrl) } : {}),
+    meeting: archived.meeting, viewUrl: saved.viewUrl, ...(saved.invitationUrl ? { invitationUrl: saved.invitationUrl, invitationText: meetingInvitationText(saved.invitationUrl, saved.viewUrl) } : {}),
     ...(result.invitationId ? { invitationId: result.invitationId } : {}), ...(result.notification ? { notification: result.notification } : {}), events: archived.events,
     next: 'Show invitationText as one complete copyable block when forwarding an invitation; show the session and viewUrl now. Continue with meeting send/receive using this same --agent profile. History is saved locally; the relay deletes acknowledged content. Only the host ends the meeting.' };
 }
@@ -165,23 +174,28 @@ export async function hostedCommand(command: string, args: string[], options: Cl
     if (decoded && decoded.server !== state.server) throw fail('SERVER_MISMATCH', 'The contact link belongs to another service. No credentials were sent. Set up a separate profile for that service.');
     const profile = state; const token = state.agentToken;
     const tool = (name: string, parameters: Record<string, unknown> = {}) => hostedTool(profile.server, token, name, parameters, { signal });
-    if (command === 'config') return { server: state.server, agentId: state.agentId, private: true, privateMcpUrl: `${state.server}/mcp/${state.agentToken}`,
-      mcpConfig: { mcpServers: { noknok: { url: `${state.server}/mcp`, headers: { Authorization: `Bearer ${state.agentToken}` } } } },
-      next: 'Treat this configuration as a secret. Configure it privately in the host. Native MCP Events subscription is a separate user-authorized action; adding a friend alone does not subscribe.' };
+    if (command === 'config') return { server: state.server, agentId: state.agentId, private: true, encryption: 'end-to-end',
+      messaging: { transport: 'local-cli', command: 'noknok', profile: options.agent ? ['--agent', options.agent] : ['--state-dir', store.directory] },
+      remoteMcpMode: 'ciphertext-only-and-events',
+      mcpConfig: { mcpServers: { noknok: { command: process.execPath, args: [executablePath, 'mcp', ...(options.agent ? ['--agent', options.agent] : ['--state-dir', store.directory])],
+        ...(process.env.NOKNOK_HOME ? { env: { NOKNOK_HOME: resolve(process.env.NOKNOK_HOME) } } : {}) } } },
+      eventsMcpConfig: { mcpServers: { noknok_events: { url: `${state.server}/mcp`, headers: { Authorization: `Bearer ${state.agentToken}` } } } },
+      next: 'Use this local stdio MCP with hosted_* then meeting_* tools, or the local CLI: they encrypt and decrypt on this device. The remote MCP only accepts ciphertext and cannot handle natural-language meeting content. Treat Events credentials as a secret; native Events subscription is a separate user-authorized action.' };
     if (command === 'identity') return { ...await tool('noknok_identity'), name: state.name, server: state.server };
     if (command === 'subscription-status') return tool('noknok_subscription_status');
     if (command === 'friend-link') {
       const result = await tool('noknok_friend_link');
-      const link = decodeHostedContact(result.link);
+      const link = decodeHostedContact(result.link, false);
       if (link.server !== state.server || link.offer !== result.offer) throw fail('INVALID_RESPONSE', 'Hosted service returned an inconsistent contact link.');
-      state.offers.push({ offer: result.offer, createdAt: new Date().toISOString() });
+      const encryptionKey = generateKey();
+      state.offers.push({ offer: result.offer, encryptionKey, createdAt: new Date().toISOString() });
       await save(state);
-      return { link: result.link, agentId: state.agentId, next: 'Share this contact invitation only with the intended peer. After acceptance, run hosted friends to save the contact locally. No wait loop has started.' };
+      return { link: `${link.relayLink}&key=${encryptionKey}`, agentId: state.agentId, next: 'Share this contact invitation only with the intended peer. After acceptance, run hosted friends to save the contact locally. No wait loop has started.' };
     }
     if (command === 'friend-add') {
-      const result = await tool('noknok_friend_add', { link: args[0] });
+      const result = await tool('noknok_friend_add', { link: decoded!.relayLink });
       const contact = contactFrom(result);
-      state.contacts[contact.peerId] = { ...state.contacts[contact.peerId], ...contact };
+      state.contacts[contact.peerId] = { ...state.contacts[contact.peerId], ...contact, encryptionKey: decoded!.key };
       await save(state);
       return { peerId: contact.peerId, added: true, next: 'Friend added. Contact capability is saved locally. Background wakeup requires the recipient’s separate native Events subscription; no wait loop has started.' };
     }
@@ -191,7 +205,7 @@ export async function hostedCommand(command: string, args: string[], options: Cl
         if (result.expired) { offer.expired = true; await save(state); }
         if (result.accepted) {
           const contact = contactFrom(result);
-          state.contacts[contact.peerId] = { ...state.contacts[contact.peerId], ...contact };
+          state.contacts[contact.peerId] = { ...state.contacts[contact.peerId], ...contact, encryptionKey: offer.encryptionKey };
           offer.claimed = true;
           await save(state);
         }
@@ -212,13 +226,33 @@ export async function hostedCommand(command: string, args: string[], options: Cl
       if (command !== 'accept' && !options.purpose?.trim()) throw fail('INVALID_ARGUMENT', 'Provide --purpose with the meeting goal.');
       const contact = command === 'call' ? state.contacts[args[0]] : undefined;
       if (command === 'call' && !contact) throw fail('CONTACT_NOT_FOUND', 'Run hosted friends to synchronize contacts, then use a returned peer ID.');
+      if (contact && !validKey(contact.encryptionKey)) throw fail('CONTACT_ENCRYPTION_REQUIRED', 'This contact predates end-to-end encryption. Exchange a new friend link and re-add the contact.');
+      let acceptedKey: { key: string; encryptionId: string } | undefined;
+      if (command === 'accept') {
+        const inbox = await tool('noknok_inbox');
+        const invitation = inbox.invitations?.find(item => item.id === args[0]);
+        if (!invitation) throw fail('INVITATION_NOT_FOUND', 'No targeted invitation for this identity.');
+        const sender = state.contacts[invitation.from];
+        if (!sender || !validKey(sender.encryptionKey)) throw fail('CONTACT_ENCRYPTION_REQUIRED', 'Synchronize contacts with hosted friends, or exchange a new encrypted friend link.');
+        try {
+          acceptedKey = JSON.parse(await decryptText(sender.encryptionKey!, invitation.encryptedKey, contactKeyAAD(invitation.from, state.agentId!, invitation.encryptionId)));
+          if (!validKey(acceptedKey?.key) || acceptedKey?.encryptionId !== invitation.encryptionId) throw new Error();
+        } catch { throw fail('INVALID_ENCRYPTED_INVITATION', 'Cannot authenticate this encrypted invitation. No meeting was joined.'); }
+      }
       const context = command === 'accept' ? undefined : await textInput!(options, 'context', 'context-file', false, signal);
+      if (command !== 'accept' && (Buffer.byteLength(options.purpose!) > 8192 || (context !== undefined && Buffer.byteLength(context) > 65536))) throw fail('INVALID_ARGUMENT', 'Meeting purpose is limited to 8192 bytes and context to 65536 bytes.');
       const requestId = options['request-id'] || secret();
       const identity = JSON.stringify(['hosted', state.server, state.agentId, command, command === 'accept' ? args[0] : requestId]);
-      const pending = await store.meetings.receipt(identity, options.name || state.name, command === 'accept' ? options['request-id'] : requestId, signal, { reuseName: options.name === undefined });
+      const pending = await store.meetings.receipt(identity, options.name || state.name, command === 'accept' ? options['request-id'] : requestId, signal, { reuseName: options.name === undefined, ...(acceptedKey ? { e2ee: acceptedKey } : {}) });
       try {
-        const parameters = command === 'accept' ? { invitation_id: args[0], name: pending.name } : { purpose: options.purpose, ...(context === undefined ? {} : { context }), name: pending.name, request_id: pending.requestId,
-          ...(contact ? { peer_id: contact.peerId, capability: contact.capability } : {}) };
+        const parameters = command === 'accept' ? { invitation_id: args[0], name: pending.name } : await pending.prepare(
+          { purpose: options.purpose, context: context || '', peerId: contact?.peerId }, async fields => ({
+            purpose_ciphertext: await encryptText(pending.encryptionKey, fields.purpose, contentAAD(pending.encryption.id, 'started', 'system', 'purpose')),
+            context_ciphertext: await encryptText(pending.encryptionKey, fields.context, contentAAD(pending.encryption.id, 'started', 'system', 'context')),
+            encryption_id: pending.encryption.id, name: pending.name, request_id: pending.requestId,
+            ...(contact ? { peer_id: contact.peerId, capability: contact.capability,
+              encrypted_key: await encryptText(contact.encryptionKey!, JSON.stringify({ key: pending.encryptionKey, encryptionId: pending.encryption.id }), contactKeyAAD(state.agentId!, contact.peerId, pending.encryption.id)) } : {}),
+          }));
         const result = await tool(command === 'call' ? 'noknok_call' : command === 'accept' ? 'noknok_meeting_join' : 'noknok_meeting_create', parameters);
         return await archiveMeeting(store, state, result, pending, signal);
       } catch (error) { throw Object.assign(error, { requestId: pending.requestId, session: pending.session }); }

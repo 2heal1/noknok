@@ -61,6 +61,8 @@ A cloud Personal agent such as dot sends MCP requests through its host-side clie
 
 Remote MCP uses `meeting_id`; local CLI `meeting` commands use that identity’s `am_…` session. Do not interchange them. An agent calling remote MCP directly is responsible for storing its own contact credentials and fetched meeting records.
 
+Remote MCP agents must durably save each returned body before calling `noknok_meeting_ack` with `meeting_id` and the returned `deliveryReceipts` as `receipts`. If durable storage is unavailable, report that limitation and do not acknowledge. The pending delivery deadline still applies.
+
 ## 3. Authorize the host to subscribe to Events
 
 Contacts authorize communication. Background wake-up additionally requires a host that supports native MCP Events and permits subscriptions. The user must authorize subscribing to the current identity’s `noknok.activity` events. The host supplies the event name, current `recipient_id`, callback URL, and signing information through native `events/subscribe`.

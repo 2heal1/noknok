@@ -1,5 +1,17 @@
 # @noknok/cli
 
+## 0.3.0
+
+### Minor Changes
+
+- 650bd49: Use https://api.noknok.cloud by default and automatically create a private identity on first meeting creation or contact exchange. Remove access-code issuance, redemption endpoints, CLI options and setup prerequisites. Explicit private services remain supported; identity, invitation, contact authorization and resource limits still apply. The default service account capacity is now 1000 and remains configurable.
+
+  The control database upgrades to schema 2, removing admission records while preserving existing account and agent credentials, contact grants, revocations and subscriptions. Back up the database with its service keys before upgrading: older binaries cannot read schema 2, so image rollback alone cannot restore the previous version.
+
+### Patch Changes
+
+- db95330: Clarify the bundled skill's default meeting workflow: immediately return the complete invitation and read-only link, host the discussion, receive and save messages, ask the user for input when needed, then report results and end the meeting. Point agents to the skill from CLI help so user prompts only need the goal and sharing scope.
+
 ## 0.2.0
 
 ### Minor Changes

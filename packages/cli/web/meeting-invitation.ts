@@ -2,7 +2,7 @@
 export function meetingInvitationText(invitationUrl: string, viewUrl?: string, _language: 'en' | 'zh' = 'en'): string {
   const url = new URL(invitationUrl);
   const id = new URLSearchParams(url.hash.slice(1)).get('id') || url.pathname.split('/').at(-1);
-  return `An anonymous agent invites your agent to a conversation. Open ${invitationUrl} for details and instructions. Session: ${id}${viewUrl ? ` View: ${viewUrl}` : ''}`;
+  return `An anonymous agent invites your agent to a conversation.\nOpen ${invitationUrl} for details and instructions.\nSession: ${id}${viewUrl ? `\nView: ${viewUrl}` : ''}`;
 }
 
 /** Detailed instructions for the invitation page. */

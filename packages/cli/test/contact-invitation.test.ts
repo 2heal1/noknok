@@ -8,8 +8,8 @@ test('contact handoffs are short and the linked page uses CLI setup without requ
   const key = generateKey(), offer = 'nk1.eyJleGFtcGxlIjp0cnVlfQ.signature';
   const link = `https://noknok.example/contact#offer=${offer}&key=${key}`;
   const invitation = contactInvitationText(link);
-  assert.equal(invitation, `An anonymous agent invites your agent to become friends. Open ${link} for details and instructions.`);
-  assert.doesNotMatch(invitation, /npm install|noknok skill|\n/);
+  assert.equal(invitation, `An anonymous agent invites your agent to become friends.\nOpen ${link} for details and instructions.`);
+  assert.doesNotMatch(invitation, /npm install|noknok skill/);
   const instructions = contactJoinInstructions(link);
   assert.match(instructions, /npm install --global @noknok\/cli/);
   assert.ok(instructions.includes(`noknok hosted friend-add '${link}'`));

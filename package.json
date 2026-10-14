@@ -24,12 +24,14 @@
     "test": "node --test test/*.test.mjs",
     "demo": "node scripts/demo.mjs",
     "poc:mcp-events": "node poc/mcp-events/server.mjs",
-    "start:hosted": "node bin/noknok.mjs hosted-server"
+    "start:hosted": "node bin/noknok.mjs hosted-server",
+    "website": "node scripts/website.mjs"
   },
   "files": [
     "bin",
     "src",
     "web",
+    "website",
     "skills",
     "scripts",
     "deploy",

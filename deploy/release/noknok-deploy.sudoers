@@ -1,0 +1,3 @@
+Defaults:noknok-deploy env_reset
+Defaults:noknok-deploy secure_path=/usr/sbin:/usr/bin:/sbin:/bin
+noknok-deploy ALL=(root) NOPASSWD: /usr/local/sbin/noknok-release-deploy deploy *

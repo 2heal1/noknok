@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomBytes } from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import { Readable } from 'node:stream';
+import { createMeetings } from '../src/meetings.mjs';
 import { startRelay } from '../src/relay.mjs';
 
 async function fixture(t, options = {}) {
@@ -234,6 +237,44 @@ test('long polls wake on own messages, other participants, final closure and exp
   const closureWait = f.request(`${second.path}/events?after=1&waitMs=25000`, { token: second.viewToken });
   await f.mutate(second, 'end');
   assert.equal((await closureWait).body.meeting.state, 'ended');
+});
+
+test('an early expiry timer keeps the poll open until the meeting actually expires', async t => {
+  let now = 1000;
+  const timers = [];
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(globalThis, 'setTimeout', (callback, ms) => {
+    const timer = { callback, ms };
+    timers.push(timer);
+    return timer;
+  });
+  t.mock.method(globalThis, 'clearTimeout', () => {});
+  const meetings = createMeetings({ getUrl: () => 'http://localhost', meetingTtlMs: 1000 });
+  t.after(() => meetings.close());
+  async function request(path, body, token) {
+    const req = Readable.from(body ? [Buffer.from(JSON.stringify(body))] : []);
+    req.method = body ? 'POST' : 'GET';
+    req.headers = { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) };
+    const res = new EventEmitter();
+    res.writeHead = status => { res.status = status; };
+    res.end = content => { res.body = JSON.parse(content); res.writableEnded = true; };
+    await meetings.handle(req, res, new URL(path, 'http://localhost'));
+    return res;
+  }
+  const created = await request('/v1/meetings', { name: 'Host', purpose: 'Expiry boundary' });
+  assert.equal(created.status, 201);
+  const room = created.body;
+  const waiting = await request(`/v1/meetings/${room.meeting.id}/events?after=1&waitMs=25000`, undefined, room.participant.token);
+  assert.equal(timers.length, 1);
+  now = 1999;
+  timers[0].callback();
+  assert.equal(waiting.writableEnded, undefined, 'an early timer must not return an active, empty response');
+  assert.equal(timers.length, 2, 'the remaining expiry interval is scheduled again');
+  now = 2000;
+  timers[1].callback();
+  assert.equal(waiting.body.meeting.state, 'expired');
+  assert.equal(waiting.body.events.at(-1).data.reason, 'meeting_timeout');
+  assert.equal(waiting.body.meeting.closedAt, room.meeting.expiresAt);
 });
 
 test('absolute expiry and retention are not extended by polling or messages; purge loses room', async t => {

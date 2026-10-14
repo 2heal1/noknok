@@ -337,7 +337,17 @@ export function createMeetings(options = {}) {
       function disconnected() { room.polls.delete(poll); clearTimeout(timer); }
       room.polls.add(poll);
       res.once('close', disconnected);
-      timer = setTimeout(() => { expire(room); poll.finish(); }, Math.min(waitMs, Math.max(1, room.expiresAt - Date.now())));
+      const waitDeadline = performance.now() + waitMs;
+      function timeout() {
+        if (!room.polls.has(poll)) return;
+        const remaining = Math.min(waitDeadline - performance.now(), room.expiresAt - Date.now());
+        // Timer delivery can precede the wall-clock expiry by a millisecond.
+        // Keep waiting until expiry or the monotonic request deadline is reached.
+        if (remaining > 0) { timer = setTimeout(timeout, Math.ceil(remaining)); return; }
+        expire(room);
+        poll.finish();
+      }
+      timeout();
       return;
     }
 

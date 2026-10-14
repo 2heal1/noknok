@@ -14,7 +14,7 @@ import { hostedCommand, decodeHostedContact } from './hosted-client.mjs';
 
 const PACKAGE = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const DEFAULT_SERVER = 'http://127.0.0.1:4317';
-const SKILL_PATH = fileURLToPath(new URL('../skills/agentcall/SKILL.md', import.meta.url));
+const SKILL_PATH = fileURLToPath(new URL('../skills/noknok/SKILL.md', import.meta.url));
 
 const HELP = `${PACKAGE.name} ${PACKAGE.version} — lightweight meetings for agents and people (Node.js >=22.13)
 
@@ -31,16 +31,16 @@ Hosted setup stores credentials locally. Keep localAgent; never guess a profile.
 Friend addition returns immediately. Native Events subscription is a separate action.
 Hosted call/accept/create return am_ sessions compatible with meeting send/receive.
 
-Meetings (no account, contacts, or wake adapter required):
-  agentcall meeting create --purpose TEXT [--context TEXT|--context-file FILE] [--product PRODUCT] [--server URL]
-  agentcall meeting join LINK [--product PRODUCT] [--name NAME]
-  agentcall meeting send SESSION --text TEXT [--type request|message|result|progress|waiting_for_user] [--to PARTICIPANT] [--reply-to SEQ]
-  agentcall meeting receive SESSION [--timeout 45]
-  agentcall meeting status|history|view SESSION
-  agentcall meeting ready SESSION [--ready true|false]
-  agentcall meeting end SESSION [--text SUMMARY] [--reason TEXT]
-  agentcall meeting leave SESSION
-  agentcall meeting sessions
+Invitation meetings (basic relay creation; hosted creation uses hosted create):
+  noknok meeting create --purpose TEXT [--context TEXT|--context-file FILE] [--product PRODUCT] [--server URL]
+  noknok meeting join LINK [--product PRODUCT] [--name NAME]
+  noknok meeting send SESSION --text TEXT [--type request|message|result|progress|waiting_for_user] [--to PARTICIPANT] [--reply-to SEQ]
+  noknok meeting receive SESSION [--timeout 45]
+  noknok meeting status|history|view SESSION
+  noknok meeting ready SESSION [--ready true|false]
+  noknok meeting end SESSION [--text SUMMARY] [--reason TEXT]
+  noknok meeting leave SESSION
+  noknok meeting sessions
 
 Meetings default to http://127.0.0.1:4317 or AGENTCALL_SERVER. Creation returns a reusable
 invitation for agents or browser guests, a private read-only view link, and your am_ session.
@@ -49,36 +49,43 @@ Only the host may end a meeting. ready signals agreement but never closes the me
 Messages are public to all meeting participants; --to requests a response, not private delivery.
 Local meeting history survives relay expiry/restart; receive regularly to archive new events.
 
-  agentcall server [--host 127.0.0.1] [--port 4317] [--public-url URL] [--retention-seconds 600] [--meeting-ttl-seconds 7200]
-  agentcall local-server [--port 4317] [--retention-seconds 600] [--meeting-ttl-seconds 7200]
-  agentcall gateway [--host 127.0.0.1] [--port 4317] [--public-url HTTPS_ORIGIN]
-  agentcall identity [--agent HANDLE] [--product PRODUCT] [--name NAME] [--server URL]
-  agentcall friend-link [--agent HANDLE] [--product PRODUCT] [--name NAME] [--server URL]
-  agentcall friend-add LINK [--agent HANDLE] [--product PRODUCT] [--name NAME]
-  agentcall friends --agent HANDLE
-  agentcall friend-remove CONTACT --agent HANDLE
-  agentcall listen --agent HANDLE [--timeout 45]
-  agentcall call CONTACT --agent HANDLE --purpose TEXT [--context TEXT]
-  agentcall mcp [--agent HANDLE] [--product PRODUCT]
-  agentcall receiver start|status|stop --agent HANDLE [--port PORT] [--gateway HTTPS_ORIGIN]
-  agentcall ui [--port 4318] [--state-dir DIR]
-  agentcall invite --name NAME --purpose TEXT [--from OWNER] [--context-file FILE] [--server URL]
-  agentcall accept INVITATION --name NAME
-  agentcall wait SESSION [--timeout 300]
-  agentcall receive SESSION [--timeout 60]
-  agentcall send SESSION [--type message|request|result|progress|waiting_for_user] --text TEXT
-  agentcall finish SESSION --text SUMMARY
-  agentcall hangup SESSION [--reason TEXT]
-  agentcall status SESSION
-  agentcall view SESSION
-  agentcall history SESSION
-  agentcall sessions
-  agentcall skill [--path]
+Service commands:
+  noknok server [--host 127.0.0.1] [--port 4317] [--public-url URL] [--retention-seconds 600] [--meeting-ttl-seconds 7200]
+  noknok local-server [--port 4317] [--retention-seconds 600] [--meeting-ttl-seconds 7200]
+  noknok gateway [--host 127.0.0.1] [--port 4317] [--public-url HTTPS_ORIGIN]
+
+Legacy two-party calls and local contacts (compatibility):
+  noknok identity [--agent HANDLE] [--product PRODUCT] [--name NAME] [--server URL]
+  noknok friend-link [--agent HANDLE] [--product PRODUCT] [--name NAME] [--server URL]
+  noknok friend-add LINK [--agent HANDLE] [--product PRODUCT] [--name NAME]
+  noknok friends --agent HANDLE
+  noknok friend-remove CONTACT --agent HANDLE
+  noknok listen --agent HANDLE [--timeout 45]
+  noknok call CONTACT --agent HANDLE --purpose TEXT [--context TEXT]
+  noknok mcp [--agent HANDLE] [--product PRODUCT]
+  noknok receiver start|status|stop --agent HANDLE [--port PORT] [--gateway HTTPS_ORIGIN]
+  noknok ui [--port 4318] [--state-dir DIR]
+  noknok invite --name NAME --purpose TEXT [--from OWNER] [--context-file FILE] [--server URL]
+  noknok accept INVITATION --name NAME
+  noknok wait SESSION [--timeout 300]
+  noknok receive SESSION [--timeout 60]
+  noknok send SESSION [--type message|request|result|progress|waiting_for_user] --text TEXT
+  noknok finish SESSION --text SUMMARY
+  noknok hangup SESSION [--reason TEXT]
+  noknok status SESSION
+  noknok view SESSION
+  noknok history SESSION
+  noknok sessions
 
 Agent setup:
-  agentcall skill        Print the bundled NokNok Skill for an agent to read
-  agentcall --skill      Alias for agentcall skill
-  agentcall skill --path Print the absolute path to the installed SKILL.md
+  noknok skill [--path]
+  noknok skill        Print the bundled noknok skill and instructions
+  noknok --skill      Alias for noknok skill
+  noknok skill --path Print the installed SKILL.md path (references live beside it)
+
+The skill and its references ship with @noknok/cli; no separate download is needed.
+Installing the CLI does not register skills automatically in every agent host.
+The legacy agentcall binary remains a compatibility alias.
 
 Options:
   --agent HANDLE        Reuse the localAgent handle returned on first use (managed storage)
@@ -109,6 +116,8 @@ Environment:
 
 Call/server results are JSON; help and skill commands print text.
 Errors are JSON on stderr with a nonzero exit code.
+
+Legacy invite/accept details (not meeting invitations):
 Invitations expire after 5 minutes. Each participant gets a DIFFERENT local SESSION.
 Use invite, display its invitationText as one copyable block immediately, then wait.
 invitationText is a short invitation; its invitationUrl serves plain-text setup, Skill and task details.
@@ -194,8 +203,8 @@ function parse(argv) {
     delete options.skill;
   }
   if (!options.help && !options.version && command && command !== 'help') {
-    if (!Object.hasOwn(COMMAND_OPTIONS, command)) throw fail('INVALID_COMMAND', `Unknown command '${command}'. Run agentcall --help.`);
-    if (command === 'meeting' && !Object.hasOwn(MEETING_OPTIONS, args[0])) throw fail('INVALID_COMMAND', 'Use agentcall meeting create|join|send|receive|status|ready|end|leave|history|view|sessions.');
+    if (!Object.hasOwn(COMMAND_OPTIONS, command)) throw fail('INVALID_COMMAND', `Unknown command '${command}'. Run noknok --help.`);
+    if (command === 'meeting' && !Object.hasOwn(MEETING_OPTIONS, args[0])) throw fail('INVALID_COMMAND', 'Use noknok meeting create|join|send|receive|status|ready|end|leave|history|view|sessions.');
     if (command === 'hosted' && !Object.hasOwn(HOSTED_OPTIONS, args[0])) throw fail('INVALID_COMMAND', 'Use noknok hosted setup|identity|friend-link|friend-add|friends|friend-remove|call|create|accept|inbox|subscription-status|config.');
     const allowed = new Set([...(command === 'hosted' ? HOSTED_OPTIONS[args[0]] : command === 'meeting' ? MEETING_OPTIONS[args[0]] : COMMAND_OPTIONS[command]), 'state-dir', ...(['server', 'local-server', 'gateway', 'skill'].includes(command) ? [] : ['agent'])]);
     for (const key of Object.keys(options)) if (!allowed.has(key)) throw fail('INVALID_ARGUMENT', `Unknown option --${key} for ${command}.`);
@@ -235,7 +244,7 @@ async function textInput(options, inlineKey = 'text', fileKey = 'file', required
 }
 
 function expectArgs(args, count) {
-  if (args.length !== count) throw fail('INVALID_ARGUMENT', `Expected ${count} positional argument(s). Run agentcall --help.`);
+  if (args.length !== count) throw fail('INVALID_ARGUMENT', `Expected ${count} positional argument(s). Run noknok --help.`);
 }
 
 function invitationText(invitation, call, invitationUrl, viewUrl) {
@@ -263,7 +272,7 @@ ${command} skill
 ${command} accept '${invitation}' --name 'Agent B'
 
 邀请有效期至 ${call.expiresAt}，只能接入一名对方。若已过期，请让发起方重新邀请。
-后续 Skill 中的 agentcall 命令都使用上述 npm exec 前缀。保存接听返回的本地 session，持续接收并回应对方；需要我补充信息或授权时，在当前会话问我，并通知对方正在等待。双方确认完成后结束，再向我汇报结果。
+后续 Skill 中的 noknok 命令都使用上述 npm exec 前缀。保存接听返回的本地 session，持续接收并回应对方；需要我补充信息或授权时，在当前会话问我，并通知对方正在等待。双方确认完成后结束，再向我汇报结果。
 
 本次目标（发起方提供）：
 ${call.purpose}
@@ -488,7 +497,7 @@ async function execute({ command, args, options }, { signal, emit, localAgent } 
       validateSessionView(result, invitation.server, invitation.callId, 'viewUrl');
     }
     const session = await store.create(invitation.server, result.call, result.participant);
-    await output({ session: session.id, callId: session.callId, invitation: result.invitation, invitationUrl: result.invitationUrl, viewSession: result.viewSession, viewUrl: result.viewUrl, invitationText: invitationText(result.invitation, result.call, result.invitationUrl, result.viewUrl), expiresAt: result.call.expiresAt, call: result.call, next: `Display invitationText verbatim as one copyable code block now. Then run: agentcall wait ${session.id} --timeout 300` });
+    await output({ session: session.id, callId: session.callId, invitation: result.invitation, invitationUrl: result.invitationUrl, viewSession: result.viewSession, viewUrl: result.viewUrl, invitationText: invitationText(result.invitation, result.call, result.invitationUrl, result.viewUrl), expiresAt: result.call.expiresAt, call: result.call, next: `Display invitationText verbatim as one copyable code block now. Then run: noknok wait ${session.id} --timeout 300` });
     return;
   }
   if (command === 'accept') {

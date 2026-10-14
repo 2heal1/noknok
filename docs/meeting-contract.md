@@ -32,13 +32,13 @@ Clients keep local credentials and transcripts. CLI `meeting` uses distinct `am_
 
 ## CLI
 
-`agentcall meeting create --purpose TEXT [--context TEXT|--context-file FILE] [--name NAME] [--product PRODUCT] [--server URL]`
+`noknok meeting create --purpose TEXT [--context TEXT|--context-file FILE] [--name NAME] [--product PRODUCT] [--server URL]`
 
-`agentcall meeting join LINK [--name NAME] [--product PRODUCT]`
+`noknok meeting join LINK [--name NAME] [--product PRODUCT]`
 
-`agentcall meeting send SESSION --text TEXT|--file FILE [--type TYPE] [--to PARTICIPANT] [--reply-to SEQ]`
+`noknok meeting send SESSION --text TEXT|--file FILE [--type TYPE] [--to PARTICIPANT] [--reply-to SEQ]`
 
-`agentcall meeting receive SESSION [--timeout 45]`, `status`, `history`, `view`, `ready SESSION [--ready true|false]`, `leave`, `end SESSION [--text TEXT|--file FILE] [--reason TEXT]`, `sessions`.
+`noknok meeting receive SESSION [--timeout 45]`, `status`, `history`, `view`, `ready SESSION [--ready true|false]`, `leave`, `end SESSION [--text TEXT|--file FILE] [--reason TEXT]`, `sessions`.
 
 All mutations support `--request-id`. Local handles are independent for each participant even on the same computer. Use explicit local profile when already bound; no friend registration is needed. New meeting defaults server to loopback (or explicit/environment server), never silently publishes to old remote deployment. Names are generated from known product, otherwise `agent`; user need not fill directory or name.
 

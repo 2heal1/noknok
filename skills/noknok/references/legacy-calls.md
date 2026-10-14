@@ -1,9 +1,4 @@
----
-name: agentcall
-description: Use NokNok to generate a friend link, add an agent contact, call a friend, or invite and join another agent for a one-to-one conversation. Manage the agent's own local identity automatically, exchange task context and evidence, show the conversation session, and finish together.
----
-
-# NokNok
+# NokNok 旧版两方通话
 
 与另一个 agent 协作，双方保留自己的上下文、工具和主人。支持活跃会话的 CLI 通信，以及 dot 的后台接收器 + MCP Events 模式。后台模式需一次性连接 Events 插件并由宿主建立订阅；只读 Skill 或启动 stdio MCP 不会建立这个订阅。
 
@@ -12,8 +7,8 @@ description: Use NokNok to generate a friend link, add an agent contact, call a 
 用户只需说“生成我的交友链接”“添加这个好友”“联系这个好友”。不要要求用户编写名称、存储目录、角色配置或完整命令。使用本地源码 CLI；完整说明在 `../../../docs/local-contacts.md`。
 
 1. **确认自己的绑定。** 若本会话已获得 `localAgent`，后续所有命令加 `--agent <自己的 localAgent>`，包括 `send/receive/finish/history/view/sessions`；宿主已绑定 `AGENTCALL_AGENT` 或 MCP 时自动复用。不要扫描硬盘、选用“最近的/唯一的身份”，或读对方的目录。已有明确属于自己的 `--state-dir` 仍可继续使用，无需迁移。
-2. **首次生成链接。** 没有自己的绑定时执行 `agentcall friend-link`。若从可信宿主信息或自身上下文明确知道自己运行在 dot，自动加 `--product dot`；豆包工作加 `--product doubaowork`，其他已知产品使用对应产品名。CLI 分别生成 `agent-dot`、`agent-doubaowork` 等默认展示名；宿主也可设置 `AGENTCALL_PRODUCT`。不需要用户填写名称，不通过系统用户名、项目目录或其他 Agent 的资料猜产品。产品未知时使用通用名称 `agent`，不要伪称自己属于某个产品。用户明确指定的名称用 `--name`，优先于产品默认名。CLI 自动生成独立身份和目录，默认使用本地交换机 `http://127.0.0.1:4317`。保留返回的 `localAgent`，仅向用户展示名称、`contactLink` 和有效期。
-3. **首次添加好友。** 执行 `agentcall friend-add '<完整交友链接>'`，已有身份则携带自己的 `--agent`；同样根据已知宿主自行传入 `--product`。工具自动从链接取得服务地址，首次使用会创建自己的独立身份。保留返回的 `localAgent` 和对方 `contact.id`；不要复制发起方的本地身份句柄来充当自己的身份。**用户只要求添加好友时，添加成功后汇报即可，不自动执行 `listen`、呼叫或开始聊天。** 好友关系允许后续联系，不表示用户要求此刻持续等待。
+2. **首次生成链接。** 没有自己的绑定时执行 `noknok friend-link`。若从可信宿主信息或自身上下文明确知道自己运行在 dot，自动加 `--product dot`；豆包工作加 `--product doubaowork`，其他已知产品使用对应产品名。CLI 分别生成 `agent-dot`、`agent-doubaowork` 等默认展示名；宿主也可设置 `AGENTCALL_PRODUCT`。不需要用户填写名称，不通过系统用户名、项目目录或其他 Agent 的资料猜产品。产品未知时使用通用名称 `agent`，不要伪称自己属于某个产品。用户明确指定的名称用 `--name`，优先于产品默认名。CLI 自动生成独立身份和目录，默认使用本地交换机 `http://127.0.0.1:4317`。保留返回的 `localAgent`，仅向用户展示名称、`contactLink` 和有效期。
+3. **首次添加好友。** 执行 `noknok friend-add '<完整交友链接>'`，已有身份则携带自己的 `--agent`；同样根据已知宿主自行传入 `--product`。工具自动从链接取得服务地址，首次使用会创建自己的独立身份。保留返回的 `localAgent` 和对方 `contact.id`；不要复制发起方的本地身份句柄来充当自己的身份。**用户只要求添加好友时，添加成功后汇报即可，不自动执行 `listen`、呼叫或开始聊天。** 好友关系允许后续联系，不表示用户要求此刻持续等待。
 4. **接收和呼叫。** 已配置后台 Events 的 dot 不在当前任务执行 `listen` 等待。后台组件负责接收；加好友后原有订阅继续生效，好友可在当前任务结束后主动联系。尚未配置时按下节完成一次性接入，不把“已加好友”报告成“已可自动唤起”。不支持 Events 的活跃会话只有在用户要求接听时才运行 `listen --timeout 45`。发起方先 `friends` 同步，从自己的通讯录确定目标，再 `call <contact.id> --purpose '本次目标'`。`call` 返回后**立即展示共享 `viewSession` 和 `viewUrl`，然后才等待和聊天**。
 5. **继续交流。** 收到来电后使用工具返回的本地 `session`，沿用下面的收发与双方完成流程。不要再次把通话邀请交给用户转发，也不要替对方操作其身份。目标不明确且存在多个候选联系人时，才向用户澄清对象。
 
@@ -42,8 +37,8 @@ description: Use NokNok to generate a friend link, add an agent contact, call a 
 
 ## 普通邀请的准备
 
-- 当前使用源码 CLI `node /absolute/path/to/noknok/bin/noknok.mjs`，路径以实际安装位置为准。下文 `agentcall` 为兼容命令名，可替换为这个源码前缀。npm 包名为 `@noknok/cli`；使用已发布版本或用户提供的源码，不假定未发布分支可通过 npx 安装。
-- `agentcall --help` 列出能力；`agentcall skill` 或 `agentcall --skill` 输出本说明，`agentcall skill --path` 返回安装包内的 Skill 路径。通话名称由 agent 根据当前会话自行选择，无需主人配置角色；接通后直接向对方了解它的环境与能力，不假设已知对方工作区。
+- 当前使用源码 CLI `node /absolute/path/to/noknok/bin/noknok.mjs`，路径以实际安装位置为准。下文 `noknok` 为兼容命令名，可替换为这个源码前缀。npm 包名为 `@noknok/cli`；使用已发布版本或用户提供的源码，不假定未发布分支可通过 npx 安装。
+- `noknok --help` 列出能力；`noknok skill` 或 `noknok --skill` 输出主 Skill（需要旧版流程时再读取本文件），`noknok skill --path` 返回安装包内的 Skill 路径。通话名称由 agent 根据当前会话自行选择，无需主人配置角色；接通后直接向对方了解它的环境与能力，不假设已知对方工作区。
 - 默认使用本机交换机 `http://127.0.0.1:4317`，需先启动服务；跨机器使用用户提供的可达服务地址。用 `--server URL` 或 `AGENTCALL_SERVER` 覆盖，优先级为命令行参数、环境变量、本机默认地址。不同机器上的 `127.0.0.1` 指向各自本机，示例域名不提供公共服务。
 - CLI 输出 JSON。保存自己获得的 **`session`**，后续命令都使用这个本地句柄；`callId` 不是句柄。同一台机器的两个 agent 也会拿到不同的 `session`，不得混用。不要从其他 agent 的本地会话文件中获取身份。
 
@@ -52,7 +47,7 @@ description: Use NokNok to generate a friend link, add an agent contact, call a 
 用户要求直接沟通时，根据用户此次提问及当前会话已有信息，在授权范围内整理本次目标、已知事实、已做的尝试及待解决问题。`--purpose` 写具体目标，`--context` 或 `--context-file` 写对方理解任务所需的精简背景；不要复制整段原会话、编造未知背景或要求用户重新复述已知信息。较长背景写入本地 UTF-8 文件，再创建邀请：
 
 ```sh
-agentcall invite --name 'Agent A' --purpose '共同排查当前问题' --context-file /absolute/path/to/context.txt
+noknok invite --name 'Agent A' --purpose '共同排查当前问题' --context-file /absolute/path/to/context.txt
 ```
 
 `--context-file` 可省略。当前会话已明确主人的称呼时，用 `--from 'Alex'` 传入该称呼；未知则省略，显示“匿名”。不要从系统用户名、Git 作者或目录猜测主人身份；`--name` 仍是 agent 的通话名称。背景只写本次任务需要的已知事实和问题，安装步骤及通信规则无需写入背景。
@@ -62,13 +57,13 @@ agentcall invite --name 'Agent A' --purpose '共同排查当前问题' --context
 不要把创建邀请和等待放入一个阻塞脚本，导致主人直到超时才看到邀请。不要转发整个 JSON、本地 `session` 或参与者凭证。旧交换机未返回 `invitationUrl` 时，CLI 会提供兼容的完整邀请文本；若旧 CLI 也没有 `invitationText`，可提供原始邀请及读取 Skill 的命令。
 
 ```sh
-agentcall wait <session> --timeout 300
+noknok wait <session> --timeout 300
 ```
 
 收到短邀请或详情链接时，先读取链接返回的纯文本；网页工具无法访问内网时，可通过当前环境的终端 `curl` 读取该链接。链接带接听凭据，只交给目标接听方。详情提供背景及固定版本的 Skill / 接听命令，按它操作即可；打开链接不占接听名额、不延长有效期。名称可由自己选择，无需让用户指定角色。已安装新版 CLI 时，也可直接接听 HTTPS 链接；旧的 `agentcall://invite/...` 格式继续可用：
 
 ```sh
-agentcall accept '<invitationUrl 或原始 invitation>' --name 'Agent B'
+noknok accept '<invitationUrl 或原始 invitation>' --name 'Agent B'
 ```
 
 读取返回的背景并保存自己的 `session`。邀请有效期为 5 分钟，由交换机决定；接通后的通话不受该邀请窗口限制。若本地命令返回等待超时，检查 `call.state` 或 `status`，不要直接宣布邀请已过期。
@@ -82,9 +77,9 @@ agentcall accept '<invitationUrl 或原始 invitation>' --name 'Agent B'
 交流目标取自本地主人的要求；不要把所有来电默认缩减成“只验证连接”，也没有默认的“最多 6 条实质性消息”限制。只有用户把本次范围明确限定为通信测试、指定轮次或时间预算时，才按该范围执行。讨论方案时应给出自己的分析、回应对方观点、追问或修正，不能仅互发接通确认就宣布任务完成。用户授权交流自己的近期工作时，可以分享自己实际知道且获准分享的相关事实；不知道的经历如实说明，不编造，也不为补齐谈资读取无关会话或文件。
 
 ```sh
-agentcall send <session> --type request --text '请在你的环境复现，返回失败请求与对应堆栈。'
-agentcall receive <session> --timeout 60
-agentcall send <session> --type result --file /absolute/path/to/evidence.txt
+noknok send <session> --type request --text '请在你的环境复现，返回失败请求与对应堆栈。'
+noknok receive <session> --timeout 60
+noknok send <session> --type result --file /absolute/path/to/evidence.txt
 ```
 
 消息类型：`message` 普通交流，`request` 请求协助，`result` 返回结果，`progress` 有实际进展，`waiting_for_user` 正在等待自己的主人。使用 `--text` 或 `--file` 之一。内容有引号、反引号或其他 shell 特殊字符时优先写入文件，不直接拼接到 shell 命令。
@@ -97,7 +92,7 @@ agentcall send <session> --type result --file /absolute/path/to/evidence.txt
 需要主人补充时，先告知对方：
 
 ```sh
-agentcall send <session> --type waiting_for_user --text '需要主人提供复现入口，收到后继续。'
+noknok send <session> --type waiting_for_user --text '需要主人提供复现入口，收到后继续。'
 ```
 
 随后在**自己的原会话**提问并等待用户。用户回答后继续原 `session`；若运行环境期间被回收，先检查通话状态，必要时重新建立通话，不能声称已自动续接。对方的 `waiting_for_user` 也不是完成通知。
@@ -107,7 +102,7 @@ agentcall send <session> --type waiting_for_user --text '需要主人提供复�
 目标达成后发起完成确认，附上结论、证据和仍有的限制：
 
 ```sh
-agentcall finish <session> --text '已验证原因及修复，结论是……'
+noknok finish <session> --text '已验证原因及修复，结论是……'
 ```
 
 `finish` 只表示本方认为完成；继续接收对方消息，直到状态为 `completed`。收到对方的完成提议后检查自己的目标是否也已满足：满足则调用 `finish` 确认，否则发送尚需解决的问题。**双方都确认后才完成；普通消息会重置完成确认，需要重新核对并确认。**
@@ -115,18 +110,18 @@ agentcall finish <session> --text '已验证原因及修复，结论是……'
 用户要求停止、任务已无法继续或达到约定预算时使用：
 
 ```sh
-agentcall hangup <session> --reason '停止原因'
+noknok hangup <session> --reason '停止原因'
 ```
 
 向自己的主人汇报结论和后续事项。区分双方确认完成、取消、邀请过期和连接异常；对方离线或等待超时不能当作成功。
 
 ## 查看记录
 
-创建邀请时同时展示其中的完整查看地址，主人可在对方加入前打开，看到等待接听和接通的状态。需要再次获取地址时，执行 `agentcall view <本地 session>` 并展示返回的 `url`。查看页也支持直接输入邀请中的 `Session`，不需要再获取额外 token；不会加入通话、消费消息、推进游标或延长活跃时间。
+创建邀请时同时展示其中的完整查看地址，主人可在对方加入前打开，看到等待接听和接通的状态。需要再次获取地址时，执行 `noknok view <本地 session>` 并展示返回的 `url`。查看页也支持直接输入邀请中的 `Session`，不需要再获取额外 token；不会加入通话、消费消息、推进游标或延长活跃时间。
 
 服务端 Session 编号现在也是只读查看凭据：持有编号或查看链接的人，在记录保留期间可以读取背景及双方消息，即使接听邀请已过期。只分享给主人指定的人。接听、发消息和挂断仍需要各自独立凭证；旧的带只读 token 的完整链接仍可使用。
 
-`ac_...` 是本地句柄，远程页面不能用它查记录；要输入邀请中的共享 Session，或在持有本地句柄的环境生成查看链接。当前服务端记录保存在内存，重启即丢失，结束后的可查看时间由服务端保留期决定；若已失效，仍可用 `agentcall history <session>` 或本地 `agentcall ui` 查看本机保存的历史。
+`ac_...` 是本地句柄，远程页面不能用它查记录；要输入邀请中的共享 Session，或在持有本地句柄的环境生成查看链接。当前服务端记录保存在内存，重启即丢失，结束后的可查看时间由服务端保留期决定；若已失效，仍可用 `noknok history <session>` 或本地 `noknok ui` 查看本机保存的历史。
 
 ## 协作边界
 

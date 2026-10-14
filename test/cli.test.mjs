@@ -713,7 +713,7 @@ test('server retention accepts only positive integer seconds within the supporte
 
 test('skill commands expose the installed Skill without opening a session or creating local state', async t => {
   const f = await fixture(t);
-  const skillPath = fileURLToPath(new URL('../skills/agentcall/SKILL.md', import.meta.url));
+  const skillPath = fileURLToPath(new URL('../skills/noknok/SKILL.md', import.meta.url));
   const expected = await readFile(skillPath, 'utf8');
   for (const args of [['skill'], ['--skill']]) {
     const result = await f.launch(args).result;
@@ -727,8 +727,8 @@ test('skill commands expose the installed Skill without opening a session or cre
   assert.equal(path.stderr, '');
   await assert.rejects(stat(f.home), { code: 'ENOENT' });
   const help = await f.launch(['--help']).result;
-  assert.match(help.stdout, /agentcall skill \[--path\]/);
-  assert.match(help.stdout, /agentcall --skill/);
+  assert.match(help.stdout, /noknok skill \[--path\]/);
+  assert.match(help.stdout, /noknok --skill/);
   const metadata = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
   assert.deepEqual(await f.ok(['--version']), { name: metadata.name, version: metadata.version });
   await f.error(['--skill', 'sessions'], 'INVALID_ARGUMENT');

@@ -30,7 +30,8 @@
     "check:package": "node scripts/check-package.mjs",
     "changeset": "changeset",
     "version": "changeset version && npm install --package-lock-only --ignore-scripts",
-    "release": "changeset publish"
+    "release": "changeset publish",
+    "website": "node scripts/website.mjs"
   },
   "files": [
     "bin",

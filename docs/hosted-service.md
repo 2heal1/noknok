@@ -1,176 +1,191 @@
-# Hosted service and native-agent contacts
+# 好友联系与后台通知
 
-**Release blocker:** End-to-end encryption is required before real-user beta or production use and is not implemented yet. The current service can read plaintext. Use synthetic content for restricted integration testing, and complete the [pre-launch checklist](launch-checklist.md) before release. HTTPS and encrypted subscription storage do not satisfy this requirement.
+邀请会议适合临时协作；如果希望以后直接联系同一个 agent，可以接入托管模式、交换好友链接，再发起会议。托管模式可以由 NokNok 提供，也可以由你自己部署。更换服务地址就进入另一套独立身份和授权空间。
 
-NokNok can run one HTTPS service for beta access, authorized contacts, invitation-based meetings, and native MCP Events delivery. The service is replaceable: each deployment has its own origin, identities, authorization realm, and data directory. The same client can use another deployment by creating a separate local profile.
+这篇指南按「接入 → 创建会议或加好友 → 联系 → 可选后台接听」展开。只想转交邀请时，先看[开始使用](getting-started.md)，不必配置好友或 MCP Events。
 
-The hosted CLI and service are implemented, including a local two-agent test covering contact exchange, meeting messages, archival, and revocation. This mode removes the laptop receiver from the cloud-agent delivery path. It does not make every agent product wakeable. The host must support native MCP Events and accept the service's connection/authentication configuration. A restricted HTTPS deployment is now available for synthetic integration tests. Local and public synthetic tests do not prove that a real dot has resumed and answered; that verification still needs a native host connection and observed replies.
+**当前公共实例 `https://api.noknok.cloud` 只用于有内测码的受限合成联调。端到端加密尚未实现；服务可以看到明文，真实用户内测仍需完成[上线前 TODO](launch-checklist.md)。真实 dot 在原任务结束后自动加入并回答，也仍待原生宿主验收。**
 
-For a Node.js 24/Caddy/SQLite deployment, use [the hosted deployment guide](deployment.md) and `deploy/compose.hosted.yaml` with `NOKNOK_DOMAIN`. Container construction, public HTTPS certificate validation, synthetic integration flows, HTTPS callback delivery, and control-state persistence across application-container recreation at `https://api.noknok.cloud` were verified on 2026-10-14. The callback receiver and meeting participants were synthetic; real dot answering remains unverified. See the [validation record](validation.md) for the tested environment and limits, and the [original plan and delivery status](public-beta-plan.md) for the remaining work.
+## 1. 安装并接入自己的身份
 
-## Local development before a domain is ready
-
-Install a published version with `npm install --global @noknok/cli`, or use the checked-out source for an unpublished branch. The examples below use `node bin/noknok.mjs`; an installed CLI can use `noknok` instead.
+先在 agent 执行命令的环境安装 CLI；内置的 `noknok` skill 也会一并安装：
 
 ```sh
-node bin/noknok.mjs hosted-server --data-dir .noknok-service --public-url http://127.0.0.1:4317
+npm install --global @noknok/cli
+noknok skill
 ```
 
-Create a beta code in a separate terminal against the same data directory and origin:
+向服务运营者领取内测码，通过私下配置交给使用者，保存到仅自己能读取的文件。不要把内测码放进会议邀请或公开文档。然后让 agent 执行：
 
 ```sh
-node bin/noknok.mjs beta-code --data-dir .noknok-service --public-url http://127.0.0.1:4317 --output-file .noknok-service/beta-code.txt
+noknok hosted setup --server https://api.noknok.cloud --code-file /path/to/private-beta-code.txt --product codex
 ```
 
-The code is written to a new private file with permissions `0600`; an existing file is not overwritten. Do not commit it. The client reads this file so the code need not appear in shell arguments. Issue distinct codes for distinct user accounts. This CLI setup flow redeems a code for a fresh account; sharing one code between separate fresh profiles is not a second-agent registration flow.
+使用自己部署的服务时替换 `--server`。`--product` 由 agent 根据已知产品填写，例如 `codex`、`dot` 或 `doubaowork`；用户无需起名字或指定状态目录。每个 agent 必须保存自己返回的 `localAgent`，例如 `ap_…`；后文的 `LOCAL_AGENT` 都替换为该值。
 
-Each personal agent sets up its own profile:
+当前 CLI 的首次 `setup` 会为新 profile 兑换一个新账号，不是向另一个 profile 的账号自动追加 agent。给不同使用者/新 profile 分别发码；不要假设同一份单次码能重复初始化两端。
+
+如果兑换后网络中断，用错误结果中的原 `localAgent` 加 `--agent`，沿用同一代码文件重试 `hosted setup`。CLI 会用本地恢复凭证继续已有注册，不必直接再消耗一个身份。不要改用别人的 profile，或通过目录中“最近一个身份”猜测自己的身份。
+
+## 2. 直接创建邀请会议
+
+已接入的主持者可以先创建会议，不需要加好友：
 
 ```sh
-node bin/noknok.mjs hosted setup --server http://127.0.0.1:4317 --code-file .noknok-service/beta-code.txt --product codex
+noknok hosted create --agent LOCAL_AGENT --purpose '收集登录故障的复现入口与操作步骤'
 ```
 
-The result includes `localAgent`, for example `ap_…`, and the remote `agentId`. Save the exact `localAgent` handle in that agent's own context. Later local commands must use `--agent HANDLE`. The CLI never selects the latest profile or borrows another agent's profile. `--state-dir DIR` is an explicit alternative for a controlled integration.
+立即把返回的 `invitationUrl` 给目标 agent 或人，把 `viewUrl` 给想旁观的人。自己保存 `am_…` session，继续使用 `meeting send` / `meeting receive`。
 
-If setup is interrupted after consuming the beta code, repeat it with the `localAgent` returned in the error and the same code file. The CLI saves independent recovery secrets before redemption and agent registration. A retry recovers the existing identities instead of consuming another slot. Ordinary results and error metadata do not print account tokens or these recovery secrets.
+**普通邀请的接收方无需内测码或托管账号：**agent 执行 `noknok meeting join '完整邀请链接'`，人直接在浏览器打开并加入。邀请码只授予这场会议的权限，不建立好友关系，也不获得创建托管会议的通用权限。访客使用量计入会议所有者的配额。
 
-Local HTTP is accepted only on loopback. Use HTTPS for reachable private or public deployments. A cloud dot cannot reach your computer's `127.0.0.1`; local tests exercise our protocol, while a real cloud-host test requires the deployed HTTPS origin and a native host connection.
+## 3. 交换好友链接
 
-## Add a contact without waiting
-
-On agent A:
+双方先完成各自的托管接入，并且使用同一个服务。A 生成好友链接：
 
 ```sh
-node bin/noknok.mjs hosted friend-link --agent A_HANDLE
+noknok hosted friend-link --agent A_HANDLE
 ```
 
-The user forwards the returned link to agent B. On B:
+用户将返回的完整联系链接交给 B，B 添加：
 
 ```sh
-node bin/noknok.mjs hosted friend-add 'CONTACT_LINK' --agent B_HANDLE
+noknok hosted friend-add '完整联系链接' --agent B_HANDLE
 ```
 
-On A, synchronize the accepted contact:
+A 再同步接受结果：
 
 ```sh
-node bin/noknok.mjs hosted friends --agent A_HANDLE
+noknok hosted friends --agent A_HANDLE
 ```
 
-The one-time offer authorizes the intended exchange; share it only with that peer. An offer lasts one day by default, with a maximum of seven days. Contact grants last 90 days and require a new authorized exchange afterward. The CLI saves received contact capabilities and the grant needed to revoke the other party's access in each participant's local profile. `friends` displays peer IDs, without printing those capabilities. A contact link from a different service is rejected before any existing credential is sent there.
+两端保存收到的 peer ID 和各自联系凭证，后续使用该 peer ID 联系。联系链接是一次授权交换，默认 1 天内有效（最长 7 天），应只交给预期联系人；联系授权有效期为 90 天，到期后需要重新交换。来自另一服务的联系链接会在已有凭证发送前被拒绝。
 
-**Adding a contact returns immediately. It does not run `listen`, subscribe to events, or start a model conversation.** Contact authorization and permission for the host to perform background work are separate actions.
+**加好友立即返回，不会进入等待循环、订阅事件或启动模型对话。** 后台处理来信需要单独授权和配置。
 
-To remove a contact and revoke the grant this agent issued:
+移除好友并撤销自己发出的联系授权：
 
 ```sh
-node bin/noknok.mjs hosted friend-remove PEER_ID --agent A_HANDLE
+noknok hosted friend-remove PEER_ID --agent LOCAL_AGENT
 ```
 
-Revocation prevents use of that grant in future calls. It cannot retract information already delivered or automatically erase another participant's local history.
+撤销阻止使用该授权发起后续联系，不会收回已经送达的内容或删除对方本地记录。
 
-## Make a call and use the existing meeting UI
+## 4. 联系好友并交流
 
-Once A knows B's peer ID:
+发起方调用：
 
 ```sh
-node bin/noknok.mjs hosted call B_PEER_ID --agent A_HANDLE --purpose 'Collect the reproduction URL and steps for this incident'
+noknok hosted call PEER_ID --agent LOCAL_AGENT --purpose '确认登录故障的复现入口、步骤和失败请求'
 ```
 
-The result immediately provides an `am_…` local session, a read-only `viewUrl`, the meeting ID, and notification status. Notification transport is not proof that the recipient model has answered. Display the session and view link to the user before continuing.
+结果包含自己的 `session`、`viewUrl`、会议 ID 和通知状态。先给用户展示 session 和查看链接，再继续处理会议。通知投递成功只表示传输结果，不能据此说对方已经醒来或已经回复。
 
-When B is not connected through an event-capable host, B can explicitly check its inbox and join:
+没有后台接听能力时，接收方可以在自己的会话主动检查并接受：
 
 ```sh
-node bin/noknok.mjs hosted inbox --agent B_HANDLE
-node bin/noknok.mjs hosted accept INVITATION_ID --agent B_HANDLE
+noknok hosted inbox --agent LOCAL_AGENT
+noknok hosted accept INVITATION_ID --agent LOCAL_AGENT
 ```
 
-Then each participant uses its own returned local session:
+也可以由发起方转交普通会议邀请，让对方按邀请加入。两端后续都使用**各自的** session 和 localAgent：
 
 ```sh
-node bin/noknok.mjs meeting send OWN_SESSION --agent OWN_HANDLE --text 'The issue reproduces after opening the report and switching the date range.'
-node bin/noknok.mjs meeting receive OWN_SESSION --agent OWN_HANDLE --timeout 45
-node bin/noknok.mjs meeting status OWN_SESSION --agent OWN_HANDLE
+noknok meeting send SESSION --agent LOCAL_AGENT --text '问题在打开报表并切换日期范围后出现。'
+noknok meeting receive SESSION --agent LOCAL_AGENT --timeout 45
+noknok meeting status SESSION --agent LOCAL_AGENT
 ```
 
-Multiple agents and humans can participate in a meeting. A human opens a valid ordinary invitation in a browser; the UI distinguishes human and agent messages. The host decides when to end the meeting, based on its goal, participant agreement, and the user's authorization.
+人也可以打开普通邀请进入同一场会议，网页将其发言标为「人工补充」。只有主持者能结束整场会议：
 
 ```sh
-node bin/noknok.mjs meeting end HOST_SESSION --agent HOST_HANDLE --text 'Reproduction evidence collected; next action is to inspect the failing request.'
+noknok meeting end HOST_SESSION --agent HOST_HANDLE --text '复现条件已确认，下一步检查失败请求。'
 ```
 
-`meeting receive` archives the messages that this participant actually receives. `meeting history OWN_SESSION --agent OWN_HANDLE` reads that local archive after server expiry. It is not a guarantee that messages a disconnected participant never fetched were archived locally.
+`meeting history SESSION --agent LOCAL_AGENT` 可以在服务清理后读取本地记录，但只包含该端实际取得的消息。请在清理前接收最后记录；没有收到过的内容不会自动进入本地存档。
 
-To create a meeting for the manual-invitation fallback without a contact:
+## 5. 可选：连接原生 MCP Events，让宿主处理来信
+
+这一步适用于支持原生 MCP Events 的宿主。只安装 CLI、添加 stdio MCP 工具，或者保持电脑在线，都不会自动获得宿主唤醒能力。云端宿主必须能访问这个服务的 HTTPS 地址；不能直接把你的 `127.0.0.1` 当作它的接收服务。
+
+先获取该身份的私密连接配置：
 
 ```sh
-node bin/noknok.mjs hosted create --agent A_HANDLE --purpose 'Compare observations for this issue'
+noknok hosted config --agent LOCAL_AGENT
 ```
 
-The owner forwards the returned ordinary meeting invitation. Other agents use `meeting join LINK`; humans open the link. The guest invitation grants access to that meeting and does not create a friendship or grant general service access.
+优先在宿主中连接服务 `/mcp`，用 `Authorization` header 传该 agent 的 bearer token。若宿主不支持自定义 header，可尝试命令返回的 `privateMcpUrl`（`/mcp/AGENT_TOKEN`）。**这份结果含私密凭证，需私下配置，不能粘贴到邀请、会议、Issue 或截图里，也不能给另一个 agent 复用。** 当前版本不提供通用 OAuth 登录，具体宿主能否接受上述配置需要实际验证。
 
-## Connect a cloud dot through native MCP Events
+插件连接后，用户明确授权宿主订阅当前身份的 NokNok 活动事件。由宿主通过原生 `events/subscribe` 提供回调 URL 和签名密钥；普通 CLI 或 MCP 工具调用不能代替宿主创建这一原生订阅。
 
-Retrieve private connection settings only when configuring the host:
+检查状态：
 
 ```sh
-node bin/noknok.mjs hosted config --agent DOT_HANDLE
+noknok hosted subscription-status --agent LOCAL_AGENT
 ```
 
-The preferred configuration is the service's `/mcp` endpoint with the agent's bearer token in an `Authorization` header. The printed configuration contains a secret and must be entered privately in the host, not pasted into a shared invitation, meeting, issue, or screenshot. It is one identity's connection configuration; do not reuse it for another agent.
+验收要实际完成：建立订阅 → 原设置任务结束 → 另一个已授权好友发起新会议 → 接收方在没有新人工输入的情况下加入并做实质回复。仅 `subscribed`、回调 HTTP 200 或模拟客户端通过，都不算真实自动接听已验证。
 
-Where a host cannot send a custom header, use the privateMcpUrl returned by the config command (`/mcp/AGENT_TOKEN`). This URL is itself a bearer credential; access logs must redact it. Host acceptance of either configuration remains an integration check. This version does not provide a general OAuth authorization flow.
+托管路线不需要给用户电脑配置 Tunnel、VPN、任意 URL 代理或 shell 入口；宿主仅通过此服务提供的通信 API 工作。收到内容的云端 agent 仍会处理这些内容，不能把它描述为信息对云端宿主也保密。
 
-After connecting the plugin, explicitly authorize the host to subscribe to the advertised NokNok activity event for this authenticated identity. The host supplies its callback URL and signing secret through native `events/subscribe`. A CLI command or a standard MCP tool call cannot manufacture the host's native subscription on its behalf.
+## 可复制提示词
 
-Inspect status afterward:
+生成联系链接，替换服务和代码文件路径：
+
+```text
+先运行 noknok skill，并阅读其中托管服务的说明。
+服务是 <服务地址>，内测码文件通过私下配置提供在 <文件路径>。
+请建立你自己的托管身份，生成好友链接并给我。
+保存返回的 localAgent，后续继续使用自己的身份。
+```
+
+添加好友：
+
+```text
+先运行 noknok skill，用你自己的 NokNok 托管身份添加下面的好友。
+添加后告诉我结果并保存 peer ID；这次只做添加，不启动监听或后台订阅。
+<完整好友链接>
+```
+
+已连接插件后，授权原生后台处理：
+
+```text
+使用已连接的 NokNok 插件。我授权你通过宿主原生 MCP Events 订阅当前身份的来信，
+并处理我已授权好友发来的会议邀请。收到后检查目标，加入并在我已有授权范围内交流；
+需要额外信息或行动授权时问我。展示订阅状态后结束设置任务，不运行 listen 等待循环。
+如果宿主无法订阅，请准确说明缺少的能力，不要把工具可调用当作后台已开启。
+```
+
+联系好友：
+
+```text
+先运行 noknok skill，用你自己的托管身份联系 <peer ID>。
+会议目标是 <目标>。立即给我 session 和只读查看链接，然后围绕目标交流。
+你担任主持者，目标达成后归纳结论并结束；无法判断时问我。
+如果对方无法后台接听，给我普通会议邀请转交。
+```
+
+## 自己运行托管服务
+
+安装同一个 CLI 后即可在本机运行；保持第一个终端运行，在另一个终端生成码：
 
 ```sh
-node bin/noknok.mjs hosted subscription-status --agent DOT_HANDLE
+noknok hosted-server --data-dir .noknok-service --public-url http://127.0.0.1:4317
+
+# 在另一个终端，使用相同数据目录和 origin。
+noknok beta-code --data-dir .noknok-service --public-url http://127.0.0.1:4317 --output-file .noknok-service/beta-code.txt
 ```
 
-A successful test requires all of the following: the host establishes the subscription, the initial setup task ends, another authorized agent sends a new invitation, and the recipient actually invokes tools to join and reply without fresh manual input. Merely seeing a callback's HTTP success or a `subscribed` flag is insufficient.
+`--output-file` 以 `0600` 权限创建新文件，不覆盖已有文件；不要提交数据目录或代码文件。HTTP 仅允许本机 loopback 测试，其他托管部署必须使用 HTTPS。公网、企业入口和 Docker Compose 部署见[部署说明](deployment.md)。
 
-No tunnel, VPN, arbitrary URL fetcher, or shell execution endpoint is needed for this hosted route. Intranet services remain outside this application's API. A cloud agent can still see the message content it is authorized to receive; this design cannot keep a conversation secret from the cloud host processing it.
+## 存储、权限和限额
 
-## Data boundary
+联系人与可复用联系凭证保存在双方自己的 profile。服务持久保存最小账号/agent 绑定、内测兑换与配额、授权撤销、有效事件订阅，以及恢复双向联系授权所需的邀请兑换记录（邀请 ID、领取者、时间、有效期）。后者可能反映交互关系；不应宣传为服务完全没有关系元数据。回调地址和签名密钥是服务私密配置，不是好友链接的一部分。
 
-The service persists control state needed for its operation: beta redemption and quotas, minimal account/agent ownership credentials, revocations, and authenticated native-event subscriptions. It also stores minimal contact-offer redemption records: offer ID, claimant, acceptance time, and expiry. These let the offer owner recover the reciprocal grant after the other agent accepts; they reveal some relationship metadata even though the server has no complete address book. Callback URLs and signing secrets are service secrets, never contact-link fields.
+联系凭证由服务的 HMAC 密钥代表已认证授权方签发。发起联系时，服务校验调用者身份、接收方授权、服务空间、操作、有效期和撤销状态；第三方不会仅凭复制 peer ID 或展示名获得联系权限。服务和密钥属于信任边界，当前也没有公开可搜索的联系人目录。
 
-Contact names and reusable contact credentials belong to the participants. The service signs contact grants with its HMAC key on behalf of an authenticated authorizing agent; participants do not hold independent signing keys in this version. The service and its key are therefore part of the trust boundary. Friend relationships are not a publicly searchable social directory. The server validates the authenticated caller against the recipient-issued capability, service realm, allowed operation, expiry, and revocation before accepting a call; a third agent cannot gain access merely by copying a peer ID or display name.
+聊天正文只在有界内存中暂存，服务重启会丢失会议；SQLite 中的订阅不会恢复会议正文。部署方的反向代理和监控应避免记录正文与凭证。HTTPS 保护传输，订阅字段的加密保护落盘敏感配置，二者都不等于防止运营者看到内容的端到端加密。
 
-Meetings and message content have bounded in-memory lifetime. They are not written as server-side chat history. Restarting the service loses active meetings; preserving subscription control state does not recreate their messages. The deployment's reverse proxy and monitoring configuration must avoid request-body and credential logging to preserve this boundary.
+默认限制包括 10 个账号、每账号 2 个活跃 agent；全局最多 5 场保留中的会议，每账号最多 2 场开放会议，每场 8 位参与者。每日创建和好友呼叫分别最多 30 次，会议消息 1,000 条，通知 200 次，订阅验证/续订 60 次。配额按 UTC 日持久计数，失败的订阅刷新不会清掉仍有效的旧订阅。
 
-HTTPS protects transport. This version is not end-to-end encrypted against the service operator, and the operator can observe content while forwarding it. Each receiving agent's own host may also retain its conversation and tool results under that host's policy.
-
-## Beta limits
-
-The default service admits ten accounts and two active agents per account. It retains at most five rooms, permits two open meetings per account and eight participants per room, and limits transcript data to 2 MiB per room / 8 MiB globally, plus bounded metadata overhead. Each room has at most 500 events and each HTTP request body at most 128 KiB.
-
-Per-account daily limits are 30 meeting creations, 30 contact calls, 1,000 meeting messages, and 200 new notifications. Response budgets are 50 MiB per meeting-owner account using service payload accounting and 512 MiB of HTTP response bodies across the service. Daily windows are fixed UTC days and persist across restarts. Guest activity consumes the meeting owner's budget. Reaching a limit returns an error; it does not silently lift the limit.
-
-These application limits are not a load-test result, DDoS defense, or a cloud-provider spending cap. Headers, TLS, retransmission, proxy traffic, callback traffic, and small quota-error responses are not all covered by the response-body budget. See [deployment limits](deployment.md) before opening beta access.
-
-## Prompts for the agents
-
-Replace the source command with the locally installed path if necessary. Supply the beta-code file through a private configuration path. The user does not need to invent names or storage directories: the agent supplies its known product identity, and the CLI manages profiles.
-
-**Generate a contact link:**
-
-> Use the NokNok CLI from this repository. Set up your own hosted profile against SERVICE_URL using the privately supplied beta-code file, with your known product name. Save the exact returned localAgent handle in your own context. Generate your contact link and show it to me. This request is only setup and contact-link generation; complete when the link is available.
-
-**Add a contact:**
-
-> Use your own NokNok hosted profile to add this contact: CONTACT_LINK. If this is your first use, set up your own profile with the privately supplied beta code. Save the returned peer ID and your own localAgent handle. Confirm that the friend is added. No waiting loop is needed.
-
-**Enable native background handling in dot, after its plugin is connected:**
-
-> Use the connected NokNok plugin. I authorize you to subscribe through your host's native MCP Events mechanism to this identity's incoming NokNok activity, and to handle calls from the contacts I have authorized. On a new invitation, inspect its stated purpose, join the targeted meeting, and discuss that purpose within my existing authorization. Ask me if a request requires information or an action I have not authorized. Preserve your contacts and any conversation record in your own supported storage. Show the subscription status, then finish this setup task; do not keep a listen loop running. If native subscription is unavailable, tell me precisely what is missing.
-
-**Start a meeting:**
-
-> Use NokNok to contact PEER_ID. The meeting goal is: GOAL. Show me the returned session and view link immediately, then discuss the goal and receive replies. You are the host: end the meeting when the goal is met, or ask me if you cannot decide. If the peer cannot wake automatically, give me the manual invitation to forward.
-
-Public HTTPS synthetic integration has been verified. Claiming native automatic answering still requires a real host subscription, completion of the setup task, and an observed autonomous join and substantive reply after an authorized contact initiates a meeting. Synthetic clients, protocol tests, and webhook receipts do not substitute for that result.
-
-Subscription verification and renewal also have a persistent limit of 60 requests per account per UTC day; the limit is checked before contacting a callback. A failed refresh does not erase a still-valid subscription.
+内存、正文、响应预算与费用边界见[部署限额](deployment.md#默认托管限额)。这些限制不是云厂商账单上限或容量压测结论。公网合成验证结果和真实宿主待验收项见[验收记录](validation.md)。

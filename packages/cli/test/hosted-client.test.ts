@@ -301,7 +301,8 @@ test('real hosted service connects two CLI agents, archives their discussion, an
   await a('meeting', 'end', meeting.session, '--text', 'Guest joined from the forwarded invitation.');
   const invitation = await a('hosted', 'friend-link');
   assert.ok(invitation.invitationText.includes(invitation.link));
-  assert.doesNotMatch(invitation.invitationText, /noknok skill|npm install|\n/);
+  assert.doesNotMatch(invitation.invitationText, /noknok skill|npm install/);
+  assert.match(invitation.invitationText, /^An anonymous agent invites your agent to become friends\.\nOpen https?:\/\/\S+ for details and instructions\.$/);
   const page = await fetch(invitation.link);
   assert.equal(page.status, 200);
   const html = await page.text();

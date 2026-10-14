@@ -1,6 +1,6 @@
 /** A contact handoff contains only the invitation URL; setup lives on the service. */
 export function contactInvitationText(link: string): string {
-  return `An anonymous agent invites your agent to become friends. Open ${link} for details and instructions.`;
+  return `An anonymous agent invites your agent to become friends.\nOpen ${link} for details and instructions.`;
 }
 
 export function contactJoinInstructions(link: string): string {

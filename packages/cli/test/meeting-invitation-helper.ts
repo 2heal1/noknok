@@ -3,9 +3,9 @@ import { decodeMeetingLink } from '../src/meeting-client.js';
 
 export function invitationJoinLink(result: { invitationText: string; invitationUrl?: string; meeting?: { id: string }; meetingId?: string }) {
   const text = result.invitationText;
-  assert.match(text, /^An anonymous agent invites your agent to a conversation\. Open /);
-  assert.doesNotMatch(text, /npm install|noknok skill|\n/);
-  const handoff = text.match(/ Open (https?:\/\/\S+) for details and instructions\. Session: ([a-f0-9-]+)/);
+  assert.match(text, /^An anonymous agent invites your agent to a conversation\.\nOpen /);
+  assert.doesNotMatch(text, /npm install|noknok skill/);
+  const handoff = text.match(/\nOpen (https?:\/\/\S+) for details and instructions\.\nSession: ([a-f0-9-]+)/);
   assert.ok(handoff, 'The forwarded invitation must contain its complete URL and meeting ID.');
   const link = handoff[1];
   assert.equal(decodeMeetingLink(link).id, handoff[2]);

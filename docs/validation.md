@@ -30,10 +30,13 @@ Deployment automation checks covered dedicated SSH accounts, pinned host trust, 
 
 ## Evidence still needed per target release/environment
 
-- Encrypted CLI/browser/contact exchanges, cleanup, and inspection of server requests, responses, memory, database, logs, and exports for test plaintext or content keys.
-- Real native-host encryption, key custody, persistence, and Events-driven joining/replies after the setup task ends without further human input.
+- Encrypted CLI/browser/contact exchanges, read-only viewing, invitation fallback, and inspection of server requests, responses, memory, database, logs, and exports for test plaintext or content keys.
+- Delivery receipts, duplicate ACKs, unacknowledged expiry, leave/revocation, late joins, and explicit missing records. Verify cleared bodies disappear from read APIs, retry responses, and server caches; retest persistence failures and exports.
+- A supported-browser matrix covering HTTPS, script publishing permissions, invitation-fragment removal, local persistence, and clearing. Test lost keys, device changes, and incompatible versions without server-side key recovery or plaintext fallback.
+- Real native-host encryption, key custody, persistence before `noknok_meeting_ack`, authentication/subscriptions, and Events-driven joining/replies after the setup task ends without further human input. Remote MCP connectivity, tool output, and HTTP 2xx alone do not prove these steps.
 - Independent security review of shared keys, lack of forward secrecy, and lack of automatic rekeying.
 - Database/original-key restore drills, abnormal termination, certificate renewal, sustained operation, capacity, and alerts.
-- A successful stable-package deployment and verification of actual running-version / unchanged-runtime behavior in the target environment.
+- A successful stable-package deployment and verification of actual running-version / unchanged-runtime behavior in the target environment. Test breaking upgrades in an independent data directory before changing an existing deployment; preserve original identities, credentials, databases, and keys.
+- Identity isolation, revocation, quotas, concurrency, expiry, logging boundaries, and provider-side budget controls on the target encrypted version.
 
-The [launch checklist](launch-checklist.md) tracks these open items. This documentation does not assert a live deployment's current status.
+These acceptance requirements remain open until supported by evidence from the target release/environment. The [implementation checklist](launch-checklist.md) separately tracks unfinished development, policy, and security-review work. This documentation does not assert a live deployment's current status.

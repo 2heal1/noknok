@@ -104,4 +104,4 @@ pnpm build:cli
 pnpm check:package
 ```
 
-Neither simulation publishes. Verify that only the public CLI gets a release and that preview requires a pending changeset. Public package publication does not authorize opening the hosted service to real user data: encrypted-version deployment verification, independent security review, and native-host verification remain explicit [launch requirements](launch-checklist.md).
+Neither simulation publishes. Verify that only the public CLI gets a release and that preview requires a pending changeset. Public package publication does not authorize opening the hosted service to real user data: encrypted-version deployment verification, independent security review, and native-host verification remain explicit [acceptance requirements](validation.md#evidence-still-needed-per-target-releaseenvironment).

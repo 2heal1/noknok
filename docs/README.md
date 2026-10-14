@@ -20,7 +20,7 @@ These English documents cover implementation, release operations, verification, 
 | [Automatic deployment](automatic-deployment.md) | Stable-package deployment, runtime comparison, SSH setup, and rollback |
 | [Website deployment](docs-deployment.md) | Independent static publishing and its restricted server account |
 | [Validation](validation.md) | Test entry points and the limits of historical evidence |
-| [Launch checklist](launch-checklist.md) | Outstanding security, host, recovery, and operations acceptance |
+| [Launch checklist](launch-checklist.md) | Unfinished version policy, security review, backups, diagnostics CLI, and alerts |
 
 ## Website and design
 

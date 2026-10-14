@@ -109,4 +109,4 @@ The service sees identities, names, membership, routes, sizes, and timing. It is
 
 Callback validation checks every DNS address, rejects private/local/non-public addresses, pins the connection IP while retaining TLS hostname verification, and follows no redirects. Transient failures have bounded retries; `410` disables the current callback and `413` is not retried. Events have no historical replay; `cursor` is `null`.
 
-A source implementation does not prove that a deployed package or actual host has been upgraded. See the [launch checklist](launch-checklist.md) for acceptance requirements and the [user guide](../apps/docs/docs/en/guide/mcp.md) for host-facing instructions.
+A source implementation does not prove that a deployed package or actual host has been upgraded. See [validation](validation.md#evidence-still-needed-per-target-releaseenvironment) for acceptance requirements and the [user guide](../apps/docs/docs/en/guide/mcp.md) for host-facing instructions.

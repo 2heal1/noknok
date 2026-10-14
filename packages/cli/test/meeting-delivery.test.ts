@@ -48,7 +48,7 @@ function fixture(t, options = {}) {
   return { meetings, rooms, rawRequest, request, create, join, ack, read };
 }
 
-test('creation awaits its first peer and explicit participant receipts erase every metadata copy', async t => {
+test('creation delivery is acknowledged independently of the active invitation details', async t => {
   const f = fixture(t);
   const host = await f.create();
   assert.equal(host.deliveryReceipts.length, 1);
@@ -67,14 +67,14 @@ test('creation awaits its first peer and explicit participant receipts erase eve
   const cleaned = await f.read(host);
   assert.equal(cleaned.events[0].bodyState, 'delivered');
   assert.equal(cleaned.events[0].data, undefined);
-  assert.equal(cleaned.meeting.purpose, undefined);
-  assert.equal(cleaned.meeting.context, undefined);
-  assert.equal(f.meetings.inspect(host.meeting.id).purpose, undefined);
+  assert.equal(cleaned.meeting.purpose, 'Private purpose');
+  assert.equal(cleaned.meeting.context, 'Private context');
+  assert.match(f.meetings.inspect(host.meeting.id).purpose, /^nkenc1\./);
   const retry = await f.request('/v1/meetings', { method: 'POST', body: host.payload });
-  assert.equal(retry.body.meeting.context, undefined);
+  assert.equal(retry.body.meeting.context, 'Private context');
   assert.equal(retry.body.events[0].data, undefined);
   const invite = new URLSearchParams(new URL(host.invitationUrl).hash.slice(1)).get('invite');
-  assert.equal((await f.request(`${host.path}/invitation`, { token: invite })).body.meeting.context, undefined);
+  assert.equal((await f.request(`${host.path}/invitation`, { token: invite })).body.meeting.context, 'Private context');
   assert.deepEqual((await f.ack(host, peer, [first])).body.acknowledged, [1], 'ACK retry remains idempotent after deletion');
   const room = f.rooms.get(host.meeting.id);
   assert.equal(room.purpose, undefined);
@@ -122,7 +122,7 @@ test('pending TTL deletes unattended bodies without traffic and valid expired re
   assert.deepEqual((await f.ack(host, host)).body.acknowledged, [1]);
   const retry = await f.request('/v1/meetings', { method: 'POST', body: host.payload });
   assert.equal(retry.body.events[0].bodyState, 'expired');
-  assert.equal(retry.body.meeting.context, undefined);
+  assert.equal(retry.body.meeting.context, 'Private context');
 });
 
 test('late joins do not enlarge existing delivery claims or resurrect deleted bodies', async t => {
@@ -239,4 +239,88 @@ test('relay requires encrypted content and retains only opaque wire bodies and p
   assert.equal(state.events.length, 1);
   assert.equal(state.state, 'active');
   assert.equal(state.encryption.id, host.meeting.encryption.id);
+});
+
+test('invitation details survive delivery expiry and late joins, then disappear immediately on end', async t => {
+  const f = fixture(t, { deliveryTtlMs: 25, retentionMs: 1000 });
+  const host = await f.create();
+  const invite = new URLSearchParams(new URL(host.invitationUrl).hash.slice(1)).get('invite');
+  await f.ack(host, host);
+  await new Promise(resolve => setTimeout(resolve, 80));
+  assert.equal((await f.read(host)).events[0].data, undefined);
+  const details = await f.request(`${host.path}/invitation`, { token: invite });
+  assert.equal(details.body.meeting.purpose, 'Private purpose');
+  assert.equal(details.body.meeting.context, 'Private context');
+  assert.equal((await f.request(`${host.path}/invitation`, { token: 'invalid' })).status, 401);
+  const wire = await f.rawRequest(`${host.path}/invitation`, { token: invite });
+  assert.ok(!JSON.stringify(wire).includes('Private purpose'));
+  assert.match(wire.body.meeting.purpose, /^nkenc1\./);
+  const peer = await f.join(host, 'Late peer');
+  assert.equal(peer.meeting.context, 'Private context');
+  assert.equal(peer.events[0].data, undefined);
+  await f.request(`${host.path}/end`, { method: 'POST', token: host.participant.token, body: { reason: 'Done' } });
+  const ended = await f.request(`${host.path}/invitation`, { token: invite });
+  assert.equal(ended.body.meeting.state, 'ended');
+  assert.equal(ended.body.meeting.purpose, undefined);
+  assert.equal(ended.body.meeting.context, undefined);
+  assert.equal(f.rooms.get(host.meeting.id).invitationContent, undefined);
+  const retry = await f.request('/v1/meetings', { method: 'POST', body: host.payload });
+  assert.equal(retry.body.meeting.context, undefined);
+  assert.equal(retry.body.events[0].data, undefined);
+});
+
+test('meeting expiry removes invitation content and its pending delivery copy', async t => {
+  const f = fixture(t, { meetingTtlMs: 30, deliveryTtlMs: 1000, retentionMs: 1000 });
+  const host = await f.create();
+  await new Promise(resolve => setTimeout(resolve, 80));
+  const room = f.rooms.get(host.meeting.id);
+  assert.equal(room.state, 'expired');
+  assert.equal(room.invitationContent, undefined);
+  assert.equal(room.events[0].data, undefined);
+  assert.equal((await f.read(host)).meeting.purpose, undefined);
+});
+
+test('30 minutes of inactivity purges a meeting; reads and acknowledgments never renew it', async t => {
+  let now = 1_800_000_000_000;
+  t.mock.method(Date, 'now', () => now);
+  const f = fixture(t);
+  const host = await f.create();
+  const room = f.rooms.get(host.meeting.id);
+  assert.equal(Date.parse(host.meeting.idleExpiresAt) - now, 30 * 60_000);
+  now += 29 * 60_000;
+  await f.read(host);
+  await f.ack(host, host);
+  const invite = new URLSearchParams(new URL(host.invitationUrl).hash.slice(1)).get('invite');
+  assert.equal((await f.request(`${host.path}/invitation`, { token: invite })).status, 200);
+  assert.equal(room.lastActivityAt, now - 29 * 60_000);
+  now += 60_000;
+  assert.equal((await f.request(`${host.path}/invitation`, { token: invite })).status, 404);
+  assert.equal(f.meetings.stats().rooms, 0);
+  assert.equal(room.invitationContent, undefined);
+  assert.equal(room.events[0].data, undefined);
+});
+
+test('successful membership and discussion changes renew idle expiry, while replay does not', async t => {
+  let now = 1_800_000_000_000;
+  t.mock.method(Date, 'now', () => now);
+  const f = fixture(t, { meetingTtlMs: 24 * 60 * 60_000 });
+  const host = await f.create();
+  now += 29 * 60_000;
+  const peer = await f.join(host);
+  assert.equal(Date.parse(peer.meeting.lastActivityAt), now);
+  now += 29 * 60_000;
+  const body = { text: 'An actual update', requestId: 'activity-once' };
+  assert.equal((await f.request(`${host.path}/messages`, { method: 'POST', token: host.participant.token, body })).status, 200);
+  now += 29 * 60_000;
+  assert.equal((await f.request(`${host.path}/ready`, { method: 'POST', token: host.participant.token, body: { ready: true } })).status, 200);
+  now += 29 * 60_000;
+  const left = await f.request(`${host.path}/leave`, { method: 'POST', token: peer.participant.token, body: {} });
+  assert.equal(left.status, 200);
+  const lastActivity = now;
+  now += 29 * 60_000;
+  const replay = await f.request(`${host.path}/messages`, { method: 'POST', token: host.participant.token, body });
+  assert.equal(replay.status, 200);
+  assert.equal(Date.parse(replay.body.meeting.lastActivityAt), lastActivity);
+  now += 60_000;
+  assert.equal((await f.request(host.path, { token: host.participant.token })).status, 404);
 });

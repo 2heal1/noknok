@@ -21,6 +21,9 @@ const VERSION = '2026-07-28';
 const HEADERS = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
   'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
 const ASSETS = new Map([
+  ['/contact', ['contact.html', 'text/html; charset=utf-8']],
+  ['/contact.js', ['contact.js', 'text/javascript; charset=utf-8']],
+  ['/contact-invitation.js', ['contact-invitation.js', 'text/javascript; charset=utf-8']],
   ['/meeting', ['meeting.html', 'text/html; charset=utf-8']],
   ['/meeting/', ['meeting.html', 'text/html; charset=utf-8']],
   ['/meeting.js', ['meeting.js', 'text/javascript; charset=utf-8']],
@@ -63,7 +66,7 @@ export interface HostedServiceOptions {
   dataDir?: string; publicUrl?: string; port?: number; host?: string;
   maxAccounts?: number; maxAgentsPerAccount?: number; maxMeetings?: number; maxOwnerMeetings?: number;
   maxParticipants?: number; maxRoomBytes?: number; maxTotalBytes?: number;
-  meetingTtlMs?: number; retentionMs?: number; deliveryTtlMs?: number; maxEvents?: number;
+  meetingTtlMs?: number; idleTtlMs?: number; retentionMs?: number; deliveryTtlMs?: number; maxEvents?: number;
   maxDailyEgressBytes?: number; maxAccountDailyEgressBytes?: number;
   webhookPost?: WebhookPost; eventOptions?: Omit<EventsOptions, 'store'>; store?: HostedStore;
 }
@@ -93,7 +96,7 @@ class MeetingResponse extends EventEmitter {
 export async function startHostedService({ dataDir, publicUrl, port = 4317, host = '127.0.0.1',
   maxAccounts = 1000, maxAgentsPerAccount = 2, maxMeetings = 5, maxOwnerMeetings = 2,
   maxParticipants = 8, maxRoomBytes = 2 * 1024 * 1024, maxTotalBytes = 8 * 1024 * 1024,
-  meetingTtlMs = 7_200_000, retentionMs = 600_000, deliveryTtlMs = 300_000, maxEvents = 500,
+  idleTtlMs, meetingTtlMs = 7_200_000, retentionMs = 600_000, deliveryTtlMs = 300_000, maxEvents = 500,
   maxDailyEgressBytes = 512 * 1024 * 1024, maxAccountDailyEgressBytes = 50 * 1024 * 1024,
   webhookPost, eventOptions = {}, store: suppliedStore }: HostedServiceOptions = {}) {
   if (!dataDir && !suppliedStore) throw new TypeError('A persistent dataDir is required.');
@@ -161,7 +164,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
     });
   }
   const meetings = createMeetings({ getUrl: () => realm, maxMeetings, maxOwnerMeetings, maxParticipants,
-    maxRoomBytes, maxTotalBytes, meetingTtlMs, retentionMs, deliveryTtlMs, maxEvents, onEvent: onMeetingEvent,
+    maxRoomBytes, maxTotalBytes, meetingTtlMs, idleTtlMs, retentionMs, deliveryTtlMs, maxEvents, onEvent: onMeetingEvent,
     isParticipantAvailable(room, participant) { return activeAgent(room.ownerAgentId) && (!participant.authId || activeAgent(participant.authId)); },
     authorizeCreate(req) {
       const actor = req.noknokActor || store.authenticate(bearer(req));

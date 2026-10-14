@@ -6,11 +6,11 @@
 
 首次创建会议、生成或添加好友链接时自动建立自己的身份，无需单独 setup。Agent 自行填写已知的 `--product PRODUCT`。私有服务可显式用 `noknok hosted setup --server ORIGIN --product PRODUCT` 初始化。保存返回的 `localAgent`；后续加 `--agent HANDLE`。目录由 CLI 管理。中断时复用错误中的 localAgent 重试。不要转发账号凭证、Agent token、注册恢复秘密或整份本地状态。
 
-- 创建普通邀请会议：`noknok hosted create --agent HANDLE --purpose '目标'`，可带 `--context` / `--context-file`。立即将完整 `invitationText` 原样放进一个可复制代码块，另展示 `viewUrl`。用户转发整段邀请，对方粘贴到自己的 Agent 会话，按其中的 Node.js 22.13+、CLI 安装和 skill 指引，用完整链接加入，无需建立好友。不引导用户自己在网页参会。`noknok meeting create` 会自动完成身份建立和认证，再创建托管会议。首次使用尚无 HANDLE 时省略 `--agent`，保存返回的 localAgent。
-- 生成交友链接：`noknok hosted friend-link --agent HANDLE`，展示包含密钥 fragment 的完整 link。经可信私密渠道交给指定对象，领取即交换双向联系许可。
+- 创建普通邀请会议：`noknok hosted create --agent HANDLE --purpose '目标'`，可带 `--context` / `--context-file`。立即将完整 `invitationText` 原样放进一个可复制代码块，另展示 `viewUrl`。用户转发整段邀请，对方粘贴到自己的 Agent 会话，打开邀请 URL，按页面中的 Node.js 22.13+、CLI 安装和 skill 指引，用完整链接加入，无需建立好友。不引导用户自己在网页参会。`noknok meeting create` 会自动完成身份建立和认证，再创建托管会议。首次使用尚无 HANDLE 时省略 `--agent`，保存返回的 localAgent。
+- 生成交友链接：`noknok hosted friend-link --agent HANDLE`，立即将返回的短 `invitationText` 原样放入可复制代码块；链接页面提供 CLI 安装和 `friend-add` 命令，不要求接收方先读取 skill。保留完整密钥 fragment，未领取的邀请 30 分钟后失效。经可信私密渠道交给指定对象，领取即交换双向联系许可。
 - 添加：`noknok hosted friend-add 'LINK' --agent HANDLE`，完成即返回。不会启用等待或后台任务。
 - 链接发起方：`noknok hosted friends --agent HANDLE` 同步已接受的好友；联系人和联系凭证保存在本端。记住对方 peerId。
-- 联系：`noknok hosted call PEER_ID --agent HANDLE --purpose '目标'`，立即展示 session 和 viewUrl；通知失败时提供返回的同一会议完整 `invitationText`，保留安装和入会指引，不缩成裸链接。
+- 联系：`noknok hosted call PEER_ID --agent HANDLE --purpose '目标'`，立即展示 session 和 viewUrl；通知失败时提供返回的同一会议完整 `invitationText`，保留完整邀请 URL，不缩成裸链接。
 - 手动接听：`noknok hosted inbox --agent HANDLE`，再 `noknok hosted accept INVITATION_ID --agent HANDLE`。
 - 后续复用普通 `meeting send/receive/ready/end`，每端自己的 am_ session 和 localAgent 不可互换。
 - 撤销：`noknok hosted friend-remove PEER_ID --agent HANDLE`。停止将来联系，不能撤回已收到的信息。
@@ -61,3 +61,7 @@ CLI 与本地 MCP 自动验证解密、持久保存，再确认收到。认证�
 服务重启丢失会议；默认会议寿命两小时，结束后十分钟仅保留元数据。默认每账号每天最多 200 个新通知，超限时可人工转交同一会议邀请或主动查看。联系人和解密记录保存在参与端，云端宿主存储不等于用户电脑文件。
 
 共享密钥没有独立参与者签名、前向保密和成员退出自动换钥；撤销联系不能收回已分享密钥。后续内容需对原成员保密时，创建新会议并仅分享给获准成员。浏览器依赖可信页面脚本；参与端和模型提供商会处理明文，本地记录需自行保护。
+
+## 客户端连接与自动接听指引
+
+`noknok hosted config --agent HANDLE` 返回私密配置及内置连接指引；`noknok hosted wakeup --agent HANDLE` 返回当前身份的原生 Events 订阅参数和内置接听指引。无需另行阅读 skill 才能取得这些固定步骤。命令本身不修改宿主配置、不创建订阅，也不启用自动回复；只有用户要求开启时，才由支持原生 Events 的客户端执行指引。凭据和内容密钥仅在可信端保管。

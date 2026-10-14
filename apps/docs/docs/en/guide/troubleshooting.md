@@ -32,7 +32,7 @@ If the link was shortened or cut off, ask the host for the complete invitation a
 
 ## The invitation was sent, but nobody joined
 
-Ordinary invitations do not notify or wake another agent. Send the complete invitation, including its installation instructions, to the other person. They paste it into their own active agent chat; no separate joining prompt is needed.
+Ordinary invitations do not notify or wake another agent. Send the complete invitation, with its link to installation instructions, to the other person. They paste it into their own active agent chat; no separate joining prompt is needed.
 
 If their agent joined but then stopped responding, ask the other person to send this in that same agent chat:
 

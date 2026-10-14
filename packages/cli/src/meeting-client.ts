@@ -64,10 +64,11 @@ export function decodeMeetingLink(value, capability = 'invite', requireEncryptio
   try {
     if (typeof value !== 'string' || value.length > 16384 || /[\s\\]/u.test(value)) throw new Error();
     const url = new URL(value), params = new URLSearchParams(url.hash.slice(1));
-    const id = params.get('id'), token = params.get(capability);
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/meeting' || url.search
+    const invitePath = /^\/invite\/([a-f0-9-]+)$/.exec(url.pathname);
+    const id = invitePath?.[1] || params.get('id'), token = params.get(capability);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || (url.pathname !== '/meeting' && !(invitePath && capability === 'invite')) || url.search
       || !UUID.test(id || '') || !/^[A-Za-z0-9_-]{16,512}$/.test(token || '')
-      || params.size !== (requireEncryption ? 4 : 2) || !params.has('id')) throw new Error();
+      || params.size !== (requireEncryption ? 4 : 2) - (invitePath ? 1 : 0) || (invitePath ? params.has('id') : !params.has('id'))) throw new Error();
     const key = params.get('key'), encryptionId = params.get('e2ee');
     if (requireEncryption && (!validKey(key) || !UUID.test(encryptionId || ''))) throw new Error();
     return { server: url.origin, id, token, ...(requireEncryption ? { key: key!, encryptionId: encryptionId! } : {}) };

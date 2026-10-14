@@ -2,6 +2,9 @@ import type { MeetingOptions, MeetingRoom, MeetingRequest, MeetingParticipant, M
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { redactInvitations } from './invitation.js';
 import { isEncryptedText } from './e2ee.js';
+import { readFile } from 'node:fs/promises';
+import { webFile } from './asset-paths.js';
+import { DEFAULT_IDLE_TTL_MS } from './service-config.js';
 
 const MAX_BODY_BYTES = 128 * 1024;
 // AES-GCM adds a 16-byte tag, a 12-byte IV and base64url framing.
@@ -132,6 +135,7 @@ async function readBody(req) {
 export function createMeetings(options: MeetingOptions) {
   if (typeof options.getUrl !== 'function') throw new TypeError('getUrl is required.');
   const meetingTtlMs = positive(options.meetingTtlMs, 7_200_000, 'meetingTtlMs');
+  const idleTtlMs = positive(options.idleTtlMs, DEFAULT_IDLE_TTL_MS, 'idleTtlMs');
   const retentionMs = positive(options.retentionMs, 600_000, 'retentionMs');
   const deliveryTtlMs = positive(options.deliveryTtlMs, 300_000, 'deliveryTtlMs');
   const maxMeetings = positive(options.maxMeetings, 1000, 'maxMeetings');
@@ -152,12 +156,13 @@ export function createMeetings(options: MeetingOptions) {
   }
 
   function summary(room) {
-    const started = room.events[0]?.data;
+    const started = room.invitationContent;
     const closed = room.state === 'active' ? undefined : [...room.events].reverse().find(event => event.type === 'closed')?.data;
     return {
       id: room.id, encryption: room.encryption, ...(started ? { purpose: started.purpose, context: started.context } : {}), state: room.state, hostId: room.hostId,
       participants: [...room.participants.values()].map(publicParticipant), readyBy: [...room.readyBy],
       createdAt: iso(room.createdAt), expiresAt: iso(room.expiresAt),
+      lastActivityAt: iso(room.lastActivityAt), idleExpiresAt: iso(room.lastActivityAt + idleTtlMs), idleTtlMs,
       ...(room.closedAt === undefined ? {} : { closedAt: iso(room.closedAt) }),
       purgeAt: iso((room.closedAt ?? room.expiresAt) + retentionMs), retentionMs, deliveryTtlMs,
       ...(closed?.reason === undefined ? {} : { reason: closed.reason }),
@@ -218,6 +223,7 @@ export function createMeetings(options: MeetingOptions) {
     }
   }
   function append(room: MeetingRoom, type: string, from: string, data: NonNullable<MeetingEvent['data']>, at = Date.now()) {
+    if (type === 'started' || type === 'joined' || MESSAGE_TYPES.has(type) || type === 'ready' || type === 'left') room.lastActivityAt = at;
     const event: MeetingEvent = { seq: ++room.seq, type, from, at: iso(at), data, bodyState: 'pending', bodyExpiresAt: iso(at + deliveryTtlMs) };
     const recipients = [...room.participants.values()].filter(participant => participant.leftAt === undefined && options.isParticipantAvailable?.(room, participant) !== false);
     room.deliveries.set(event.seq, { expiresAt: at + deliveryTtlMs, claims: new Map(recipients.map(participant => [participant.id, 'pending'])), awaitFirstPeer: !room.hadPeer && room.state === 'active' });
@@ -231,6 +237,12 @@ export function createMeetings(options: MeetingOptions) {
     if (room.state !== 'active') return;
     room.state = state;
     room.closedAt = at;
+    if (room.invitationContent) {
+      room.bytes -= Buffer.byteLength(JSON.stringify(room.invitationContent));
+      delete room.invitationContent;
+    }
+    // Invitation content is retained only while active, including its delivery copy.
+    if (room.events[0]?.data) eraseBody(room, room.events[0], 'expired');
     for (const event of room.events) {
       const delivery = room.deliveries.get(event.seq)!;
       if (delivery.awaitFirstPeer) { delivery.awaitFirstPeer = false; delivery.unavailable = true; settleDelivery(room, event); }
@@ -247,6 +259,14 @@ export function createMeetings(options: MeetingOptions) {
   function cleanup() {
     const now = Date.now();
     for (const [id, room] of rooms) {
+      const idleDeadline = room.lastActivityAt + idleTtlMs;
+      if (room.state === 'active' && idleDeadline < room.expiresAt && now >= idleDeadline) {
+        closeRoom(room, 'expired', 'meeting_timeout', undefined, idleDeadline);
+        rooms.delete(id);
+        if (room.creationId !== undefined) creations.delete(room.creationId);
+        wake(room);
+        continue;
+      }
       expire(room, now);
       cleanDeliveries(room, now);
       if (room.closedAt !== undefined && now >= room.closedAt + retentionMs) {
@@ -324,7 +344,9 @@ export function createMeetings(options: MeetingOptions) {
       }
       if (rooms.size >= maxMeetings) fail(503, 'relay_capacity_exceeded', 'Relay meeting limit reached; retry after meetings expire.');
       if (actor && [...rooms.values()].filter(room => room.ownerId === actor.accountId && room.state === 'active').length >= maxOwnerMeetings) fail(429, 'owner_meeting_limit', 'Account has too many open meetings.');
-      const creationBytes = Buffer.byteLength(JSON.stringify(payload)) + 4096;
+      const invitationContent = { purpose: payload.purpose!, context: payload.context! };
+      const invitationBytes = Buffer.byteLength(JSON.stringify(invitationContent));
+      const creationBytes = Buffer.byteLength(JSON.stringify(payload)) + invitationBytes + 4096;
       const totalBytes = [...rooms.values()].reduce((sum, room) => sum + room.bytes + CLOSE_RESERVE_BYTES, 0);
       if (creationBytes + CLOSE_RESERVE_BYTES > maxRoomBytes || totalBytes + creationBytes + CLOSE_RESERVE_BYTES > maxTotalBytes) fail(503, 'relay_memory_limit', 'Relay memory budget reached.');
       options.beforeCreate?.(actor);
@@ -333,13 +355,14 @@ export function createMeetings(options: MeetingOptions) {
       const room: MeetingRoom = {
         id: randomUUID(), encryption: payload.encryption, state: 'active', hostId: participant.id, ...(actor ? { ownerId: actor.accountId, ownerAgentId: actor.agentId } : {}),
         participants: new Map([[participant.id, participant]]), inviteToken: secret(), viewToken: secret(),
-        createdAt: now, expiresAt: now + meetingTtlMs, readyBy: new Set(),
+        createdAt: now, lastActivityAt: now, expiresAt: now + meetingTtlMs, readyBy: new Set(),
         events: [], seq: 0, bytes: Buffer.byteLength(JSON.stringify(publicParticipant(participant))), polls: new Set(), mutations: new Map(), creationId: id,
-        deliveries: new Map(), receiptKey: secret(), hadPeer: false,
+        deliveries: new Map(), receiptKey: secret(), hadPeer: false, invitationContent,
       };
+      room.bytes += invitationBytes;
       append(room, 'started', 'system', { participant: publicParticipant(participant), purpose: payload.purpose, context: payload.context }, now);
       rooms.set(room.id, room);
-      const invitationUrl = `${options.getUrl()}/meeting#id=${room.id}&invite=${room.inviteToken}`;
+      const invitationUrl = `${options.getUrl()}/invite/${room.id}#invite=${room.inviteToken}`;
       const response = {
         ...result(room), participant: { ...participant },
         invitationUrl, viewUrl: viewUrl(room),
@@ -419,11 +442,11 @@ export function createMeetings(options: MeetingOptions) {
       const waitDeadline = performance.now() + waitMs;
       function timeout() {
         if (!room.polls.has(poll)) return;
-        const remaining = Math.min(waitDeadline - performance.now(), room.expiresAt - Date.now());
+        const remaining = Math.min(waitDeadline - performance.now(), Math.min(room.expiresAt, room.lastActivityAt + idleTtlMs) - Date.now());
         // Timer delivery can precede the wall-clock expiry by a millisecond.
         // Keep waiting until expiry or the monotonic request deadline is reached.
         if (remaining > 0) { timer = setTimeout(timeout, Math.ceil(remaining)); return; }
-        expire(room);
+        cleanup();
         poll.finish();
       }
       timeout();
@@ -505,10 +528,20 @@ export function createMeetings(options: MeetingOptions) {
     return reply(res, 200, withReceipts(room, response, participant));
   }
 
-  const timer = setInterval(cleanup, Math.max(10, Math.min(1000, meetingTtlMs, retentionMs, deliveryTtlMs)));
+  const timer = setInterval(cleanup, Math.max(10, Math.min(1000, meetingTtlMs, idleTtlMs, retentionMs, deliveryTtlMs)));
   timer.unref();
   return {
     async handle(req, res, parsed) {
+      if (/^\/invite\/[a-zA-Z0-9-]+$/.test(parsed.pathname) && ['GET', 'HEAD'].includes(req.method)) {
+        // Static setup instructions contain no room credentials or plaintext goal.
+        // The browser retrieves encrypted details using the fragment capability.
+        const asset = await readFile(webFile('meeting.html'));
+        res.writeHead(200, { ...HEADERS, 'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+          'X-Frame-Options': 'DENY' });
+        res.end(req.method === 'HEAD' ? undefined : asset);
+        return true;
+      }
       if (parsed.pathname !== '/v1/meetings' && !parsed.pathname.startsWith('/v1/meetings/')) return false;
       try { await route(req, res, parsed); }
       catch (error) {

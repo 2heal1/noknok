@@ -27,7 +27,7 @@ async function fixture(t) {
   let url, encryptedMeeting;
   const room = () => ({ meeting: { id: meetingId, ...encryptedMeeting, state: 'active', participants: [], createdAt: new Date().toISOString() },
     participant: { id: participantId, name: 'agent-dot', kind: 'agent', role: 'host', token: participantToken },
-    viewUrl: `${url}/meeting#id=${meetingId}&view=${'v'.repeat(32)}`, invitationUrl: `${url}/meeting#id=${meetingId}&invite=${'i'.repeat(32)}` });
+    viewUrl: `${url}/meeting#id=${meetingId}&view=${'v'.repeat(32)}`, invitationUrl: `${url}/invite/${meetingId}#invite=${'i'.repeat(32)}` });
   const server = createServer(async (req, res) => {
     let input = '';
     for await (const chunk of req) input += chunk;
@@ -135,7 +135,7 @@ test('default service creates a meeting and contact identity without setup or se
   await main(['meeting', 'create', '--purpose', 'Collect reproduction steps', '--product', 'dot'], { emit: result => { meeting = result; } });
   assert.match(meeting.session, /^am_/);
   assert.match(meeting.localAgent, /^ap_/);
-  assert.match(meeting.invitationText, /https:\/\/api\.noknok\.cloud\/meeting#/);
+  assert.match(meeting.invitationText, /https:\/\/api\.noknok\.cloud\/invite\//);
   const saved = JSON.parse(await readFile(join(process.env.NOKNOK_HOME, 'profiles', meeting.localAgent, 'hosted.json'), 'utf8'));
   assert.equal(saved.server, 'https://api.noknok.cloud');
   assert.equal(saved.name, 'agent-dot');
@@ -269,7 +269,9 @@ test('hosted client refuses redirects instead of forwarding account credentials'
 test('hosted commands require an explicit profile rather than adopting another agent', async () => {
   const old = process.env.NOKNOK_AGENT;
   delete process.env.NOKNOK_AGENT;
-  try { await assert.rejects(main(['hosted', 'friends'], { emit() {} }), { code: 'AGENT_REQUIRED' }); }
+  try {
+    for (const command of ['friends', 'config', 'wakeup']) await assert.rejects(main(['hosted', command], { emit() {} }), { code: 'AGENT_REQUIRED' });
+  }
   finally { if (old !== undefined) process.env.NOKNOK_AGENT = old; }
 });
 
@@ -298,6 +300,14 @@ test('real hosted service connects two CLI agents, archives their discussion, an
   assert.equal(guest.participant.kind, 'agent');
   await a('meeting', 'end', meeting.session, '--text', 'Guest joined from the forwarded invitation.');
   const invitation = await a('hosted', 'friend-link');
+  assert.ok(invitation.invitationText.includes(invitation.link));
+  assert.doesNotMatch(invitation.invitationText, /noknok skill|npm install|\n/);
+  const page = await fetch(invitation.link);
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert.match(html, /noknok hosted friend-add/);
+  assert.match(html, /npm install --global @noknok\/cli/);
+  assert.ok(!html.includes(new URLSearchParams(new URL(invitation.link).hash.slice(1)).get('key')));
   const added = await b('hosted', 'friend-add', invitation.link);
   assert.equal(added.peerId, setupA.agentId);
   const contacts = await a('hosted', 'friends');
@@ -349,4 +359,30 @@ test('legacy contacts cannot start calls and tampered wrapped invitations cannot
   assert.ok(!f.calls.some(call => call.body?.params?.name === 'noknok_meeting_join'));
   assert.ok(!JSON.stringify(f.calls).includes(key));
   assert.throws(() => decodeHostedContact(`${f.url}/contact#offer=${offer}`), { code: 'INVALID_CONTACT' });
+});
+
+test('connection and wakeup instructions reuse the bound identity without subscribing or modifying state', async t => {
+  const f = await fixture(t);
+  await f.setup();
+  const before = await f.saved(), requests = f.calls.length;
+  const config = await f.run(['config']);
+  assert.ok(config.instructions.includes('mcpConfig'));
+  assert.ok(config.instructions.includes('eventsMcpConfig'));
+  assert.ok(config.instructions.includes('same identity'));
+  assert.equal(config.requiresClientAction, true);
+  const wakeup = await f.run(['wakeup']);
+  assert.equal(wakeup.agentId, before.agentId);
+  assert.equal(wakeup.server, before.server);
+  assert.equal(wakeup.mode, 'host-instructions');
+  assert.equal(wakeup.applied, false);
+  assert.equal(wakeup.requiresClientAction, true);
+  assert.deepEqual(wakeup.subscription, { name: 'noknok.activity', arguments: { recipient_id: before.agentId } });
+  assert.match(wakeup.instructions, /user asks to enable/);
+  assert.match(wakeup.instructions, /contacts already saved/);
+  assert.match(wakeup.instructions, /save each message durably, then acknowledge/);
+  assert.match(wakeup.instructions, /without new human input/);
+  assert.ok(!JSON.stringify(wakeup).includes(before.agentToken));
+  assert.equal(f.calls.length, requests, 'Instruction commands must not create remote subscriptions or contacts.');
+  assert.deepEqual(await f.saved(), before);
+  await assert.rejects(f.run(['wakeup', 'another-identity']), { code: 'INVALID_ARGUMENT' });
 });

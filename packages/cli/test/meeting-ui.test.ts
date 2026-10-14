@@ -2,7 +2,7 @@ import { generateKey, encryptText, contentAAD } from '../web/e2ee.js';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MeetingRequestCache, MeetingCache, mergeEvents, parseMeetingLink, randomId, randomRetryToken, transcriptOf, saveAndAcknowledge, hasIncompleteHistory, decryptMeetingPayload } from '../web/meeting.js';
+import { MeetingRequestCache, MeetingCache, mergeEvents, parseMeetingLink, parseMeetingLocation, randomId, randomRetryToken, transcriptOf, saveAndAcknowledge, hasIncompleteHistory, decryptMeetingPayload } from '../web/meeting.js';
 import { redactInvitations } from '../src/invitation.js';
 
 test('viewing and exporting redact hosted contact grants and credentials without mutating evidence', () => {
@@ -267,4 +267,17 @@ test('browser persists exact nonce and request id before sending and restores th
   assert.notEqual(next.body.requestId, initial.body.requestId);
   backing.beforeSet = () => { throw new Error('Storage unavailable'); };
   await assert.rejects(reloaded.prepare('room:participant', '/messages', { text: 'Unsaved' }, prepare), /Storage unavailable/);
+});
+
+
+test('invitation paths resolve in the browser without uploading keys or accepting ambiguous IDs', () => {
+  const id = randomUUID(), encryptionId = randomUUID(), key = generateKey();
+  const hash = `#invite=join-secret&key=${key}&e2ee=${encryptionId}`;
+  assert.deepEqual(parseMeetingLocation(`/invite/${id}`, hash), { id, mode: 'invite', token: 'join-secret', key, encryptionId });
+  assert.equal(parseMeetingLocation(`/invite/${id}`, hash + '&id=' + randomUUID()), null);
+  assert.equal(parseMeetingLocation(`/invite/${id}`, hash + '&key=' + key), null);
+  assert.equal(parseMeetingLocation(`/invite/${id}`, hash + '&view=read-secret'), null);
+  assert.equal(parseMeetingLocation(`/invite/${id}`, ''), null);
+  assert.equal(parseMeetingLocation(`/invite/${id}`, '#invite=join-secret'), null);
+  assert.equal(redactInvitations(`Open https://relay.example/invite/${id}${hash}`), 'Open [redacted invitation]');
 });

@@ -19,7 +19,7 @@ Keep that terminal open. In your agent's chat, say:
 ```text wrapCode
 Read the instructions from noknok skill.
 Use http://127.0.0.1:4317 to create a meeting about an example bug report.
-Give me the complete invitation, including installation instructions for the other agent, and the read-only view link.
+Give me the complete invitation, with a link to installation and joining instructions, and the read-only view link.
 ```
 
 This basic service needs no account or database. Forward the complete invitation to the other person, who pastes it into their own agent chat. This local address only works for agents in the same environment as the service. Stopping or restarting the service loses the meetings it holds.
@@ -50,6 +50,8 @@ The Docker setup keeps service credentials and registration data in a persistent
 Meeting content is temporary. By default, it waits for delivery for at most five minutes and can be removed sooner once the required participants confirm they have saved it. Content is cleared at the deadline even without confirmation. Participants who join late and read-only viewers cannot recover content already cleared.
 
 By default, a meeting can stay open for up to two hours, and its status remains for ten minutes after it ends or expires. Neither extends the content's retention time. A restart clears meetings even when account data survives. Participants should [save the records they need](./history.md).
+
+The service immediately removes a meeting and its invitation content after 30 minutes without joins, messages, or membership/status changes. Reads, polling, acknowledgments, and retries do not renew this deadline. Active meetings still have the configured absolute lifetime.
 
 The default hosted setup allows five retained meetings, up to eight participants per meeting, and 1,000 accounts. It also limits daily activity. If users reach a limit, the service reports an error; restarting does not reset daily quotas.
 

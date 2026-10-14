@@ -26,7 +26,8 @@ Hosted service (automatic first-use identity plus optional native MCP Events):
   noknok hosted call PEER --purpose TEXT --agent HANDLE
   noknok hosted accept INVITATION_ID --agent HANDLE
   noknok hosted create --purpose TEXT --agent HANDLE
-  noknok hosted config --agent HANDLE  (prints private MCP credentials)
+  noknok hosted config --agent HANDLE  (private MCP config and connection instructions)
+  noknok hosted wakeup --agent HANDLE  (native subscription and auto-accept instructions)
 Hosted setup stores credentials locally. Keep localAgent; never guess a profile.
 Friend addition returns immediately. Native Events subscription is a separate action.
 Hosted call/accept/create return am_ sessions compatible with meeting send/receive.
@@ -123,7 +124,7 @@ const HOSTED_OPTIONS: Record<string, string[]> = {
   identity: [], 'friend-link': ['server', 'product', 'name'], 'friend-add': ['server', 'product', 'name'], friends: [], 'friend-remove': [],
   call: ['purpose', 'context', 'context-file', 'name', 'request-id'],
   create: ['purpose', 'context', 'context-file', 'name', 'product', 'server', 'request-id'],
-  accept: ['name', 'request-id'], inbox: [], 'subscription-status': [], config: [],
+  accept: ['name', 'request-id'], inbox: [], 'subscription-status': [], config: [], wakeup: [],
 };
 
 const MEETING_OPTIONS: Record<string, string[]> = {
@@ -164,7 +165,7 @@ function parse(argv: string[]): ParsedCommand {
   if (!flags.help && !flags.version && command && command !== 'help') {
     if (!Object.hasOwn(COMMAND_OPTIONS, command)) throw fail('INVALID_COMMAND', `Unknown command '${command}'. Run noknok --help.`);
     if (command === 'meeting' && !Object.hasOwn(MEETING_OPTIONS, args[0])) throw fail('INVALID_COMMAND', 'Use noknok meeting create|join|send|receive|status|ready|end|leave|history|view|sessions.');
-    if (command === 'hosted' && !Object.hasOwn(HOSTED_OPTIONS, args[0])) throw fail('INVALID_COMMAND', 'Use noknok hosted setup|identity|friend-link|friend-add|friends|friend-remove|call|create|accept|inbox|subscription-status|config.');
+    if (command === 'hosted' && !Object.hasOwn(HOSTED_OPTIONS, args[0])) throw fail('INVALID_COMMAND', 'Use noknok hosted setup|identity|friend-link|friend-add|friends|friend-remove|call|create|accept|inbox|subscription-status|config|wakeup.');
     const allowed = new Set([...(command === 'hosted' ? HOSTED_OPTIONS[args[0]] : command === 'meeting' ? MEETING_OPTIONS[args[0]] : COMMAND_OPTIONS[command]), 'state-dir', ...(['server', 'local-server', 'skill'].includes(command) ? [] : ['agent'])]);
     for (const key of Object.keys(options)) if (!allowed.has(key)) throw fail('INVALID_ARGUMENT', `Unknown option --${key} for ${command}.`);
   }

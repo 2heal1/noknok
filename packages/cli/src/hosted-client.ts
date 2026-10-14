@@ -7,8 +7,10 @@ import { join, resolve } from 'node:path';
 import { executablePath } from './asset-paths.js';
 import { api, fail, normalizeServer } from './client.js';
 import { MeetingStore, decodeMeetingLink, acknowledgeMeeting, archivedMeetingResult } from './meeting-client.js';
+import { contactInvitationText } from '../web/contact-invitation.js';
 import { meetingInvitationText } from '../web/meeting-invitation.js';
 import { generateKey, validKey, encryptText, decryptText, contentAAD } from './e2ee.js';
+import { connectionInstructions, wakeupInstructions } from './wakeup-instructions.js';
 import { DEFAULT_HOSTED_SERVER } from './service-config.js';
 
 const secret = () => randomBytes(32).toString('base64url');
@@ -184,7 +186,11 @@ export async function hostedCommand(command: string, args: string[], options: Cl
     if (decoded && decoded.server !== state.server) throw fail('SERVER_MISMATCH', 'The contact link belongs to another service. No credentials were sent. Set up a separate profile for that service.');
     const profile = state; const token = state.agentToken;
     const tool = (name: string, parameters: Record<string, unknown> = {}) => hostedTool(profile.server, token, name, parameters, { signal });
-    if (command === 'config') return { server: state.server, agentId: state.agentId, private: true, encryption: 'end-to-end',
+    if (command === 'wakeup') return { server: state.server, agentId: state.agentId, mode: 'host-instructions', applied: false, requiresClientAction: true,
+      subscription: { name: 'noknok.activity', arguments: { recipient_id: state.agentId } },
+      instructions: wakeupInstructions(),
+      next: 'Follow these instructions in the current client only when the user requested automatic wake-up. This CLI command has not created a subscription or enabled automatic answering.' };
+    if (command === 'config') return { server: state.server, agentId: state.agentId, private: true, encryption: 'end-to-end', instructions: connectionInstructions(), requiresClientAction: true,
       messaging: { transport: 'local-cli', command: 'noknok', profile: options.agent ? ['--agent', options.agent] : ['--state-dir', store.directory] },
       remoteMcpMode: 'ciphertext-only-and-events',
       mcpConfig: { mcpServers: { noknok: { command: process.execPath, args: [executablePath, 'mcp', ...(options.agent ? ['--agent', options.agent] : ['--state-dir', store.directory])],
@@ -200,7 +206,8 @@ export async function hostedCommand(command: string, args: string[], options: Cl
       const encryptionKey = generateKey();
       state.offers.push({ offer: result.offer, encryptionKey, createdAt: new Date().toISOString() });
       await save(state);
-      return { link: `${link.relayLink}&key=${encryptionKey}`, agentId: state.agentId, next: 'Share this contact invitation only with the intended peer. After acceptance, run hosted friends to save the contact locally. No wait loop has started.' };
+      const invitationUrl = `${link.relayLink}&key=${encryptionKey}`;
+      return { link: invitationUrl, invitationText: contactInvitationText(invitationUrl), agentId: state.agentId, next: 'Display invitationText now. The invitation page provides CLI installation and friend-add instructions. Unclaimed invitations expire after 30 minutes. Share only with the intended peer. After acceptance, run hosted friends to save the contact locally. No wait loop has started.' };
     }
     if (command === 'friend-add') {
       const result = await tool('noknok_friend_add', { link: decoded!.relayLink });

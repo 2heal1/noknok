@@ -18,6 +18,7 @@ const REQUIRED = [
   'dist/src/cli.js', 'dist/src/mcp-stdio.js', 'dist/src/hosted-service.js', 'dist/src/e2ee.js',
   'dist/src/deploy/server.js', 'dist/src/deploy/hosted-server.js',
   'skills/noknok/SKILL.md', 'skills/noknok/references/hosted.md',
+  'dist/web/contact.html', 'dist/web/contact.js', 'dist/web/contact-invitation.js',
   'dist/web/meeting.html', 'dist/web/meeting.js', 'dist/web/meeting-invitation.js', 'dist/web/e2ee.js',
 ];
 

@@ -17,6 +17,7 @@ export interface Meeting {
   context?: string;
   createdAt?: string;
   expiresAt?: string;
+  idleExpiresAt?: string;
   purgeAt?: string;
   readyBy?: string[];
   summary?: string;

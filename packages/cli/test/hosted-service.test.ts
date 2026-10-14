@@ -387,11 +387,13 @@ test('native agents explicitly acknowledge saved bodies; hosted retry caches can
     f.service.meetings.inspect(meeting_id),
   ];
   for (const snapshot of snapshots) {
-    for (const marker of [args.purpose, args.context, sendArgs.text]) assert.ok(!JSON.stringify(snapshot).includes(marker), marker);
+    assert.ok(!JSON.stringify(snapshot).includes(sendArgs.text), sendArgs.text);
   }
   assert.ok(snapshots[0].events.some(event => event.bodyState === 'delivered'));
   const endArgs = { meeting_id, text: 'private-summary-to-delete', request_id: 'close-pending' };
   const ended = await f.tool(a, 'meeting_end', endArgs);
+  assert.equal(ended.meeting.purpose, undefined);
+  assert.equal(ended.meeting.context, undefined);
   await f.tool(a, 'meeting_ack', { meeting_id, receipts: ended.deliveryReceipts });
   const finalRead = await f.tool(b, 'meeting_read', { meeting_id });
   assert.equal(finalRead.meeting.summary, endArgs.text);
@@ -400,7 +402,7 @@ test('native agents explicitly acknowledge saved bodies; hosted retry caches can
   assert.ok(!JSON.stringify(f.service.meetings.inspect(meeting_id)).includes(endArgs.text));
 });
 
-test('native pending bodies expire without ACK, including cached creation metadata', async t => {
+test('native pending bodies expire without ACK while active invitation metadata remains', async t => {
   const f = await fixture(t, { deliveryTtlMs: 30 });
   const a = await f.register();
   const args = { purpose: 'expiring-native-purpose', context: 'expiring-native-context', request_id: 'expiry' };
@@ -411,8 +413,9 @@ test('native pending bodies expire without ACK, including cached creation metada
   const retry = await f.tool(a, 'meeting_create', args);
   assert.equal(retry.invitationText, undefined, 'The relay must not emit an incomplete handoff without the client-held encryption key.');
   for (const snapshot of [read, retry, f.service.meetings.inspect(created.meeting.id)]) {
-    assert.ok(!JSON.stringify(snapshot).includes(args.purpose));
-    assert.ok(!JSON.stringify(snapshot).includes(args.context));
+    assert.ok(snapshot.meeting ? snapshot.meeting.purpose : snapshot.purpose);
+    assert.ok(snapshot.meeting ? snapshot.meeting.context : snapshot.context);
+    assert.ok(!snapshot.events?.some(event => event.type === 'started' && event.data));
   }
   assert.equal(read.events.find(event => event.type === 'started').bodyState, 'expired');
   assert.equal((await f.tool(a, 'identity')).transcriptStorage, 'participant');
@@ -501,4 +504,17 @@ test('wrapped room keys appear only in the targeted recipient inbox and join', a
   assert.equal(joined.encryptedKey, inbox.invitations[0].encryptedKey);
   await f.tool(b, 'friend_revoke', { capability: friend.claimed.issuedCapability });
   assert.equal((await f.tool(b, 'inbox')).invitations[0].encryptedKey, undefined);
+});
+
+test('idle meetings are removed from hosted sessions and targeted invitation inboxes', async t => {
+  const f = await fixture(t, { idleTtlMs: 1000, meetingTtlMs: 2000 });
+  const a = await f.register(), b = await f.register();
+  const friend = await f.pair(a, b);
+  const call = await f.tool(a, 'call', { peer_id: b.agentId, capability: friend.contact.capability,
+    purpose: 'An unaccepted meeting', request_id: 'idle-call' });
+  assert.equal((await f.tool(b, 'inbox')).invitations.length, 1);
+  await delay(1150);
+  assert.equal(f.service.meetings.inspect(call.meeting.id), undefined);
+  assert.equal((await f.tool(b, 'inbox')).invitations.length, 0);
+  await assert.rejects(f.tool(a, 'meeting_read', { meeting_id: call.meeting.id }));
 });

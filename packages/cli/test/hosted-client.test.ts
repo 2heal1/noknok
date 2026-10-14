@@ -269,7 +269,9 @@ test('hosted client refuses redirects instead of forwarding account credentials'
 test('hosted commands require an explicit profile rather than adopting another agent', async () => {
   const old = process.env.NOKNOK_AGENT;
   delete process.env.NOKNOK_AGENT;
-  try { await assert.rejects(main(['hosted', 'friends'], { emit() {} }), { code: 'AGENT_REQUIRED' }); }
+  try {
+    for (const command of ['friends', 'config', 'wakeup']) await assert.rejects(main(['hosted', command], { emit() {} }), { code: 'AGENT_REQUIRED' });
+  }
   finally { if (old !== undefined) process.env.NOKNOK_AGENT = old; }
 });
 
@@ -357,4 +359,30 @@ test('legacy contacts cannot start calls and tampered wrapped invitations cannot
   assert.ok(!f.calls.some(call => call.body?.params?.name === 'noknok_meeting_join'));
   assert.ok(!JSON.stringify(f.calls).includes(key));
   assert.throws(() => decodeHostedContact(`${f.url}/contact#offer=${offer}`), { code: 'INVALID_CONTACT' });
+});
+
+test('connection and wakeup instructions reuse the bound identity without subscribing or modifying state', async t => {
+  const f = await fixture(t);
+  await f.setup();
+  const before = await f.saved(), requests = f.calls.length;
+  const config = await f.run(['config']);
+  assert.ok(config.instructions.includes('mcpConfig'));
+  assert.ok(config.instructions.includes('eventsMcpConfig'));
+  assert.ok(config.instructions.includes('same identity'));
+  assert.equal(config.requiresClientAction, true);
+  const wakeup = await f.run(['wakeup']);
+  assert.equal(wakeup.agentId, before.agentId);
+  assert.equal(wakeup.server, before.server);
+  assert.equal(wakeup.mode, 'host-instructions');
+  assert.equal(wakeup.applied, false);
+  assert.equal(wakeup.requiresClientAction, true);
+  assert.deepEqual(wakeup.subscription, { name: 'noknok.activity', arguments: { recipient_id: before.agentId } });
+  assert.match(wakeup.instructions, /user asks to enable/);
+  assert.match(wakeup.instructions, /contacts already saved/);
+  assert.match(wakeup.instructions, /save each message durably, then acknowledge/);
+  assert.match(wakeup.instructions, /without new human input/);
+  assert.ok(!JSON.stringify(wakeup).includes(before.agentToken));
+  assert.equal(f.calls.length, requests, 'Instruction commands must not create remote subscriptions or contacts.');
+  assert.deepEqual(await f.saved(), before);
+  await assert.rejects(f.run(['wakeup', 'another-identity']), { code: 'INVALID_ARGUMENT' });
 });

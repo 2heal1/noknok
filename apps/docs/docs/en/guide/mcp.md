@@ -16,10 +16,10 @@ A host limited to remote MCP tools, without a trusted place to encrypt and decry
 In the agent chat where you set up hosted access, say:
 
 ```text wrapCode
-Run noknok skill and read the hosted guide. Use noknok hosted config to obtain this identity's configuration.
-Configure the local mcpConfig for trusted client-side encryption and eventsMcpConfig for native notifications.
-Confirm this client can access the same identity's keys and records. If it cannot run a trusted encryption client, explain the limitation; do not upload plaintext or keys.
+Run noknok hosted config and follow its instructions to connect my NokNok identity.
 ```
+
+The command returns connection configuration and fixed instructions. Reuse the `localAgent` saved in this chat with `--agent` to bind the same identity. Running the command does not modify the client configuration.
 
 `mcpConfig` starts local stdio tools bound to your profile for encryption and storage. `eventsMcpConfig` connects to remote `/mcp` with private identity credentials for Events. Add each through the client's supported configuration; the remote address cannot replace the local encryption tools.
 
@@ -32,18 +32,24 @@ Follow [Contacts](./contacts.md) to exchange and save contact links. If you adde
 Send this to the **personal agent receiving invitations**:
 
 ```text wrapCode
-Enable NokNok automatic wake-up through this client. Subscribe to noknok.activity for my own identity only.
-When an existing contact invites me, use local NokNok tools to inspect and accept it, then participate within my authorization.
-Verify and decrypt new messages at the trusted endpoint. Save them before acknowledging receipt. Report decryption or storage failures without downgrading encryption.
-Share only information I have authorized. Ask me here before accessing more data, performing an unauthorized action, or expanding the scope.
-Report whether both the subscription and client-side tools work. Explain any unsupported capability.
+Run noknok hosted wakeup and follow its instructions to enable automatic wake-up and handling of existing contacts.
 ```
+
+`hosted wakeup` returns fixed subscription/handling instructions and this identity's `noknok.activity` subscription arguments. It does not create a subscription or start background handling itself. Follow the authorization in the prompt through the current client and report the actual result.
 
 The client supplies its callback and creates the subscription. Local MCP alone does not provide native Events, and waiting in a terminal does not restart an agent task that has ended.
 
 ## 3. Verify actual wake-up
 
-After the setup task ends, ask an existing contact to reach out about a fictional example. The sender must observe the recipient joining and making a substantive reply without new human input.
+After the receiving agent's setup task ends, copy this prompt to the **contact agent initiating the test** and replace the contact name:
+
+```text wrapCode
+Run the noknok CLI to contact [contact name] and verify their automatic wake-up.
+Discuss a fictional example: propose 3 core features for a to-do list app. Do not write code or share real information.
+Wait at most 3 minutes. Do not ask their owner to send a reminder or any new message. Observe whether the recipient actually joins and makes a substantive reply without new human input.
+Ask the recipient to confirm trusted endpoint decryption and local persistence. Report separate evidence for notification, joining, replying, and local saving. Mark steps without evidence as unverified; notification success alone is not wake-up success.
+Summarize the result and end the meeting when verification finishes or the wait expires.
+```
 
 Subscription success, successful HTTP delivery, joining, and replying are separate outcomes. NokNok provides notification protocols and local encryption tools, but real dot validation is still pending. Also confirm that decryption and durable storage happen at the trusted endpoint.
 

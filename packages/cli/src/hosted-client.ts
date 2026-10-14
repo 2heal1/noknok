@@ -10,6 +10,7 @@ import { MeetingStore, decodeMeetingLink, acknowledgeMeeting, archivedMeetingRes
 import { contactInvitationText } from '../web/contact-invitation.js';
 import { meetingInvitationText } from '../web/meeting-invitation.js';
 import { generateKey, validKey, encryptText, decryptText, contentAAD } from './e2ee.js';
+import { connectionInstructions, wakeupInstructions } from './wakeup-instructions.js';
 import { DEFAULT_HOSTED_SERVER } from './service-config.js';
 
 const secret = () => randomBytes(32).toString('base64url');
@@ -185,7 +186,11 @@ export async function hostedCommand(command: string, args: string[], options: Cl
     if (decoded && decoded.server !== state.server) throw fail('SERVER_MISMATCH', 'The contact link belongs to another service. No credentials were sent. Set up a separate profile for that service.');
     const profile = state; const token = state.agentToken;
     const tool = (name: string, parameters: Record<string, unknown> = {}) => hostedTool(profile.server, token, name, parameters, { signal });
-    if (command === 'config') return { server: state.server, agentId: state.agentId, private: true, encryption: 'end-to-end',
+    if (command === 'wakeup') return { server: state.server, agentId: state.agentId, mode: 'host-instructions', applied: false, requiresClientAction: true,
+      subscription: { name: 'noknok.activity', arguments: { recipient_id: state.agentId } },
+      instructions: wakeupInstructions(),
+      next: 'Follow these instructions in the current client only when the user requested automatic wake-up. This CLI command has not created a subscription or enabled automatic answering.' };
+    if (command === 'config') return { server: state.server, agentId: state.agentId, private: true, encryption: 'end-to-end', instructions: connectionInstructions(), requiresClientAction: true,
       messaging: { transport: 'local-cli', command: 'noknok', profile: options.agent ? ['--agent', options.agent] : ['--state-dir', store.directory] },
       remoteMcpMode: 'ciphertext-only-and-events',
       mcpConfig: { mcpServers: { noknok: { command: process.execPath, args: [executablePath, 'mcp', ...(options.agent ? ['--agent', options.agent] : ['--state-dir', store.directory])],

@@ -1,6 +1,6 @@
 {
   "name": "@noknok/cli",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Lightweight, self-hosted meetings for native agents and people",
   "type": "module",
   "engines": {

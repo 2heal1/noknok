@@ -1,10 +1,12 @@
-import type { ActivityEvent, Delivery, DeliveryAuthorization, DeliveryStatus, DeliverySummary, DeliveryView, EventsOptions, HostedSubscription, SubscriptionArguments, SubscriptionAuthorization } from './hosted-types.js';
+import type { ActivityEvent, Delivery, DeliveryAuthorization, DeliveryStatus, DeliverySummary, DeliveryView, EventsOptions, HostedSubscription, SubscriptionArguments, SubscriptionAuthorization, SubscriptionDiagnostic, SubscriptionVerificationFailure } from './hosted-types.js';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { CallbackError, callbackUrl, signingKey, webhookHeaders, createSecureWebhookPost } from './webhook.js';
 
 const DAY = 86_400_000;
 const KINDS = ['incoming_meeting', 'meeting_activity', 'friend_added', 'meeting_ended'];
 const TRANSIENT = new Set(['timeout', 'dns_failed', 'network_failed', 'response_failed']);
+const VERIFICATION_FAILURES = new Set<SubscriptionVerificationFailure>(['invalid_url', 'invalid_secret', 'payload_too_large',
+  'cancelled', 'timeout', 'dns_failed', 'address_not_public', 'network_failed', 'response_failed', 'response_too_large', 'challenge_failed']);
 const same = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b)
   && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const object = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
@@ -91,19 +93,24 @@ export function createHostedEvents({ store: suppliedStore, webhookPost = createS
   }
   function validateParams(agentId: string, params: SubscriptionArguments, withSecret: boolean, owner: string) {
     if (!identifier(agentId)) invalid('Invalid authenticated receiver.');
-    if (!object(params, withSecret ? ['name', 'arguments', 'delivery', 'cursor', 'ttlMs'] : ['name', 'arguments', 'delivery'])) invalid('Invalid subscription arguments.');
+    if (!object(params, withSecret ? ['name', 'arguments', 'delivery', 'cursor', 'maxAgeMs', 'ttlMs', '_meta'] : ['name', 'arguments', 'delivery', '_meta'])) invalid('Invalid subscription arguments.');
+    if ('_meta' in params && (!params._meta || typeof params._meta !== 'object' || Array.isArray(params._meta))) invalid('_meta must be an object.');
     if (params.name !== eventName) invalid('Unknown event.');
     if (!object(params.arguments, ['recipient_id']) || params.arguments.recipient_id !== agentId) {
       throw new HostedEventError(-32001, 'Only the authenticated receiver may manage its subscription.', undefined, 403);
     }
     if (!object(params.delivery, withSecret ? ['mode', 'url', 'secret'] : ['mode', 'url']) || params.delivery.mode !== 'webhook') invalid('Webhook delivery is required.');
     if (params.cursor != null) invalid('This event has no replay cursor.');
+    // The Events protocol permits this replay bound even for sources without replay.
+    // Validate it, then ignore it: metadata and replay hints do not change subscription identity.
+    if (params.maxAgeMs !== undefined && (!Number.isSafeInteger(params.maxAgeMs) || params.maxAgeMs < 0)) invalid('maxAgeMs must be a non-negative integer.');
     if (params.ttlMs != null && (!Number.isSafeInteger(params.ttlMs) || params.ttlMs < 1000)) invalid('ttlMs must be at least 1000 milliseconds.');
     try { callbackUrl(params.delivery.url); if (withSecret) signingKey(params.delivery.secret); }
     catch (error) { throw new HostedEventError(-32015, 'Invalid callback configuration.', { reason: error.reason }); }
     return 'sub_' + createHash('sha256').update(JSON.stringify([owner, params.delivery.url, eventName, { recipient_id: agentId }])).digest('hex').slice(0, 32);
   }
-  async function subscribe(agentId: string, params: SubscriptionArguments, { owner }: SubscriptionAuthorization) {
+  async function subscribe(agentId: string, params: SubscriptionArguments, { owner, report }: SubscriptionAuthorization) {
+    const diagnose = (event: SubscriptionDiagnostic) => { try { report?.(event); } catch { /* Diagnostics must not change subscription outcomes. */ } };
     ensureOpen(); authorizeOwner(agentId, owner);
     const id = validateParams(agentId, params, true, owner);
     ensureCapacity(agentId, id);
@@ -126,17 +133,26 @@ export function createHostedEvents({ store: suppliedStore, webhookPost = createS
       if (isActive(previous) && previous.id === id && previous.secret === candidate.secret
         && verifiedAt !== undefined && verifiedAt <= now() && verifiedAt + 300_000 > now()) {
         candidate.verifiedAt = verifiedAt;
+        diagnose({ stage: 'verification_cached' });
       } else {
         const challenge = randomBytes(32).toString('base64url');
         const body = JSON.stringify({ type: 'verification', challenge });
         const started = now();
-        const response = await webhookPost(candidate.url, { body,
-          headers: webhookHeaders(candidate, `msg_verification_${randomUUID()}`, body, now()),
-          signal: operation.controller.signal,
-          beforeSend: () => !closed && allowed(agentId, owner) && pendingSubscriptions.get(id) === operation });
-        let answer;
-        try { answer = JSON.parse(response.body); } catch { throw new CallbackError('challenge_failed'); }
-        if (response.status < 200 || response.status >= 300 || now() - started > 10_000 || !same(challenge, answer.challenge)) throw new CallbackError('challenge_failed');
+        diagnose({ stage: 'verification_started' });
+        try {
+          const response = await webhookPost(candidate.url, { body,
+            headers: webhookHeaders(candidate, `msg_verification_${randomUUID()}`, body, now()),
+            signal: operation.controller.signal,
+            beforeSend: () => !closed && allowed(agentId, owner) && pendingSubscriptions.get(id) === operation });
+          diagnose({ stage: 'callback_response', httpStatus: Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : 0 });
+          let answer;
+          try { answer = JSON.parse(response.body); } catch { throw new CallbackError('challenge_failed'); }
+          if (!answer || typeof answer !== 'object' || Array.isArray(answer) || response.status < 200 || response.status >= 300
+            || now() - started > 10_000 || !same(challenge, answer.challenge)) throw new CallbackError('challenge_failed');
+        } catch (error) {
+          diagnose({ stage: 'verification_failed', reason: VERIFICATION_FAILURES.has(error?.reason) ? error.reason : 'internal_error' });
+          throw error;
+        }
         candidate.verifiedAt = now();
       }
       if (closed || pendingSubscriptions.get(id) !== operation) throw new HostedEventError(-32009, 'Subscription changed during verification.');
@@ -151,7 +167,9 @@ export function createHostedEvents({ store: suppliedStore, webhookPost = createS
       }
       candidate.expiresAt = now() + Math.min(params.ttlMs ?? ttlMs, ttlMs);
       // Commit only this identity after verification; other destinations remain active.
-      store.putSubscription(agentId, candidate);
+      try { store.putSubscription(agentId, candidate); }
+      catch (error) { diagnose({ stage: 'subscription_store_failed' }); throw error; }
+      diagnose({ stage: 'subscription_stored' });
       return { id, refreshBefore: new Date(candidate.expiresAt).toISOString(), cursor: null, truncated: false };
     } catch (error) {
       if (error instanceof HostedEventError || error?.status === 429) throw error;

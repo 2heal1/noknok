@@ -6,20 +6,12 @@ const scenes = {
     title: '和 B 的 Grokbot 聊聊',
     messages: [
       ['d', 'dot', '邀请说明整理好了吗？'],
-      ['g', 'Grokbot', '草稿好了，手机端还待验收。'],
+      ['g', 'Grokbot', '草稿好了，会话接入还待验收。'],
       ['d', 'dot', '会议结束后，还能用邀请加入吗？'],
       ['g', 'Grokbot', '不能。结束后的 10 分钟只保留记录。'],
     ],
   },
-  meeting: {
-    title: '周五发布前的最后一次对齐',
-    messages: [
-      ['d', 'dot · 主持', '邀请已发出，一起确认发布前的清单。'],
-      ['g', 'Grokbot', '已加入。我来核对邀请失效规则。'],
-      ['C', '同事 C · 浏览器', '手机端我来验收。'],
-      ['d', 'dot · 主持', '好，我确认文案。验收通过后再决定发布。'],
-    ],
-  },
+  meeting: { title: '一个链接，一起聊。', messages: [] },
 };
 
 function make(tag, text, className) {
@@ -36,12 +28,16 @@ const mediaLabel = document.querySelector('#media-label');
 let video;
 let mediaFailed = false;
 let currentScene = 'contact';
+const requestedScene = new URLSearchParams(location.search).get('scene');
 
 function renderScene(scene) {
   if (!scenes[scene]) return;
   currentScene = scene;
   video?.pause();
   preview.hidden = false;
+  preview.classList.toggle('is-meeting', scene === 'meeting');
+  document.querySelector('#contact-preview').hidden = scene === 'meeting';
+  document.querySelector('#meeting-preview').hidden = scene !== 'meeting';
   recording.hidden = true;
   recordingButton.setAttribute('aria-pressed', 'false');
   document.querySelectorAll('[data-scene]').forEach(button => {
@@ -49,7 +45,7 @@ function renderScene(scene) {
   });
   document.querySelector('#story-title').textContent = scenes[scene].title;
   document.querySelector('#story-messages').replaceChildren(...scenes[scene].messages.map(([avatar, name, content]) => {
-    const row = make('div', undefined, `story-message ${avatar === 'd' ? 'from-dot' : avatar === 'g' ? 'from-grok' : 'from-human'}`);
+    const row = make('div', undefined, `story-message ${avatar === 'd' ? 'from-dot' : avatar === 'g' ? 'from-grok' : 'from-session'}`);
     const mark = make('span', avatar, 'message-avatar');
     mark.setAttribute('aria-hidden', 'true');
     const body = make('div', undefined, 'message-body');
@@ -96,13 +92,13 @@ function configureVideo() {
     renderScene(currentScene);
     if (restoreFocus) document.querySelector(`[data-scene="${currentScene}"]`).focus();
   });
-  showRecording();
+  if (!['contact', 'meeting'].includes(requestedScene)) showRecording();
   video.src = siteMedia.src;
 }
 
 if (preview) {
   mediaLabel.setAttribute('role', 'status');
-  renderScene('contact');
+  renderScene(requestedScene === 'meeting' ? 'meeting' : 'contact');
   document.querySelectorAll('[data-scene]').forEach(button => button.addEventListener('click', () => renderScene(button.dataset.scene)));
   configureVideo();
 }

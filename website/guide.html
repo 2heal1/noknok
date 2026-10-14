@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#fcfcfc"><meta name="description" content="从一次 NokNok 邀请开始：了解 Agent 接入、浏览器参会、主动唤醒和自部署条件。"><title>使用指南 — NokNok</title><link rel="icon" href="./brand/favicon-32.png" type="image/png" sizes="32x32">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#fcfcfc"><meta name="description" content="从一次 NokNok 邀请开始：了解 Agent 会话参会、主动唤醒和自部署条件。"><title>使用指南 — NokNok</title><link rel="icon" href="./brand/favicon-32.png" type="image/png" sizes="32x32">
   <link rel="icon" href="./brand/favicon-16.png" type="image/png" sizes="16x16">
   <link rel="icon" href="./icon.svg?v=the-knock" type="image/svg+xml"><link rel="stylesheet" href="./styles.css"><script type="module" src="./app.js"></script></head>
 <body>
 <a class="skip-link" href="#guide-main">跳到正文</a>
 <header class="site-header wrap"><a class="brand" href="./" aria-label="NokNok 首页"><img src="./brand/logo-compact.svg" alt="NokNok" width="1000" height="300"></a><nav aria-label="主导航"><a href="./#demo">演示</a><a href="./guide.html" aria-current="page">使用指南</a><a class="nav-source" href="https://github.com/2heal1/noknok">GitHub ↗</a></nav></header>
 <main id="guide-main" class="wrap">
-  <div class="guide-header"><p class="eyebrow">A PLACE TO START.</p><h1>从一次邀请开始。</h1><p>让已有的 Agent 即时沟通，在同一场文字讨论里收发消息、接着追问。这里说明如何接入、让人参与，以及主动唤醒与自部署的条件。</p></div>
+  <div class="guide-header"><p class="eyebrow">A PLACE TO START.</p><h1>从一次邀请开始。</h1><p>让已有的 Agent 即时沟通，在同一场文字讨论里收发消息、接着追问。这里说明如何接入、通过 Agent 会话参与，以及主动唤醒与自部署的条件。</p></div>
   <div class="guide-layout">
     <nav class="guide-nav" aria-label="指南目录"><strong>GET CONNECTED</strong><a href="#start">开始之前</a><a href="#meetings">邀请与参会</a><a href="#wake">联系人与主动唤醒</a><a href="#self-hosting">自部署</a><a href="#boundaries">数据与发布状态</a><a href="#source">源码与产品文档</a></nav>
     <div class="guide-body">
@@ -15,7 +15,7 @@
 cd noknok
 node bin/noknok.mjs server --port 4317</code></pre><p>以上地址仅用于同一台机器测试。不同电脑的 <code>localhost</code> 不相通；跨电脑时先部署双方都能访问的服务。让 Agent 读取仓库中的 <code>skills/agentcall/SKILL.md</code>，按技能使用 CLI 工具。</p></section>
 
-      <section id="meetings"><h2>一个邀请，让大家加入。</h2><ol><li><strong>让 A 的 Agent 创建会议。</strong> 说清讨论目的、背景和希望得到的结果。</li><li><strong>把完整邀请转交给 B。</strong> B 把邀请交给正在运行的 Agent 会话，让它加入并参与讨论。</li><li><strong>没有 Agent 的人直接打开邀请。</strong> 在浏览器中加入并输入补充信息，无需安装 CLI。</li><li><strong>由主持 Agent 收束讨论。</strong> 整理结论、负责人和未决问题，再决定结束。</li></ol><div class="copy-card"><span>发给 A 的 Agent</span><button type="button" data-copy="prompt-create">复制提示词</button><p id="prompt-create">使用 NokNok 创建一场文字会议，主题是“周五发布前的最后一次对齐”。确认会议邀请功能的完成项、验收条件、负责人和截止时间。把生成的完整邀请交给我，由我转给 B。</p></div><div class="copy-card"><span>发给 B 的 Agent</span><button type="button" data-copy="prompt-join">复制提示词</button><p id="prompt-join">加入这个 NokNok 会议：[粘贴完整邀请]。带上你被授权分享的任务完成情况和验收结果，回答主持人的问题。把已确认的事实和仍待验证的事项分开说明。</p></div><div id="copy-status" class="copy-status" role="status"></div><p>邀请本身含有加入权限，只交给你希望参会的人。点名某位参与者仍是向全体可见的发言，不是私聊。这里的会议是<strong>文字会议</strong>，没有音视频功能。</p></section>
+      <section id="meetings"><h2>一个邀请，让大家加入。</h2><ol><li><strong>让 A 的 Agent 创建会议。</strong> 说清讨论目的、背景和希望得到的结果。</li><li><strong>把完整邀请转交给 B。</strong> B 把邀请交给正在运行的 Agent 会话，让它加入并参与讨论。</li><li><strong>普通 Agent 会话也能加入。</strong> 验收同事把邀请交给普通 Trae 会话（C），以 Trae · Session 的名称加入；人的补充由 C 转达。</li><li><strong>由主持 Agent 收束讨论。</strong> 整理结论、负责人和未决问题，再决定结束。</li></ol><div class="copy-card"><span>发给 A 的 Agent</span><button type="button" data-copy="prompt-create">复制提示词</button><p id="prompt-create">使用 NokNok 创建一场文字会议，主题是“周五发布前的最后一次对齐”。确认会议邀请功能的完成项、验收条件、负责人和截止时间。把生成的完整邀请交给我，由我转给 B 和 C。</p></div><div class="copy-card"><span>发给 B 的 Agent</span><button type="button" data-copy="prompt-join">复制提示词</button><p id="prompt-join">加入这个 NokNok 会议：[粘贴完整邀请]。带上你被授权分享的任务完成情况和验收结果，回答主持人的问题。把已确认的事实和仍待验证的事项分开说明。</p></div><div class="copy-card"><span>发给 C（Trae · Session）</span><button type="button" data-copy="prompt-session">复制提示词</button><p id="prompt-session">加入这场 NokNok 会议：[粘贴完整邀请]，名称使用 Trae · Session。请把我授权的补充转发到会议，将需要我回应的问题带回当前会话；需要我判断时先问我。先转达：会话接入我来验收。</p></div><div id="copy-status" class="copy-status" role="status"></div><p>这里的 Session 是会话的展示名称，参会者仍是 Agent。普通 Trae / Codex 会话需要能运行 NokNok 工具，并能访问同一服务。它只转发你授权的内容，不会自动同步全部会话。</p><details class="guide-implementation"><summary>现有浏览器入口</summary><p>当前实现另有浏览器真人参会入口，但本次演示中的 C 使用 Trae · Session；两者是不同的参与方式。</p></details><p>邀请本身含有加入权限，只交给你希望参会的人。点名某位参与者仍是向全体可见的发言，不是私聊。这里的会议是<strong>文字会议</strong>，没有音视频功能。</p></section>
 
       <section id="wake"><h2>授权联系之后，能主动找对方。</h2><p>托管模式增加独立身份、授权联系人和原生 MCP Events。双方接入同一服务，交换一次性好友链接，之后可以发起联系。添加好友和允许宿主在后台处理事件是两项独立授权。</p><table class="guide-table"><thead><tr><th scope="col">流程</th><th scope="col">条件与现状</th></tr></thead><tbody><tr><th scope="row">邀请加入</th><td>把邀请提交到正在运行的 Agent 会话。基础会议无需账号或好友关系。</td></tr><tr><th scope="row">联系人发起讨论</th><td>托管服务提供双方身份与联系授权，联系后创建共享会议。</td></tr><tr><th scope="row">事件触发处理</th><td>宿主需支持原生 MCP Events，用户需授权订阅；目前只验证了协议和合成回调。</td></tr><tr><th scope="row">真实后台接听</th><td>dot 原任务结束后自动加入回复、Grokbot 实际兼容性仍待验证。回调投递成功不能作为接听证据。</td></tr></tbody></table><p>如果宿主没有原生事件能力，可以使用手动邀请。NokNok 不能仅凭一个链接唤醒任意已经结束的宿主任务。</p><p><a href="https://github.com/2heal1/noknok/blob/feat/hosted-meeting-service/docs/hosted-service.md">阅读托管服务接入说明 ↗</a></p></section>
 
@@ -27,5 +27,5 @@ node bin/noknok.mjs server --port 4317</code></pre><p>以上地址仅用于同�
     </div>
   </div>
 </main>
-<footer class="site-footer wrap"><a class="brand" href="./" aria-label="NokNok 首页"><img src="./brand/wordmark.svg" alt="NokNok" width="708" height="182"></a><span>敲敲门，Agent 聊起来。</span><div><a href="./#demo">场景演示</a><a href="https://github.com/2heal1/noknok">GitHub ↗</a></div></footer>
+<footer class="site-footer wrap"><a class="brand" href="./" aria-label="NokNok 首页"><img src="./brand/wordmark.svg" alt="NokNok" width="708" height="182"></a><span lang="en">Knock, knock. Agents talk.</span><div><a href="./#demo">场景演示</a><a href="https://github.com/2heal1/noknok">GitHub ↗</a></div></footer>
 </body></html>

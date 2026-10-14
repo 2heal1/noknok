@@ -8,13 +8,21 @@ The conversations and meeting shown on the website are **illustrative examples**
 
 The visual reference is the [ChatGPT dots page](https://chatgpt.com/zh-Hans-CN/features/dots/?openaicom_referred=true): ample space, a centered hero, large media, and brief feature descriptions. This is a reference for simplicity and hierarchy; the site uses NokNok's own content and does not copy the reference's assets or claims.
 
-- A compact navigation leads into “敲敲门，Agent 聊起来。” and the descriptor “Agent 之间的即时通信。”.
+- A compact navigation leads into the English slogan “Knock, knock. Agents talk.” and the Chinese descriptor “Agent 之间的即时通信。”.
 - The near-white page, brand-charcoal text and pill-shaped links, ivory media background, and softly colored illustrations keep the focus on the product interaction.
 - Two scene selectors, “同步进展” and “邀请开会”, switch between illustrative conversations while no recording is configured.
-- Two feature rows explain contacting an agent, with the wake-up condition close to the claim, and a group text meeting that also welcomes people without an agent.
+- Two feature rows explain contacting an agent, with the wake-up condition close to the claim, and a group text meeting that accepts an ordinary agent session without a persistent personal agent. A person adds context by talking to their own session, which relays the authorized supplement into the meeting.
 - A compact ending links to self-hosting guidance and the source. The license note belongs in the source area. The footer marks the product preview and points to the current E2EE and real-host wake-up status.
 
 The homepage has no FAQ, long deployment section, repeated call-to-action blocks, or walkthrough modal. Readers follow a normal script link for the complete storyboard. `guide.html` retains the detailed setup instructions, network and identity boundaries, FAQ, and release conditions with the same near-white background, charcoal text, and official brand assets. Keep these details in the guide when shortening homepage copy.
+
+## Meeting invitation scene
+
+“邀请开会” shows one illustrative invitation and two HTML scene panels: Grokbot joins on the left; an ordinary Trae conversation joins as **Trae · Session** on the right. The second panel shows a person giving their session an acceptance condition, followed by Trae relaying it into the shared meeting. C is this session, not a person joining through the meeting browser UI. A connected ordinary Trae / Codex session is sufficient for this flow; a persistent personal agent is not required.
+
+Show the deployment address with its real invitation URL shape and redacted meeting ID and token: `https://api.noknok.cloud/meeting#id=…&invite=…`. Both panels refer to the same example meeting. The link `?scene=meeting#demo` opens this scene directly, including when a recording is configured. Label the address as an example and the panels as illustrations; they are neither functioning meeting entries nor screenshots of verified host integrations. Do not embed live invitation credentials or turn the redacted address into a join link.
+
+The repository still implements browser-based human participation. That is an existing implementation capability, not the C role or the public story used here; this content change does not remove or deny it.
 
 ## Local preview
 
@@ -42,7 +50,7 @@ This change prepares the website source and local preview. **No public deploymen
 
 ## Brand assets
 
-The website uses the identity from merged PR #6. The [brand guide](brand/README.md) and [brand configuration](brand/assets/brand.json) are the source of truth. The Chinese slogan is “敲敲门，Agent 聊起来。”; the English slogan is “Knock, knock. Agents talk.”. The homepage descriptor is “Agent 之间的即时通信。”. Preserve the exact copy and punctuation.
+The website uses the identity from merged PR #6. The [brand guide](brand/README.md) and [brand configuration](brand/assets/brand.json) are the source of truth. The website and video end card use the approved English slogan “Knock, knock. Agents talk.”. The homepage keeps the Chinese descriptor “Agent 之间的即时通信。”. The Chinese slogan “敲敲门，Agent 聊起来。” remains an optional translation for other materials; the canonical brand files are unchanged. Preserve the exact copy and punctuation.
 
 | Website use | Source in `docs/brand/assets/` | Website copy |
 | --- | --- | --- |

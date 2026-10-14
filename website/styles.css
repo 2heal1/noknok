@@ -14,7 +14,7 @@ body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.65 v
 a { color: inherit; text-decoration: none; }
 button { font: inherit; color: inherit; cursor: pointer; }
 button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-a:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--ink); outline-offset: 5px; }
+a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--ink); outline-offset: 5px; }
 h1, h2, h3, p { margin: 0; }
 h1, h2, h3 { font-weight: 500; line-height: 1.25; letter-spacing: -.04em; }
 p { color: var(--muted); }
@@ -52,7 +52,6 @@ p { color: var(--muted); }
 .story-message { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; }
 .message-avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #dde3d4; color: #465339; font: 20px Georgia, serif; }
 .from-grok .message-avatar { background: #eee1d8; color: #685446; }
-.from-human .message-avatar { background: #e7e7e7; color: #535353; font: 13px var(--font); }
 .message-body strong { display: block; font-size: 12px; font-weight: 500; margin-bottom: 5px; }
 .message-body p { font-size: 14px; color: #50504c; line-height: 1.7; }
 .chat-composer { display: flex; align-items: center; justify-content: space-between; margin: 0 23px 20px; padding: 10px 11px 10px 17px; background: #f6f6f3; border-radius: 26px; color: #696963; font-size: 12px; }
@@ -69,7 +68,6 @@ p { color: var(--muted); }
 .agent-avatar { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 20px; font: 39px Georgia, serif; }
 .dot-avatar { background: #dde4d2; color: #47533a; }
 .grok-avatar { background: #f8f1eb; color: #7c614e; }
-.human-avatar { background: #ededeb; color: #66665f; font: 24px var(--font); }
 .connection-dots { font-size: 27px; color: #7e6a5d; letter-spacing: 6px; margin-right: -6px; }
 .notification { display: flex; align-items: center; gap: 14px; background: #fffdfb; border: 1px solid #ffffff80; border-radius: 16px; padding: 18px 22px; width: min(325px, calc(100% - 46px)); }
 .notification-icon { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 10px; background: #efeee8; font-size: 18px; }
@@ -84,10 +82,6 @@ p { color: var(--muted); }
 .participants { display: flex; justify-content: space-around; gap: 20px; padding: 23px 0; }
 .participants > div { display: flex; flex-direction: column; align-items: center; gap: 9px; font-size: 11px; }
 .participants .agent-avatar { width: 44px; height: 44px; border-radius: 14px; font-size: 28px; }
-.participants .human-avatar { font-size: 18px; }
-.human-message { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; background: #f3f5ee; }
-.human-message > span { display: grid; place-items: center; font-size: 10px; background: #e3e8da; color: #536146; width: 23px; height: 23px; border-radius: 50%; }
-.human-message p { color: #526046; font-size: 12px; }
 .ownership { text-align: center; padding: 64px 24px 58px; border-radius: 28px; background: #f2f2ef; }
 .ownership h2 { font-size: 35px; }
 .ownership > p { font-size: 15px; margin-top: 17px; }
@@ -96,6 +90,52 @@ p { color: var(--muted); }
 .site-footer .brand img { width: 94px; }
 .site-footer p, .site-footer > a:last-child, .site-footer > span, .site-footer > div { font-size: 11px; color: var(--muted); }
 .site-footer > div { display: flex; gap: 22px; }
+
+/* One invitation, shown in two Agent conversations. These are illustrations. */
+.story-preview.is-meeting { padding: 35px; }
+.invite-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 22px; }
+.invite-heading h2 { font-size: 23px; letter-spacing: -.03em; }
+.invite-link { display: flex; align-items: center; gap: 12px; padding: 15px 18px; background: #fffdf9; border: 1px solid #dfd9ce; border-radius: 12px; }
+.invite-link > svg { width: 21px; height: 21px; flex-shrink: 0; color: #6d665b; }
+.invite-link code { font: 12px/1.7 'SFMono-Regular', Consolas, monospace; overflow-wrap: anywhere; min-width: 0; }
+.invite-link > span { margin-left: auto; white-space: nowrap; color: #6d665b; font-size: 10px; }
+.invite-views { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 25px; }
+.invite-views figure { margin: 0; min-width: 0; }
+.invite-visual { background: white; border: 1px solid #e2dfd7; border-radius: 16px; overflow: hidden; min-height: 340px; }
+.visual-chrome { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 16px 19px; border-bottom: 1px solid #eeece7; color: var(--muted); font-size: 10px; }
+.visual-app { color: var(--ink); font-size: 12px; font-weight: 550; }
+.visual-body { padding: 23px 21px; }
+.sample-user { margin-left: auto; width: fit-content; padding: 12px 15px; border-radius: 14px 14px 3px 14px; background: #f1f0ec; color: #44463f; font-size: 12px; line-height: 1.8; }
+.sample-link { display: flex; align-items: center; gap: 10px; border: 1px solid #e5e1d7; padding: 11px 12px; border-radius: 10px; margin-top: 9px; margin-left: auto; width: fit-content; }
+.sample-link > span { color: #6d665b; font-size: 17px; }
+.sample-link strong { font-size: 10px; display: block; font-weight: 500; }
+.sample-link div > span { display: block; font-size: 9px; color: #737067; margin-top: 2px; }
+.sample-agent { display: flex; gap: 10px; margin-top: 25px; }
+.sample-agent .message-avatar { flex-shrink: 0; width: 27px; height: 27px; font-size: 17px; background: #eee1d8; color: #685446; }
+.sample-agent strong { font-size: 10px; font-weight: 500; }
+.sample-agent p { font-size: 12px; line-height: 1.8; color: #50504c; margin-top: 5px; }
+.sample-agent .session-avatar { font: 11px var(--font); background: #e7e7e2; color: #4c5046; }
+.invite-views figcaption { margin-top: 12px; text-align: center; font-size: 12px; }
+.session-avatar { background: #ededeb; color: #555a4f; font: 24px var(--font); }
+.session-message { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; background: #f3f5ee; }
+.session-message > span { display: grid; place-items: center; font-size: 10px; background: #e3e8da; color: #536146; width: 23px; height: 23px; border-radius: 50%; flex-shrink: 0; }
+.session-message p { color: #526046; font-size: 11px; }
+@media (max-width: 700px) {
+  .story-preview.is-meeting { padding: 27px 22px; }
+  .invite-views { grid-template-columns: 1fr; gap: 25px; }
+  .invite-heading h2 { font-size: 22px; }
+  .invite-link { flex-wrap: wrap; gap: 7px 10px; padding: 13px; }
+  .invite-link code { flex: 1; font-size: 11px; }
+  .invite-link > span { flex-basis: 100%; padding-left: 31px; }
+  .invite-visual { height: auto; min-height: 335px; }
+}
+@media (max-width: 420px) {
+  .story-preview.is-meeting { padding: 24px 15px; }
+  .invite-heading { gap: 12px; margin-bottom: 18px; }
+  .invite-heading h2 { font-size: 21px; }
+  .invite-heading .preview-label { font-size: 9px; }
+  .visual-body { padding: 20px 17px; }
+}
 
 /* The guide retains the implementation details, apart from the short homepage. */
 .eyebrow { font-size: 10px; letter-spacing: .1em; color: var(--muted); }
@@ -128,6 +168,8 @@ p { color: var(--muted); }
 .guide-table td { color: var(--muted); }
 .guide-table th, .guide-table td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .guide-table th:first-child { width: 26%; }
+.guide-implementation { margin-block: 18px; font-size: 13px; color: var(--muted); }
+.guide-implementation summary { cursor: pointer; }
 .copy-status { min-height: 20px; font-size: 11px; color: #50504a; }
 
 @media (max-width: 1000px) {

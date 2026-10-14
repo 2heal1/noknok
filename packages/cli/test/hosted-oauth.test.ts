@@ -34,7 +34,13 @@ test('OAuth metadata and DCR support exact redirect registration and limited sco
   assert.equal(resource.resource, `${env.realm}/mcp`); assert.deepEqual(resource.scopes_supported, HOSTED_OAUTH_SCOPES);
   const metadata = await (await env.request('/.well-known/oauth-authorization-server')).json();
   assert.deepEqual(metadata.code_challenge_methods_supported, ['S256']); assert.ok(metadata.registration_endpoint);
-  for (const redirect of ['http://example.com/callback', 'https://example.com/cb#fragment', 'https://user:password@example.com/cb', 'javascript:alert(1)']) assert.equal((await env.register({ redirect_uris: [redirect] })).response.status, 400);
+  for (const redirect of ['http://example.com/callback', 'https://example.com/cb#fragment', 'https://user:password@example.com/cb', 'javascript:alert(1)', 'https://*/callback', 'https://*.example.com/callback', 'https://example.com;/callback', "https://example.com'/callback", 'http://[::1]:3000/callback', 'https://[::1]/callback', 'https://192.0.2.1/callback']) {
+    const rejected = await env.register({ redirect_uris: [redirect] });
+    assert.equal(rejected.response.status, 400, redirect); assert.equal(rejected.value.error, 'invalid_redirect_uri', redirect);
+  }
+  for (const redirect of ['https://example.com/callback', 'http://localhost:3000/callback', 'http://127.0.0.1:3000/callback', 'https://127.0.0.1/callback', 'https://例子.example/callback']) {
+    assert.equal((await env.register({ redirect_uris: [redirect] })).response.status, 201, redirect);
+  }
   assert.equal((await env.register({ scope: 'noknok:messages:send' })).response.status, 400);
   assert.equal((await env.register({ grant_types: ['password'] })).response.status, 400);
   const { value: client } = await env.register();
@@ -43,6 +49,21 @@ test('OAuth metadata and DCR support exact redirect registration and limited sco
     const response = await env.request(`/oauth/authorize?${new URLSearchParams({ ...query, ...extra })}`); assert.equal(response.status, 400); assert.equal(response.headers.get('location'), null);
   }
   assert.equal((await env.request(`/oauth/authorize?${new URLSearchParams(query)}&client_id=duplicate`)).status, 400);
+});
+
+test('OAuth page CSP does not trust unsafe callback hosts in persisted client metadata', async t => {
+  const env = await setup(t), { value: client } = await env.register();
+  const saved = JSON.parse(env.store.db.prepare('SELECT value FROM oauth_clients WHERE id=?').get(client.client_id).value);
+  for (const redirect of ['https://*/callback', 'https://*.example.com/callback', 'https://example.com;/callback', 'http://[::1]:3000/callback', 'https://192.0.2.1/callback']) {
+    env.store.db.prepare('UPDATE oauth_clients SET value=? WHERE id=?').run(JSON.stringify({ ...saved, redirectUris: [redirect] }), client.client_id);
+    const response = await env.request(`/oauth/authorize?${new URLSearchParams({ response_type: 'code', client_id: client.client_id, redirect_uri: redirect, resource: `${env.realm}/mcp`, code_challenge: secret(), code_challenge_method: 'S256' })}`);
+    assert.equal(response.status, 400);
+    assert.match(response.headers.get('content-type')!, /^application\/json/);
+    assert.equal((await response.json()).error, 'invalid_redirect_uri');
+    const formAction = response.headers.get('content-security-policy')!.split(';').map(value => value.trim()).filter(value => value.startsWith('form-action '));
+    assert.deepEqual(formAction, ["form-action 'self'"]);
+  }
+  assert.equal(env.store.db.prepare('SELECT COUNT(*) n FROM oauth_grants').get().n, 0);
 });
 
 test('two-sided pairing preserves the existing identity, rejects cross-Agent access and stores only hashed credentials', async t => {

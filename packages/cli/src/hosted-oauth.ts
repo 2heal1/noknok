@@ -2,6 +2,7 @@ import type http from 'node:http';
 import type { HostedStore } from './hosted-store.js';
 import type { HostedIdentity } from './hosted-types.js';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { isIP } from 'node:net';
 import OAuth2Server from './oauth-engine.js';
 
 export const HOSTED_OAUTH_SCOPES = ['noknok:events:read', 'noknok:events:manage', 'noknok:status:read'];
@@ -20,9 +21,22 @@ const bearer = req => /^Bearer (\S+)$/.exec(req.headers.authorization || '')?.[1
 const text = (value: unknown, max = 4096): value is string => typeof value === 'string' && value.length > 0 && value.length <= max;
 const headers = { 'Cache-Control': 'no-store', 'Pragma': 'no-cache', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff',
   'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'", 'X-Frame-Options': 'DENY' };
+function callbackOrigin(target: URL) {
+  // URL accepts hosts such as "*" and "example.com;" that have special meaning
+  // in CSP. CSP cannot match IPv6 or IPv4 hosts other than 127.0.0.1.
+  if (!/^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.?$/i.test(target.hostname) || (isIP(target.hostname) && target.hostname !== '127.0.0.1')) {
+    throw failure(400, 'invalid_redirect_uri', 'Use a DNS name or 127.0.0.1 for the callback host.');
+  }
+  return target.origin;
+}
 function json(res, status, value) { res.writeHead(status, { ...headers, 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); }
-function page(res, content: string) {
-  res.writeHead(200, { ...headers, 'Content-Type': 'text/html; charset=utf-8' });
+function page(res, content: string, redirectUri?: string) {
+  // Browsers also check form-action when the POST redirects to the registered
+  // client. Use only its parsed origin, never raw client metadata in a policy.
+  const policy = redirectUri ? headers['Content-Security-Policy'].replace("form-action 'self'", `form-action 'self' ${callbackOrigin(new URL(redirectUri))}`) : headers['Content-Security-Policy'];
+  // Native form POSTs need the same-origin Origin header; no-referrer makes it
+  // "null" in browsers. Keep cross-origin referrers suppressed.
+  res.writeHead(200, { ...headers, 'Content-Security-Policy': policy, 'Referrer-Policy': 'same-origin', 'Content-Type': 'text/html; charset=utf-8' });
   res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect NokNok</title><style>body{font:17px/1.6 system-ui;max-width:680px;margin:8vh auto;padding:24px;color:#172526;background:#f5f3eb}h1{line-height:1.15}button,input{font:inherit;padding:10px;margin:8px 0}button{cursor:pointer}code,dd{overflow-wrap:anywhere}dt{font-weight:600}dd{margin:0 0 12px}section{background:white;padding:24px;border-radius:12px}</style><main><h1>Connect your existing NokNok Agent</h1><section>${content}</section><p>Only event identifiers and status are shared. Your CLI keeps the message decryption keys. Plaintext you choose to send to a cloud model is processed by that model service.</p></main></html>`);
 }
 function fields(params: URLSearchParams): Record<string, string> {
@@ -187,12 +201,13 @@ export function createHostedOAuth({ store, onRevoke = () => {}, clientKey = req 
   function hidden(secret: string, action: string) { return `<input type="hidden" name="csrf" value="${csrf(secret)}"><input type="hidden" name="action" value="${action}">`; }
   function show(req, res) {
     const tx = transaction(req), registered = client(tx.auth.client_id)!;
+    const render = (content: string) => page(res, content, tx.auth.redirect_uri);
     const pairing = row('SELECT * FROM oauth_pairings WHERE transaction_id=?', tx.id);
     const details = `<dl><dt>Application (self-reported name)</dt><dd>${escape(registered.name)}</dd><dt>Callback address</dt><dd>${escape(tx.auth.redirect_uri)}</dd><dt>Permissions</dt><dd><ul>${tx.auth.scope.split(' ').map(scope => `<li>${escape(SCOPE_LABELS[scope])}</li>`).join('')}</ul></dd>${pairing ? `<dt>Existing Agent</dt><dd>${escape(pairing.agent_id)}</dd>` : ''}</dl>`;
-    if (!pairing) return page(res, `${details}<p>Run <code>noknok hosted pair --agent YOUR_EXISTING_HANDLE</code> in the CLI that already owns your Agent. Enter its short-lived pairing code below. Never enter an Agent token or encryption key.</p><form method="post" action="/oauth/authorize">${hidden(tx.secret, 'pair')}<label>Pairing code <input name="user_code" required autocomplete="off" maxlength="20"></label><br><button>Review Agent and permissions</button></form>`);
+    if (!pairing) return render(`${details}<p>Run <code>noknok hosted pair --agent YOUR_EXISTING_HANDLE</code> in the CLI that already owns your Agent. Enter its short-lived pairing code below. Never enter an Agent token or encryption key.</p><form method="post" action="/oauth/authorize">${hidden(tx.secret, 'pair')}<label>Pairing code <input name="user_code" required autocomplete="off" maxlength="20"></label><br><button>Review Agent and permissions</button></form>`);
     if (pairing.expires_at <= store.now()) throw failure(400, 'invalid_request', 'Pairing expired; restart authorization.');
-    if (pairing.status === 'review') return page(res, `${details}<p>Verify this is the application you intended to connect. Approving here also requires confirmation from your original CLI.</p><form method="post" action="/oauth/authorize">${hidden(tx.secret, 'consent')}<button>Confirm in browser</button></form><form method="post" action="/oauth/authorize">${hidden(tx.secret, 'deny')}<button>Deny</button></form>`);
-    if (['awaiting_cli', 'approved'].includes(pairing.status)) return page(res, `${details}<p>In your original CLI, inspect this exact request:</p><p><code>noknok hosted pair-status ${escape(pairing.id)} --agent YOUR_EXISTING_HANDLE</code></p><p>Review the application, Agent and permissions there, then use the confirmation value shown by that command with <code>hosted pair-confirm</code>.</p><p>Request status: <strong>${escape(pairing.status)}</strong></p><form method="post" action="/oauth/authorize">${hidden(tx.secret, 'finish')}<button>Finish after CLI confirmation</button></form>`);
+    if (pairing.status === 'review') return render(`${details}<p>Verify this is the application you intended to connect. Approving here also requires confirmation from your original CLI.</p><form method="post" action="/oauth/authorize">${hidden(tx.secret, 'consent')}<button>Confirm in browser</button></form><form method="post" action="/oauth/authorize">${hidden(tx.secret, 'deny')}<button>Deny</button></form>`);
+    if (['awaiting_cli', 'approved'].includes(pairing.status)) return render(`${details}<p>In your original CLI, inspect this exact request:</p><p><code>noknok hosted pair-status ${escape(pairing.id)} --agent YOUR_EXISTING_HANDLE</code></p><p>Review the application, Agent and permissions there, then use the confirmation value shown by that command with <code>hosted pair-confirm</code>.</p><p>Request status: <strong>${escape(pairing.status)}</strong></p><form method="post" action="/oauth/authorize">${hidden(tx.secret, 'finish')}<button>Finish after CLI confirmation</button></form>`);
     throw failure(400, 'invalid_request', 'This pairing has already been used. Restart authorization.');
   }
   function pairingView(saved) {
@@ -223,6 +238,7 @@ export function createHostedOAuth({ store, onRevoke = () => {}, clientKey = req 
         let target: URL;
         try { if (!text(value, 2048)) throw Error(); target = new URL(value); } catch { throw failure(400, 'invalid_redirect_uri', 'Invalid redirect URI.'); }
         if ((target.protocol !== 'https:' && !(target.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(target.hostname))) || target.username || target.password || target.hash) throw failure(400, 'invalid_redirect_uri', 'Use HTTPS redirect URIs without fragments or credentials.');
+        callbackOrigin(target);
       }
       if ((input.grant_types !== undefined && (!Array.isArray(input.grant_types) || !input.grant_types.includes('authorization_code') || input.grant_types.some(value => !['authorization_code', 'refresh_token'].includes(value)))) || (input.response_types !== undefined && (!Array.isArray(input.response_types) || input.response_types.length !== 1 || input.response_types[0] !== 'code'))) throw failure(400, 'invalid_client_metadata', 'Only authorization code and refresh token grants are supported.');
       if (input.scope !== undefined) scopes(input.scope);

@@ -37,6 +37,10 @@ Validate both scenarios on the target build. OAuth is not a prerequisite for ins
 
 Tests using an HTTP callback fixture cover protocol delivery and local decryption, not whether ChatGPT/dot schedules an idle task. `processing: not_observed` is intentional: the server does not infer CLI availability or successful handling from HTTP 2xx. Notification metadata cannot restore expired ciphertext.
 
+OAuth browser regression must use native form submissions, without manually setting `Origin`. Check pairing, browser consent, CLI confirmation, completion and denial with a callback on a different origin. OAuth HTML uses `Referrer-Policy: same-origin` so the browser retains its same-origin POST Origin; API and redirect responses retain `no-referrer`. Only the selected, validated callback origin joins `form-action 'self'`, allowing the final browser redirect without exposing a Referer to that client. Confirm the returned state and PKCE exchange, and reject null, wildcard, foreign or missing Origin and invalid/missing CSRF. `hosted-oauth-integration.test.ts` guards these headers and server checks; an HTTP test that supplies Origin itself cannot establish browser compatibility.
+
+Callback hosts must be DNS names (including `localhost` and normalized international names) or `127.0.0.1`. IPv6 literals and other IP literals are rejected because they cannot be matched by this restrictive [CSP host-source policy](https://www.w3.org/TR/CSP3/#framework-directive-source-list). Use a hostname for a client hosted on IPv6; do not replace the callback allowlist with a wildcard or scheme-wide source.
+
 Publishing or deploying a package may restart the service and lose active in-memory meetings. Finish/save/end meetings and schedule an idle deployment window before testing the deployed target; do not confuse deployment interruption with OAuth revocation behavior.
 
 ## Historical infrastructure evidence

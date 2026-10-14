@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -64,6 +64,71 @@ test('instant CLI and browser invitation meetings work without any OAuth grant',
   assert.equal((await guest('meeting', 'status', joined.session)).meeting.state, 'ended');
   assert.ok((await host('meeting', 'history', room.session)).events.some(event => event.data?.text === 'Reply over the original encrypted meeting transport'));
   assert.equal(f.service.store.db.prepare('SELECT COUNT(*) n FROM oauth_grants').get().n, 0);
+});
+
+test('OAuth browser pages preserve same-origin forms while Origin and CSRF checks fail closed', async t => {
+  const f = await fixture(t), agent = f.agent('browser');
+  await agent('hosted', 'setup', '--server', f.service.url);
+  const { agentToken } = await f.state('browser');
+  const request = (path, options: RequestInit = {}) => fetch(`${f.service.url}${path}`, { ...options, redirect: 'manual' });
+  const cli = (path, method = 'GET', input?) => request(path, { method, headers: { Authorization: `Bearer ${agentToken}`, 'Content-Type': 'application/json' }, ...(input === undefined ? {} : { body: JSON.stringify(input) }) });
+  const json = async (response, status = 200) => {
+    assert.equal(response.status, status);
+    assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+    return response.json();
+  };
+  const html = async (response, expected, callbackOrigin = '') => {
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('referrer-policy'), 'same-origin');
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const formAction = response.headers.get('content-security-policy')!.split(';').map(value => value.trim()).filter(value => value.startsWith('form-action '));
+    assert.deepEqual(formAction, [`form-action 'self'${callbackOrigin ? ` ${callbackOrigin}` : ''}`]);
+    const text = await response.text(); assert.match(text, expected); return text;
+  };
+  await html(await request('/oauth/pair'), /short-lived pairing code/);
+  const metadata = await json(await request('/.well-known/oauth-authorization-server'));
+  assert.equal(metadata.issuer, f.service.url);
+  const callback = 'https://chatgpt.com/connector_platform/oauth_redirect?next=https://untrusted.example/finish&policy=form-action%20*';
+  const client = await json(await request('/oauth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_name: 'Browser regression test', redirect_uris: [callback, 'https://unused.example/callback'], token_endpoint_auth_method: 'none' }) }), 201);
+  // Only this transaction's selected callback origin belongs in CSP, never its
+  // path/query or another registered callback's origin.
+  const authorizationHtml = (response, expected) => html(response, expected, 'https://chatgpt.com');
+  const pairing = await json(await cli('/oauth/pairings', 'POST', {}), 201);
+  const verifier = randomBytes(32).toString('base64url'), state = 'browser-state +/&=';
+  const params = new URLSearchParams({ client_id: client.client_id, redirect_uri: client.redirect_uris[0], response_type: 'code', resource: `${f.service.url}/mcp`, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', state });
+  const authorization = await request(`/oauth/authorize?${params}`);
+  const initial = await authorizationHtml(authorization, /name="user_code"/);
+  const cookie = authorization.headers.get('set-cookie')!.split(';')[0], csrf = /name="csrf" value="([^"]+)"/.exec(initial)![1];
+  const browser = (action, more = {}, origin: string | undefined = f.service.url) => request('/oauth/authorize', { method: 'POST', headers: { Cookie: cookie, ...(origin === undefined ? {} : { Origin: origin }), 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf, action, ...more }).toString() });
+
+  for (const origin of ['null', '*', 'https://attacker.example']) {
+    const rejected = await browser('pair', { user_code: pairing.user_code }, origin);
+    assert.equal(rejected.status, 403, origin);
+    assert.equal((await rejected.json()).error.code, 'origin_denied', origin);
+  }
+  const missingOrigin = await request('/oauth/authorize', { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf, action: 'pair', user_code: pairing.user_code }).toString() });
+  assert.equal((await json(missingOrigin, 403)).error, 'access_denied');
+  for (const invalidCsrf of ['', 'wrong', 'é'.repeat(csrf.length)]) {
+    const rejected = await browser('pair', { user_code: pairing.user_code, csrf: invalidCsrf });
+    assert.equal((await json(rejected, 403)).error, 'access_denied');
+  }
+  const missingCsrf = await request('/oauth/authorize', { method: 'POST', headers: { Cookie: cookie, Origin: f.service.url, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ action: 'pair', user_code: pairing.user_code }).toString() });
+  assert.equal((await json(missingCsrf, 403)).error, 'access_denied');
+  assert.equal((await json(await cli(`/oauth/pairings/${pairing.pairing_id}`))).status, 'waiting_for_browser');
+
+  await authorizationHtml(await browser('pair', { user_code: pairing.user_code }), /Confirm in browser/);
+  await authorizationHtml(await browser('consent'), /awaiting_cli/);
+  await authorizationHtml(await browser('finish'), /awaiting_cli/);
+  const pending = await json(await cli(`/oauth/pairings/${pairing.pairing_id}`));
+  await json(await cli(`/oauth/pairings/${pairing.pairing_id}/confirm`, 'POST', { confirmation: pending.confirmation }));
+  await authorizationHtml(await request('/oauth/continue', { headers: { Cookie: cookie } }), /approved/);
+  const finish = await browser('finish');
+  assert.equal(finish.status, 302);
+  assert.equal(finish.headers.get('referrer-policy'), 'no-referrer');
+  const redirect = new URL(finish.headers.get('location')!);
+  assert.equal(redirect.searchParams.get('state'), state);
+  const tokens = await json(await request('/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', client_id: client.client_id, redirect_uri: client.redirect_uris[0], resource: `${f.service.url}/mcp`, code: redirect.searchParams.get('code')!, code_verifier: verifier }).toString() }));
+  assert.ok(tokens.access_token);
 });
 
 test('OAuth Events reuse existing contacts, isolate chats, and revocation leaves CLI meetings usable', async t => {

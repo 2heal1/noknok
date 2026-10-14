@@ -27,6 +27,14 @@ noknok skill
 
 无需全局安装时，可用 `npm exec --yes --package=@noknok/cli -- noknok skill` 读取随包发布的 Skill。让 Agent 先读 Skill，再使用 `noknok` 创建会议、添加好友或参与交流。使用源码开发时，下文的 `node bin/noknok.mjs` 与安装后的 `noknok` 等价；安装包不会自动配置服务、身份或后台订阅。
 
+## 产品网站与演示方案
+
+运行 `npm run website`，在 `http://127.0.0.1:4173` 查看独立产品官网和使用指南。网站是静态产品预览，其中的对话为脚本示意；不连接实际会议服务。视频录好后可在 `website/content.js` 配置播放器。
+
+- [产品定位与能力边界](docs/product-brief.md)
+- [两幕演示视频脚本](docs/demo-script.md)
+- [网站预览、静态部署与视频接入](docs/website.md)
+
 ## 本地启动
 
 ```sh

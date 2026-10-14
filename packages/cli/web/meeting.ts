@@ -1,6 +1,7 @@
 import type { MeetingRecord, ConversationEvent, MeetingLink } from './types.js';
 import { meetingInvitationText, meetingJoinInstructions } from './meeting-invitation.js';
 import { validKey, contentAAD, decryptText, encryptText, isEncryptedText } from './e2ee.js';
+import { avatarIdentity } from './avatar-catalog.js';
 interface MeetingElements {
   'notice': HTMLElement;
   'storage-warning': HTMLElement;
@@ -18,6 +19,8 @@ interface MeetingElements {
   'agent-prompt': HTMLTextAreaElement;
   'copy-agent-prompt': HTMLButtonElement;
   'room': HTMLElement;
+  'toggle-details': HTMLButtonElement;
+  'room-details': HTMLElement;
   'room-number': HTMLElement;
   'room-status': HTMLElement;
   'room-purpose': HTMLElement;
@@ -650,6 +653,25 @@ function startMeetingApp() {
     }
   }
 
+  function participantAvatar(participant: { name: string; kind: string }) {
+    const identity = avatarIdentity(participant.name);
+    const avatar = make('span', `avatar ${participant.kind === 'human' ? 'human' : 'agent'}`, identity.initials);
+    avatar.dataset.tone = identity.tone;
+    avatar.setAttribute('aria-hidden', 'true');
+    if (participant.kind !== 'human' && identity.icon) {
+      const image = make('img', '');
+      image.alt = '';
+      image.addEventListener('error', () => {
+        avatar.classList.remove('has-logo');
+        avatar.replaceChildren(document.createTextNode(identity.initials));
+      }, { once: true });
+      image.src = identity.icon;
+      avatar.classList.add('has-logo');
+      avatar.replaceChildren(image);
+    }
+    return avatar;
+  }
+
   function renderParticipants() {
     const members = current.meeting.participants || [];
     const ready = new Set(current.meeting.readyBy || []);
@@ -663,7 +685,7 @@ function startMeetingApp() {
     for (const participant of joined) {
       const mine = current.mode === 'participant' && participant.id === current.participantId;
       const card = make('div', `participant${mine ? ' is-self' : ''}`);
-      const avatar = make('span', `avatar ${participant.kind === 'human' ? 'human' : 'agent'}`, participant.kind === 'human' ? participant.name.slice(0, 1) : participant.name.slice(0, 2).toUpperCase());
+      const avatar = participantAvatar(participant);
       const info = make('div', 'participant-info');
       info.append(make('div', 'participant-name', `${participant.name}${mine ? ' · 我' : ''}`));
       const details = make('div', 'participant-details');
@@ -705,7 +727,7 @@ function startMeetingApp() {
         const author = person(event.from) || { name: '参会者', kind: 'agent' };
         const row = make('article', `message${author.kind === 'human' ? ' is-human' : ''}${event.from === current.participantId && current.mode === 'participant' ? ' is-self' : ''}`);
         row.id = `message-${event.seq}`;
-        row.append(make('span', `avatar ${author.kind === 'human' ? 'human' : 'agent'}`, author.name.slice(0, author.kind === 'human' ? 1 : 2).toUpperCase()));
+        row.append(participantAvatar(author));
         const body = make('div', 'message-body');
         const head = make('div', 'message-head');
         head.append(make('span', 'message-name', author.name), make('span', `kind-badge ${author.kind}`, author.kind === 'human' ? '人工补充' : 'Agent'));
@@ -886,6 +908,12 @@ function startMeetingApp() {
   });
   $('message-text').addEventListener('keydown', (event) => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); $('message-form').requestSubmit(); } });
   $('cancel-reply').addEventListener('click', clearReply);
+  $('toggle-details').addEventListener('click', () => {
+    const open = Boolean($('room-details').hidden);
+    $('room-details').hidden = !open;
+    $('room').classList.toggle('details-open', open);
+    $('toggle-details').setAttribute('aria-expanded', String(open));
+  });
   $('open-end').addEventListener('click', () => $('end-dialog').showModal());
   $('cancel-end').addEventListener('click', () => $('end-dialog').close());
   $('end-form').addEventListener('submit', async (event) => {

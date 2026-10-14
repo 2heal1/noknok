@@ -41,11 +41,20 @@ test('CI deployment pins SSH trust, limits the command, isolates credentials, an
     fetch: async (url, options) => {
       assert.equal(url, 'https://api.example.test/health');
       assert.equal(options?.redirect, 'error');
-      return Response.json({ ok: true, mode: 'hosted', transcriptStorage: 'memory' });
+      return Response.json({ ok: true, mode: 'hosted', transcriptStorage: 'participant', deliveryStorage: 'pending_memory' });
     },
   });
   assert.equal(result.version, '0.1.0');
   await assert.rejects(stat(identityPath!), { code: 'ENOENT' });
+});
+
+test('CI rejects a legacy or incorrectly configured transcript endpoint after a new deployment', async () => {
+  for (const health of [
+    { ok: true, mode: 'hosted', transcriptStorage: 'memory' },
+    { ok: true, mode: 'hosted', transcriptStorage: 'participant', deliveryStorage: 'disk' },
+  ]) await assert.rejects(deployHosted(fixture(), {
+    run: async () => {}, fetch: async () => Response.json(health),
+  }), /participant-owned transcripts/);
 });
 
 test('failed SSH never runs public health verification and still removes credentials', async () => {

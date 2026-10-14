@@ -42,7 +42,11 @@ class DeploymentTests(unittest.TestCase):
         self.fail_new_health = False
         self.fail_rollback = False
         self.fail_build = False
-        self.transcript_storage = 'memory'
+        self.health_responses = {
+            OLD: {'ok': True, 'mode': 'hosted', 'transcriptStorage': 'memory'},
+            NEW: {'ok': True, 'mode': 'hosted', 'transcriptStorage': 'participant',
+                  'deliveryStorage': 'pending_memory', 'deliveryTtlMs': 300_000},
+        }
         for name, value in [('DATA', self.data), ('BUNDLE', self.bundle), ('run', self.command)]:
             context = patch.object(deploy, name, value)
             context.start()
@@ -58,7 +62,7 @@ class DeploymentTests(unittest.TestCase):
     def command(self, *args, **_kwargs):
         self.commands.append(args)
         if args[0] == deploy.CURL:
-            return json.dumps({'ok': True, 'mode': 'hosted', 'transcriptStorage': self.transcript_storage})
+            return json.dumps(self.health_responses[self.current_image])
         self.assertEqual(args[0], deploy.DOCKER)
         if args[1] == 'ps':
             return 'c' * 12
@@ -121,10 +125,40 @@ class DeploymentTests(unittest.TestCase):
         self.assertNotIn('pending', self.state())
         self.assertIsNone(self.state()['highWaterVersion'])
 
-    def test_health_rejects_an_endpoint_with_the_wrong_transcript_storage(self):
-        self.transcript_storage = 'disk'
+    def test_release_health_requires_participant_storage_and_pending_memory_delivery(self):
+        self.current_image = NEW
+        spec = {'image': NEW, 'kind': 'release'}
+        deploy.healthy(self.config, spec)
+        valid = dict(self.health_responses[NEW])
+        for change in [{'transcriptStorage': 'memory'}, {'transcriptStorage': 'disk'},
+                       {'deliveryStorage': 'disk'}, {'deliveryStorage': None}]:
+            self.health_responses[NEW] = {**valid, **change}
+            with self.assertRaisesRegex(deploy.DeploymentError, 'health checks did not pass'):
+                deploy.healthy(self.config, spec)
+
+    def test_memory_health_is_only_accepted_for_the_captured_bootstrap_snapshot(self):
+        deploy.healthy(self.config, {'image': OLD, 'kind': 'bootstrap'})
+        for kind in ('release', None):
+            with self.assertRaisesRegex(deploy.DeploymentError, 'health checks did not pass'):
+                deploy.healthy(self.config, {'image': OLD, 'kind': kind})
+
+    def test_a_new_release_with_legacy_health_is_rejected_and_bootstrap_is_restored(self):
+        state = deploy.load_state(self.config)
+        self.health_responses[NEW] = dict(self.health_responses[OLD])
+        with self.assertRaisesRegex(deploy.DeploymentError, 'previous deployment was restored'):
+            deploy.deploy(self.config, state, '0.1.0')
+        self.assertEqual(self.current_image, OLD)
+        self.assertEqual(self.state()['current']['kind'], 'bootstrap')
+        self.assertEqual(self.state()['lastFailure']['rollback'], 'succeeded')
+
+    def test_manual_release_rollback_does_not_allow_the_bootstrap_health_exception(self):
+        state = deploy.load_state(self.config)
+        state['current'] = deploy.release_spec(self.config, '0.2.0', NEW)
+        state['previous'] = deploy.release_spec(self.config, '0.1.0', OLD)
+        self.current_image = NEW
         with self.assertRaisesRegex(deploy.DeploymentError, 'health checks did not pass'):
-            deploy.healthy(self.config, OLD)
+            deploy.rollback(self.config, state)
+        self.assertEqual(self.state()['pending']['kind'], 'release')
 
     def test_failed_rollback_preserves_pending_and_blocks_further_ci(self):
         state = deploy.load_state(self.config)

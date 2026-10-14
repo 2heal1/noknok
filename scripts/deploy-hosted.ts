@@ -50,8 +50,8 @@ export async function deployHosted(env: NodeJS.ProcessEnv, dependencies: { run?:
     ], { timeout: 20 * 60_000, env: { PATH: env.PATH, HOME: env.HOME, LANG: 'C.UTF-8' } });
     const response = await (dependencies.fetch || fetch)(`${config.origin}/health`, { redirect: 'error', signal: AbortSignal.timeout(15_000) });
     if (!response.ok) throw new Error('Public HTTPS health verification failed.');
-    const health = await response.json() as { ok?: unknown; mode?: unknown; transcriptStorage?: unknown } | null;
-    if (health?.ok !== true || health?.mode !== 'hosted' || health?.transcriptStorage !== 'memory') throw new Error('Public endpoint does not report a healthy hosted service.');
+    const health = await response.json() as { ok?: unknown; mode?: unknown; transcriptStorage?: unknown; deliveryStorage?: unknown } | null;
+    if (health?.ok !== true || health?.mode !== 'hosted' || health?.transcriptStorage !== 'participant' || health?.deliveryStorage !== 'pending_memory') throw new Error('Public endpoint does not report a healthy hosted service with participant-owned transcripts.');
     return { version: config.version, origin: config.origin };
   } finally {
     await rm(directory, { recursive: true, force: true });

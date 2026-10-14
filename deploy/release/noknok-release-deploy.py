@@ -149,7 +149,8 @@ def activate(config, spec):
     run(*args, 'up', '-d', '--no-build', '--no-deps', '--pull', 'never', 'noknok', timeout=120)
 
 
-def healthy(config, image):
+def healthy(config, spec):
+    image = spec['image']
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         try:
@@ -160,8 +161,13 @@ def healthy(config, image):
             if status == 'healthy':
                 value = json.loads(run(CURL, '--fail', '--silent', '--show-error', '--max-time', '10', '--max-filesize', '1048576',
                                        '--proto', '=https', '--tlsv1.2', f"https://{config['domain']}/health", timeout=15))
-                if isinstance(value, dict) and value.get('ok') is True and value.get('mode') == 'hosted' and value.get('transcriptStorage') == 'memory':
-                    return
+                if isinstance(value, dict) and value.get('ok') is True and value.get('mode') == 'hosted':
+                    current_contract = value.get('transcriptStorage') == 'participant' and value.get('deliveryStorage') == 'pending_memory'
+                    # Only an administrator-captured pre-registry snapshot may
+                    # use the old health contract when restoring that service.
+                    bootstrap_contract = spec.get('kind') == 'bootstrap' and value.get('transcriptStorage') == 'memory'
+                    if current_contract or bootstrap_contract:
+                        return
         except (DeploymentError, ValueError):
             pass
         time.sleep(2)
@@ -191,7 +197,7 @@ def deploy(config, state, version):
     if state.get('highWaterVersion') and requested < version_tuple(state['highWaterVersion']):
         raise DeploymentError('Automatic downgrades are refused; use administrator rollback previous.')
     if state['current']['version'] == version:
-        healthy(config, state['current']['image'])
+        healthy(config, state['current'])
         return {'status': 'unchanged', 'version': version}
     for key in ('controlVolume', 'caddyDataVolume', 'caddyConfigVolume'):
         run(DOCKER, 'volume', 'inspect', config[key])
@@ -208,13 +214,13 @@ def deploy(config, state, version):
     save(DATA / 'state.json', state)
     try:
         activate(config, candidate)
-        healthy(config, image)
+        healthy(config, candidate)
     except BaseException:
         # The state retains pending when rollback fails or the process is killed;
         # subsequent CI runs must not blindly overwrite an uncertain deployment.
         try:
             activate(config, previous)
-            healthy(config, previous['image'])
+            healthy(config, previous)
         except Exception:
             state['lastFailure'] = {'version': version, 'rollback': 'failed', 'at': timestamp()}
             save(DATA / 'state.json', state)
@@ -238,7 +244,7 @@ def rollback(config, state):
     state['pending'] = target
     save(DATA / 'state.json', state)
     activate(config, target)
-    healthy(config, target['image'])
+    healthy(config, target)
     state.update(current=target, previous=old if target != old else state.get('previous'), deployedAt=timestamp())
     state.pop('pending', None)
     save(DATA / 'state.json', state)

@@ -16,6 +16,6 @@ COPY --from=package --chown=node:node /release/receipt.json ./release-receipt.js
 RUN mkdir /data && chown node:node /data
 USER node
 EXPOSE 4317
-HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=6 CMD node -e "fetch('http://127.0.0.1:4317/health').then(async r=>{const d=await r.json();process.exit(r.ok&&d.mode==='hosted'&&d.transcriptStorage==='memory'?0:1)}).catch(()=>process.exit(1))"
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=6 CMD node -e "fetch('http://127.0.0.1:4317/health').then(async r=>{const d=await r.json();process.exit(r.ok&&d.mode==='hosted'&&d.transcriptStorage==='participant'&&d.deliveryStorage==='pending_memory'?0:1)}).catch(()=>process.exit(1))"
 ENTRYPOINT ["node", "dist/bin/noknok.js"]
 CMD ["hosted-server", "--host", "0.0.0.0"]

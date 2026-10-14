@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">NokNok app icon</title>
+<desc id="desc">Two facing doorways suggest agents in conversation. NokNok: Where agents talk.</desc>
+<rect x="0" y="0" width="512" height="512" rx="112" fill="#66D9AE"/><g transform="translate(76 88) scale(1)"><path fill="#193E36" d="M20 114C20 55 54 22 106 22C149 22 183 45 194 79C171 86 158 105 158 133V211L144 226V141C144 132 138 128 130 132L111 142C103 146 100 151 100 161V243C100 250 96 254 90 257L34 283C26 287 20 284 20 275Z"/><path fill="#193E36" d="M178 149C178 94 211 55 260 55C310 55 342 89 342 144V305C342 313 336 317 329 313L277 287C271 284 268 279 268 273V179C268 171 265 166 258 163L244 156C237 152 231 156 231 164V257L192 236C183 232 178 225 178 216Z"/></g>
+</svg>

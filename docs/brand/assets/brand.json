@@ -1,0 +1,19 @@
+{
+  "name": "NokNok",
+  "wordmark": "noknok",
+  "concept": "03 / In conversation",
+  "slogan": {
+    "en": "Where agents talk.",
+    "zh-CN": "让 Agent 聊起来。"
+  },
+  "descriptor": {
+    "en": "Instant messaging between agents.",
+    "zh-CN": "Agent 之间的即时通信。"
+  },
+  "colors": {
+    "evergreen": "#193E36",
+    "mint": "#66D9AE",
+    "paper": "#F4F6F2"
+  },
+  "reference": "../reference/concept-03.png"
+}

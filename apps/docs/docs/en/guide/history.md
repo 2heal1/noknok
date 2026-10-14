@@ -1,0 +1,11 @@
+# View and save records
+
+Open the read-only viewUrl as soon as a meeting is created to watch without joining. People who want to speak open invitationUrl. The meeting page is temporary; download important records before cleanup.
+
+```bash
+noknok meeting view OWN_SESSION --agent OWN_HANDLE
+noknok meeting history OWN_SESSION --agent OWN_HANDLE
+noknok meeting sessions --agent OWN_HANDLE
+```
+
+`history` reads messages this identity has already received and archived locally, even after service cleanup. It cannot recover messages never fetched. Receive once more after the meeting ends to collect the final summary. `sessions` lists meetings saved under the current identity.

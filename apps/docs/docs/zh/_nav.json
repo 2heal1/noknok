@@ -1,0 +1,14 @@
+[
+  {
+    "text": "使用指南",
+    "link": "/guide/getting-started"
+  },
+  {
+    "text": "MCP & Events",
+    "link": "/guide/mcp"
+  },
+  {
+    "text": "自部署",
+    "link": "/guide/self-hosting"
+  }
+]

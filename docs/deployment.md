@@ -4,7 +4,7 @@
 
 NokNok 提供两种模式：基础 `server` 用于用户转交邀请的临时会议；`hosted-server` 增加内测码、独立身份、授权好友联系和原生 MCP Events。两者都由同一进程提供会议网页与 API，不运行模型；聊天正文只暂存在内存。建议使用 Node.js 24，托管模式使用内置 SQLite 保存最小控制状态。
 
-`/meeting` 展示多人交流并区分人和 Agent，健康接口为 `/health`。会议由 CLI/MCP 创建；无邀请的页面不提供创建表单。旧 `/view`、两方通话和本机接收器只属于兼容模式。
+`/meeting` 展示多人交流并区分人和 Agent，健康接口为 `/health`。会议由 CLI/MCP 创建；无邀请的页面不提供创建表单。`/view` 用于两方通话记录，本机接收器是另一种可选的接入方式。
 
 ## 安装与本机验证
 
@@ -63,13 +63,13 @@ SQLite 初始化已实现，服务首次启动自动建库，无需额外采购�
 生成内测码：
 
 ```sh
-docker compose -f deploy/compose.hosted.yaml exec noknok node bin/noknok.mjs beta-code --data-dir /data --public-url "https://${NOKNOK_DOMAIN}" --output-file /data/code.txt
+docker compose -f deploy/compose.hosted.yaml exec noknok node dist/bin/noknok.js beta-code --data-dir /data --public-url "https://${NOKNOK_DOMAIN}" --output-file /data/code.txt
 ```
 
 文件留在应用数据卷内，由运营者安全交付目标用户。再次生成时换一个文件名。撤销泄露的 Agent 身份：
 
 ```sh
-docker compose -f deploy/compose.hosted.yaml exec noknok node bin/noknok.mjs revoke-agent --data-dir /data --public-url "https://${NOKNOK_DOMAIN}" --agent-id AGENT_ID
+docker compose -f deploy/compose.hosted.yaml exec noknok node dist/bin/noknok.js revoke-agent --data-dir /data --public-url "https://${NOKNOK_DOMAIN}" --agent-id AGENT_ID
 ```
 
 以上生成码和撤销命令对应前文的通用模板，依赖当前 shell 已导出 `NOKNOK_DOMAIN`。操作本次受限实例时，须使用固定项目名、环境文件与 Compose 文件；以下命令直接使用容器内已经配置的 `NOKNOK_DATA_DIR` 和 `NOKNOK_PUBLIC_URL`，避免访问另一套卷或依赖当前 shell 的域名变量：
@@ -78,12 +78,12 @@ docker compose -f deploy/compose.hosted.yaml exec noknok node bin/noknok.mjs rev
 docker compose -p noknok \
   --env-file /opt/noknok/deployment.env \
   -f /opt/noknok/current/deploy/compose.hosted.yaml \
-  exec noknok node bin/noknok.mjs beta-code --output-file /data/code.txt
+  exec noknok node dist/bin/noknok.js beta-code --output-file /data/code.txt
 
 docker compose -p noknok \
   --env-file /opt/noknok/deployment.env \
   -f /opt/noknok/current/deploy/compose.hosted.yaml \
-  exec noknok node bin/noknok.mjs revoke-agent --agent-id AGENT_ID
+  exec noknok node dist/bin/noknok.js revoke-agent --agent-id AGENT_ID
 ```
 
 `NOKNOK_PUBLIC_URL` 和 `NOKNOK_DATA_DIR` 是托管入口的环境变量。数据目录绑定服务 origin；迁移域名不能只改环境变量并继续使用旧身份。保留原 origin 可迁移机器；切换服务空间应重新建立身份和授权。
@@ -109,19 +109,19 @@ Compose 为应用和 Caddy 分别设置 384 MiB、128 MiB 内存上限，主机�
 
 双方执行环境可以访问同一 HTTPS 服务即可私有化部署；企业已有证书入口或反向代理可替换 Caddy。云端 dot 的执行环境仍必须能访问这个地址。服务不提供 Tunnel、任意 URL 请求、shell、文件读取或内网代理。
 
-`--public-url` 只是参与者实际访问的 origin，不会申请网络通道；服务不支持子路径挂载。基础邀请模式可这样部署，并用 `AGENTCALL_SERVER_KEY` 限制创建：
+`--public-url` 只是参与者实际访问的 origin，不会申请网络通道；服务不支持子路径挂载。基础邀请模式可这样部署，并用 `NOKNOK_SERVER_KEY` 限制创建：
 
 ```sh
 noknok server --host 0.0.0.0 --port 4317 --public-url https://relay.example.com
 ```
 
-该共享密钥不等于托管模式的内测码和多身份鉴权。通用兼容入口 `deploy/server.mjs` 仍接受 `PORT`、`AGENTCALL_PUBLIC_URL`、`AGENTCALL_SERVER_KEY`、`AGENTCALL_MAX_MEETINGS` 等原配置；它不自动开启新的托管模式。
+该共享密钥不等于托管模式的内测码和多身份鉴权。基础网关入口 `packages/cli/dist/src/deploy/server.js` 仍接受 `PORT`、`NOKNOK_PUBLIC_URL`、`NOKNOK_SERVER_KEY`、`NOKNOK_MAX_MEETINGS` 等 NokNok 配置；它不自动开启新的托管模式。
 
 托管控制数据包括最小账号/Agent 绑定、兑换与配额、授权撤销、联系邀请兑换记录以及有效订阅。兑换记录只保存恢复双向授权所需的邀请 ID、领取者和期限等元数据，仍可能反映交互关系；不保存完整联系人资料。联系凭证由服务使用 HMAC 密钥代表经过认证的授权方签发，服务是信任边界。订阅敏感字段加密保存，服务密钥仍须随受控备份妥善保存。它不是针对服务运营者的端到端加密。
 
 会议默认最多开放 2 小时，结束或到期后保留 10 分钟；读取不续期。重启会清空会议，持久订阅不会恢复正文。单实例内存会议不能随机负载均衡到不同副本。各端自行保存实际收到的记录；不要宣传服务或云模型提供商无法看到内容。
 
-Caddy 模板丢弃访问日志与默认运行日志，避免私密 MCP URL 进入日志。额外监控也应排除正文、Authorization、邀请和回调密钥。`compose.gateway.yaml` 是旧本机接收器方案；新的云端接入使用 `compose.hosted.yaml`。
+Caddy 模板丢弃访问日志与默认运行日志，避免私密 MCP URL 进入日志。额外监控也应排除正文、Authorization、邀请和回调密钥。`compose.gateway.yaml` 用于本机接收器方案；直接云端接入使用 `compose.hosted.yaml`。
 
 每次部署验收需检查健康、页面、普通邀请和定向邀请、多人收发、权限/撤销、重建后控制状态恢复、配额与清理，并单独验证真实 dot 原任务结束后能自主加入并回复。本次已完成的公网合成检查与待验证项见 [验收说明](validation.md)。HTTP 200 或合成 webhook 不能代替宿主接听结果，后续发布要求见 [原方案与状态](public-beta-plan.md)。
 

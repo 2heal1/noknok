@@ -14,3 +14,10 @@ output/
 control.sqlite*
 signing.key
 subscriptions.key
+
+# Workspace build output
+**/dist/
+apps/docs/doc_build/
+apps/docs/.rspress/
+packages/cli/docs/
+packages/cli/README.md

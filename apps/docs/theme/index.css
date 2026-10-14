@@ -1,0 +1,229 @@
+:root { --rp-c-brand: #343a30; --rp-c-brand-light: #58634f; --rp-c-brand-dark: #20261d; --rp-c-bg: #fcfcfc; --rp-c-bg-soft: #f3f3ef; --rp-c-text-1: #252823; --rp-font-family-base: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+.rp-nav .rspress-logo { width: 140px; height: auto; }
+@media (max-width: 540px) { .rp-nav .rspress-logo { width: 104px; } }
+.noknok-home {
+  --paper: #fcfcfc;
+  --ink: #252823;
+  --muted: #696969;
+  --line: #dededb;
+  --panel: #f7f3ea;
+  --peach: #f2ddd0;
+  --sage: #e5ebdd;
+  --font: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+.noknok-home * { box-sizing: border-box; }
+.noknok-home { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.65 var(--font); -webkit-font-smoothing: antialiased; }
+.noknok-home a { color: inherit; text-decoration: none; }
+.noknok-home button { font: inherit; color: inherit; cursor: pointer; }
+.noknok-home button, .noknok-home a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.noknok-home a:focus-visible, .noknok-home button:focus-visible, .noknok-home summary:focus-visible, .noknok-home [tabindex]:focus-visible { outline: 2px solid var(--ink); outline-offset: 5px; }
+.noknok-home h1, .noknok-home h2, .noknok-home h3, .noknok-home p { margin: 0; }
+.noknok-home h1, .noknok-home h2, .noknok-home h3 { font-weight: 500; line-height: 1.25; letter-spacing: -.04em; }
+.noknok-home p { color: var(--muted); }
+.noknok-home [hidden] { display: none !important; }
+.noknok-home .wrap { width: min(1040px, calc(100% - 64px)); margin-inline: auto; }
+.noknok-home .skip-link { position: fixed; left: 16px; top: 12px; padding: 10px 18px; background: var(--ink); color: white; border-radius: 8px; transform: translateY(-160%); z-index: 20; }
+.noknok-home .skip-link:focus { transform: none; }
+.noknok-home .site-header { width: calc(100% - 64px); max-width: 1440px; margin-inline: auto; height: 80px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.noknok-home .brand { display: inline-flex; align-items: center; flex-shrink: 0; line-height: 1; }
+.noknok-home .brand img { display: block; width: 140px; height: auto; }
+.noknok-home .language-switch { min-width: 38px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--ink); font-size: 12px; white-space: nowrap; }
+.noknok-home .language-switch:hover { background: #f2f2ed; }
+.noknok-home .site-header nav { display: flex; align-items: center; gap: 28px; font-size: 13px; white-space: nowrap; }
+.noknok-home .site-header nav a:not(.nav-source):hover, .noknok-home .text-link:hover, .noknok-home .demo-caption a:hover, .noknok-home .site-footer > a:last-child:hover { text-decoration: underline; text-underline-offset: 4px; }
+.noknok-home .nav-source { display: inline-flex; align-items: center; background: var(--ink); color: white; border-radius: 30px; padding: 8px 16px; font-size: 12px; }
+.noknok-home .hero { text-align: center; padding: 54px 0 62px; }
+.noknok-home .hero h1 { font-size: clamp(42px, 4.4vw, 64px); line-height: 1.22; letter-spacing: -.055em; font-weight: 550; }
+.noknok-home .hero-description { font-size: 21px; margin-top: 23px; }
+.noknok-home .hero-install { display: grid; justify-items: center; gap: 8px; margin-top: 24px; font-size: 12px; color: var(--muted); }
+.noknok-home .hero-install a { color: var(--ink); }
+.noknok-home .hero-install a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.noknok-home .hero-install code { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; }
+.noknok-home .hero-install span { font-size: 11px; }
+.noknok-home .hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 28px; }
+.noknok-home .button { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 43px; padding: 11px 20px; border-radius: 28px; border: 1px solid var(--line); font-size: 13px; font-weight: 500; line-height: 1.5; transition: background .15s; }
+.noknok-home .button.primary { color: white; background: var(--ink); border-color: var(--ink); }
+.noknok-home .button.primary:hover, .noknok-home .nav-source:hover { background: #353535; }
+.noknok-home .button.secondary { background: transparent; }
+.noknok-home .button.secondary:hover { background: #efefec; }
+.noknok-home .demo { max-width: 960px; }
+.noknok-home .scene-switch { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 7px; margin-bottom: 20px; }
+.noknok-home .scene-switch button { padding: 9px 20px; border: 0; background: transparent; border-radius: 28px; color: var(--muted); font-size: 13px; }
+.noknok-home .scene-switch button[aria-pressed="true"] { background: #ebebe7; color: var(--ink); }
+.noknok-home .scene-switch button:hover { background: #f0f0ec; }
+.noknok-home .demo-stage { border-radius: 32px; background: var(--panel); overflow: hidden; }
+.noknok-home .story-preview { padding: 56px 65px; }
+.noknok-home .chat-window { width: min(620px, 100%); margin: auto; background: #fff; border: 1px solid #e5e4de; border-radius: 18px; box-shadow: 0 8px 30px #29251b06; overflow: hidden; }
+.noknok-home .chat-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 25px; border-bottom: 1px solid #efefeb; font-size: 14px; }
+.noknok-home .preview-label { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+.noknok-home .story-messages { display: flex; flex-direction: column; gap: 25px; padding: 29px 30px; min-height: 330px; }
+.noknok-home .story-message { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; }
+.noknok-home .message-avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #dde3d4; color: #465339; font: 20px Georgia, serif; }
+.noknok-home .product-avatar { background: #fff; }
+.noknok-home .product-avatar img { display: block; width: 72%; height: 72%; object-fit: contain; }
+.noknok-home .from-grok .message-avatar { background: #fff; }
+.noknok-home .message-body strong { display: block; font-size: 12px; font-weight: 500; margin-bottom: 5px; }
+.noknok-home .message-body p { font-size: 14px; color: #50504c; line-height: 1.7; }
+.noknok-home .chat-composer { display: flex; align-items: center; justify-content: space-between; margin: 0 23px 20px; padding: 10px 11px 10px 17px; background: #f6f6f3; border-radius: 26px; color: #696963; font-size: 12px; }
+.noknok-home .send-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #deded7; color: #53534b; font-size: 19px; line-height: 1; }
+.noknok-home .demo-caption { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 15px; font-size: 11px; color: var(--muted); }
+.noknok-home .recording { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #151515; }
+.noknok-home .features { padding-block: 130px 115px; display: flex; flex-direction: column; gap: 48px; }
+.noknok-home .feature-row { display: grid; grid-template-columns: 1.4fr .85fr; gap: 64px; align-items: center; }
+.noknok-home .feature-row.reverse { grid-template-columns: .85fr 1.4fr; }
+.noknok-home .feature-row.reverse .feature-art { order: 2; }
+.noknok-home .feature-art { border-radius: 28px; min-height: 325px; position: relative; overflow: hidden; }
+.noknok-home .contact-art { background: var(--peach); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 27px; }
+.noknok-home .contact-pair { display: flex; align-items: center; gap: 27px; }
+.noknok-home .agent-avatar { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 20px; font: 39px Georgia, serif; }
+.noknok-home .dot-avatar { background: #fff; }
+.noknok-home .grok-avatar { background: #fff; }
+.noknok-home .connection-dots { font-size: 27px; color: #7e6a5d; letter-spacing: 6px; margin-right: -6px; }
+.noknok-home .notification { display: flex; align-items: center; gap: 14px; background: #fffdfb; border: 1px solid #ffffff80; border-radius: 16px; padding: 18px 22px; width: min(325px, calc(100% - 46px)); }
+.noknok-home .notification-icon { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 10px; background: #efeee8; font-size: 18px; }
+.noknok-home .notification strong { display: block; font-size: 12px; font-weight: 500; }
+.noknok-home .notification p { font-size: 12px; margin-top: 3px; }
+.noknok-home .feature-copy h2 { font-size: 29px; line-height: 1.4; margin-bottom: 15px; }
+.noknok-home .feature-copy p { font-size: 15px; line-height: 1.9; }
+.noknok-home .text-link { display: inline-block; font-size: 12px; margin-top: 20px; }
+.noknok-home .meeting-art { background: var(--sage); display: grid; place-items: center; padding: 30px; }
+.noknok-home .meeting-card { background: #fff; width: min(355px, 100%); padding: 19px 21px; border-radius: 18px; }
+.noknok-home .meeting-card-title { font-size: 12px; padding-bottom: 17px; border-bottom: 1px solid #eceee7; }
+.noknok-home .participants { display: flex; justify-content: space-around; gap: 20px; padding: 23px 0; }
+.noknok-home .participants > div { display: flex; flex-direction: column; align-items: center; gap: 9px; font-size: 11px; }
+.noknok-home .participants .agent-avatar { width: 44px; height: 44px; border-radius: 14px; font-size: 28px; }
+.noknok-home .ownership { text-align: center; padding: 64px 24px 58px; border-radius: 28px; background: #f2f2ef; }
+.noknok-home .ownership h2 { font-size: 35px; }
+.noknok-home .ownership > p { font-size: 15px; margin-top: 17px; }
+.noknok-home .ownership > .ownership-note { margin-top: 21px; font-size: 11px; }
+.noknok-home .site-footer { margin-top: 100px; min-height: 95px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-top: 1px solid #e7e7e3; }
+.noknok-home .site-footer .brand img { width: 94px; }
+.noknok-home .site-footer p, .noknok-home .site-footer > a:last-child, .noknok-home .site-footer > span, .noknok-home .site-footer > div { font-size: 11px; color: var(--muted); }
+.noknok-home .site-footer > div { display: flex; gap: 22px; }
+
+/* One invitation, shown in two Agent conversations. These are illustrations. */
+.noknok-home .story-preview.is-meeting { padding: 35px; }
+.noknok-home .invite-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 22px; }
+.noknok-home .invite-heading h2 { font-size: 23px; letter-spacing: -.03em; }
+.noknok-home .invitation-card { padding: 18px 20px; background: #fffdf9; border: 1px solid #dfd9ce; border-radius: 12px; }
+.noknok-home .invitation-label { color: #6d665b; font-size: 10px; margin-bottom: 10px; }
+.noknok-home .invitation-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.8 'SFMono-Regular', Consolas, monospace; }
+.noknok-home .invitation-text code { font: inherit; }
+.noknok-home .invite-views { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 25px; }
+.noknok-home .invite-views figure { margin: 0; min-width: 0; }
+.noknok-home .invite-visual { background: white; border: 1px solid #e2dfd7; border-radius: 16px; overflow: hidden; min-height: 340px; }
+.noknok-home .visual-chrome { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 16px 19px; border-bottom: 1px solid #eeece7; color: var(--muted); font-size: 10px; }
+.noknok-home .visual-app { color: var(--ink); font-size: 12px; font-weight: 550; }
+.noknok-home .visual-body { padding: 23px 21px; }
+.noknok-home .sample-user { margin-left: auto; width: fit-content; padding: 12px 15px; border-radius: 14px 14px 3px 14px; background: #f1f0ec; color: #44463f; font-size: 12px; line-height: 1.8; }
+.noknok-home .sample-link { display: flex; align-items: center; gap: 10px; border: 1px solid #e5e1d7; padding: 11px 12px; border-radius: 10px; margin-top: 9px; margin-left: auto; width: fit-content; }
+.noknok-home .sample-link > span { color: #6d665b; font-size: 17px; }
+.noknok-home .sample-link strong { font-size: 10px; display: block; font-weight: 500; }
+.noknok-home .sample-link div > span { display: block; font-size: 9px; color: #737067; margin-top: 2px; }
+.noknok-home .sample-agent { display: flex; gap: 10px; margin-top: 25px; }
+.noknok-home .sample-agent .message-avatar { flex-shrink: 0; width: 27px; height: 27px; font-size: 17px; background: #eee1d8; color: #685446; }
+.noknok-home .sample-agent .product-avatar { background: #fff; }
+.noknok-home .sample-agent strong { font-size: 10px; font-weight: 500; }
+.noknok-home .sample-agent p { font-size: 12px; line-height: 1.8; color: #50504c; margin-top: 5px; }
+.noknok-home .invite-views figcaption { margin-top: 12px; text-align: center; font-size: 12px; }
+.noknok-home .claude-avatar { background: #fff; }
+.noknok-home .session-message { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; background: #f3f5ee; }
+.noknok-home .session-message > span { display: grid; place-items: center; font-size: 10px; background: #e3e8da; color: #536146; width: 23px; height: 23px; border-radius: 50%; flex-shrink: 0; }
+.noknok-home .session-message > .claude-avatar { background: transparent; }
+.noknok-home .session-message p { color: #526046; font-size: 11px; }
+@media (max-width: 700px) {
+.noknok-home .story-preview.is-meeting { padding: 27px 22px; }
+.noknok-home .invite-views { grid-template-columns: 1fr; gap: 25px; }
+.noknok-home .invite-heading h2 { font-size: 22px; }
+.noknok-home .invitation-card { padding: 14px; }
+.noknok-home .invitation-text { font-size: 11px; }
+.noknok-home .invite-visual { height: auto; min-height: 335px; }
+}
+@media (max-width: 420px) {
+.noknok-home .story-preview.is-meeting { padding: 24px 15px; }
+.noknok-home .invite-heading { gap: 12px; margin-bottom: 18px; }
+.noknok-home .invite-heading h2 { font-size: 21px; }
+.noknok-home .invite-heading .preview-label { font-size: 9px; }
+.noknok-home .visual-body { padding: 20px 17px; }
+}
+
+@media (max-width: 1000px) {
+.noknok-home .feature-row, .noknok-home .feature-row.reverse { gap: 40px; grid-template-columns: 1.25fr 1fr; }
+.noknok-home .feature-row.reverse { grid-template-columns: 1fr 1.25fr; }
+.noknok-home .feature-copy h2 { font-size: 25px; }
+.noknok-home .feature-copy p { font-size: 13px; }
+.noknok-home .feature-art { min-height: 300px; }
+}
+@media (max-width: 700px) {
+.noknok-home .wrap { width: calc(100% - 40px); }
+.noknok-home .site-header { width: calc(100% - 40px); height: 72px; gap: 18px; }
+.noknok-home .site-header nav { gap: 20px; font-size: 12px; }
+.noknok-home .brand img { width: 124px; }
+.noknok-home .hero { padding: 42px 0 45px; }
+.noknok-home .hero h1 { font-size: 43px; line-height: 1.27; }
+.noknok-home .hero-description { font-size: 18px; margin-top: 21px; }
+.noknok-home .hero-actions { margin-top: 24px; }
+.noknok-home .scene-switch { margin-bottom: 17px; }
+.noknok-home .demo-stage { border-radius: 24px; }
+.noknok-home .story-preview { padding: 32px 24px; }
+.noknok-home .story-messages { padding: 25px; min-height: 332px; gap: 22px; }
+.noknok-home .chat-header { padding: 18px 23px; font-size: 12px; }
+.noknok-home .features { padding-block: 80px; gap: 56px; }
+.noknok-home .feature-row, .noknok-home .feature-row.reverse { grid-template-columns: 1fr; gap: 22px; }
+.noknok-home .feature-row.reverse .feature-art { order: 0; }
+.noknok-home .feature-art { min-height: 330px; border-radius: 24px; }
+.noknok-home .feature-copy { text-align: center; }
+.noknok-home .feature-copy h2 { font-size: 28px; margin-bottom: 12px; }
+.noknok-home .feature-copy p { font-size: 15px; }
+.noknok-home .text-link { margin-top: 14px; }
+.noknok-home .ownership { padding: 49px 22px; }
+.noknok-home .ownership h2 { font-size: 30px; }
+.noknok-home .ownership > p { font-size: 14px; }
+.noknok-home .site-footer { margin-top: 65px; flex-wrap: wrap; gap: 18px; padding-block: 27px; }
+.noknok-home .site-footer p { order: 3; width: 100%; font-size: 10px; }
+.noknok-home .site-footer > span { display: none; }
+}
+@media (max-width: 420px) {
+.noknok-home .wrap, .noknok-home .site-header { width: calc(100% - 32px); }
+.noknok-home .site-header { gap: 12px; }
+.noknok-home .site-header nav { gap: 10px; font-size: 11px; }
+.noknok-home .nav-source { font-size: 10px; padding: 7px 12px; }
+.noknok-home .brand img { width: 104px; }
+.noknok-home .hero { padding-top: 31px; }
+.noknok-home .hero h1 { font-size: 37px; }
+.noknok-home .hero-description { font-size: 16px; }
+.noknok-home .button { padding: 10px 18px; font-size: 12px; }
+.noknok-home .scene-switch button { font-size: 12px; padding: 8px 16px; }
+.noknok-home .story-preview { padding: 22px 14px; }
+.noknok-home .chat-window { border-radius: 14px; }
+.noknok-home .chat-header { padding: 16px; font-size: 11px; gap: 9px; }
+.noknok-home .preview-label { font-size: 9px; }
+.noknok-home .story-messages { padding: 21px 17px; gap: 21px; min-height: 345px; }
+.noknok-home .story-message { grid-template-columns: 26px 1fr; gap: 10px; }
+.noknok-home .message-avatar { width: 26px; height: 26px; font-size: 17px; }
+.noknok-home .message-body strong { font-size: 10px; }
+.noknok-home .message-body p { font-size: 12px; }
+.noknok-home .chat-composer { margin: 0 13px 14px; padding-left: 14px; font-size: 10px; }
+.noknok-home .demo-caption { font-size: 9px; gap: 10px; }
+.noknok-home .feature-art { min-height: 295px; }
+.noknok-home .feature-copy h2 { font-size: 26px; }
+.noknok-home .feature-copy p { font-size: 14px; }
+.noknok-home .notification { padding: 16px 19px; }
+.noknok-home .meeting-art { padding: 25px 21px; }
+.noknok-home .meeting-card { padding: 17px; }
+.noknok-home .meeting-card-title { font-size: 10px; }
+.noknok-home .participants { gap: 12px; }
+.noknok-home .ownership h2 { font-size: 25px; }
+.noknok-home .ownership > p { font-size: 12px; }
+.noknok-home .ownership > .ownership-note { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+
+.noknok-home *, .noknok-home *::before, .noknok-home *::after { transition: none !important; }
+}
+
+@media (max-width: 540px) {
+.noknok-home .site-header nav a:first-child { display: none; }
+}
+
+.noknok-home .hero-install code { white-space: normal; }

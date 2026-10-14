@@ -68,7 +68,7 @@ function integerParam(parsed, name, fallback, max) {
 }
 function iso(time) { return new Date(time).toISOString(); }
 function publicParticipant(participant) {
-  const { token: unused, ...result } = participant;
+  const { token: unused, authId: unusedAuth, ...result } = participant;
   return result;
 }
 function write(res, status, body) {
@@ -115,9 +115,20 @@ export function createMeetings(options = {}) {
   const retentionMs = positive(options.retentionMs, 600_000, 'retentionMs');
   const maxMeetings = positive(options.maxMeetings, 1000, 'maxMeetings');
   if (options.serverKey !== undefined && (typeof options.serverKey !== 'string' || !options.serverKey)) throw new TypeError('serverKey must be a nonempty string.');
+  const maxParticipants = positive(options.maxParticipants, MAX_PARTICIPANTS, 'maxParticipants');
+  const maxRoomBytes = positive(options.maxRoomBytes, MAX_ROOM_BYTES, 'maxRoomBytes');
+  const maxTotalBytes = positive(options.maxTotalBytes, Number.MAX_SAFE_INTEGER, 'maxTotalBytes');
+  const maxEvents = positive(options.maxEvents, MAX_EVENTS, 'maxEvents');
+  const maxOwnerMeetings = positive(options.maxOwnerMeetings, maxMeetings, 'maxOwnerMeetings');
   const rooms = new Map();
   const creations = new Map();
   let closing = false;
+
+  function reply(res, status, value) {
+    try { options.beforeWrite?.(value, Buffer.byteLength(JSON.stringify(value))); }
+    catch (error) { return write(res, error.status || 503, { error: { code: error.code || 'response_budget', message: error.status ? error.message : 'Response budget reached.' } }); }
+    return write(res, status, value);
+  }
 
   function summary(room) {
     return {
@@ -149,6 +160,7 @@ export function createMeetings(options = {}) {
     const event = { seq: ++room.seq, type, from, at: iso(at), data };
     room.events.push(event);
     room.bytes += Buffer.byteLength(JSON.stringify(event));
+    options.onEvent?.(room, event);
     return event;
   }
   function wake(room) { for (const poll of [...room.polls]) poll.finish(); }
@@ -182,11 +194,15 @@ export function createMeetings(options = {}) {
     cleanup();
     const room = rooms.get(id);
     if (!room) fail(404, 'meeting_not_found', 'Meeting does not exist or its retention period has elapsed.');
+    options.authorizeRoom?.(room);
     return room;
   }
   function authenticate(req, room, allowView = false) {
     const credential = token(req);
-    for (const participant of room.participants.values()) if (equal(credential, participant.token)) return participant;
+    for (const participant of room.participants.values()) if (equal(credential, participant.token)) {
+      options.authorizeParticipant?.(room, participant);
+      return participant;
+    }
     if (allowView && equal(credential, room.viewToken)) return { id: 'viewer' };
     fail(401, 'unauthorized', `A valid ${allowView ? 'participant or read-only viewer' : 'participant'} Bearer token is required.`);
   }
@@ -196,7 +212,9 @@ export function createMeetings(options = {}) {
   }
   function capacity(room, payload, key) {
     // Reserve one event and enough bytes for a final summary, even when full.
-    if (room.events.length >= MAX_EVENTS - 1 || room.bytes + Buffer.byteLength(JSON.stringify(payload)) + MAX_TEXT_BYTES + 8192 > MAX_ROOM_BYTES) {
+    const extra = Buffer.byteLength(JSON.stringify(payload)) + MAX_TEXT_BYTES + 8192;
+    const total = [...rooms.values()].reduce((sum, item) => sum + item.bytes + MAX_TEXT_BYTES + 8192, 0);
+    if (room.events.length >= maxEvents - 1 || room.bytes + extra > maxRoomBytes || total + extra > maxTotalBytes) {
       fail(429, 'meeting_capacity_exceeded', 'Meeting message limit reached; the host can end it and start a new meeting.');
     }
     if (key !== undefined && room.mutations.size >= MAX_MUTATIONS) fail(429, 'meeting_capacity_exceeded', 'Meeting request limit reached.');
@@ -228,18 +246,25 @@ export function createMeetings(options = {}) {
       const body = await readBody(req);
       if (closing) fail(503, 'relay_closing', 'Relay is shutting down.');
       const payload = { ...identity(body), purpose: string(body, 'purpose', { required: true, max: 8192 }), context: string(body, 'context', { max: 64 * 1024, fallback: '' }) };
-      const id = requestId(body);
-      const recoveryHash = retryTokenHash(body, id);
+      const actor = options.authorizeCreate?.(req, body);
+      const rawId = requestId(body);
+      const id = rawId === undefined ? undefined : actor ? `${actor.accountId}:${rawId}` : rawId;
+      const recoveryHash = retryTokenHash(body, rawId);
       cleanup();
       if (id !== undefined && creations.has(id)) {
         const room = getRoom(creations.get(id));
-        return write(res, 200, replay(room, 'create', payload, recoveryHash));
+        return reply(res, 200, replay(room, 'create', payload, recoveryHash));
       }
       if (rooms.size >= maxMeetings) fail(503, 'relay_capacity_exceeded', 'Relay meeting limit reached; retry after meetings expire.');
+      if (actor && [...rooms.values()].filter(room => room.ownerId === actor.accountId && room.state === 'active').length >= maxOwnerMeetings) fail(429, 'owner_meeting_limit', 'Account has too many open meetings.');
+      const creationBytes = Buffer.byteLength(JSON.stringify(payload)) + 4096;
+      const totalBytes = [...rooms.values()].reduce((sum, room) => sum + room.bytes + MAX_TEXT_BYTES + 8192, 0);
+      if (creationBytes + MAX_TEXT_BYTES + 8192 > maxRoomBytes || totalBytes + creationBytes + MAX_TEXT_BYTES + 8192 > maxTotalBytes) fail(503, 'relay_memory_limit', 'Relay memory budget reached.');
+      options.beforeCreate?.(actor);
       const now = Date.now();
-      const participant = { id: randomUUID(), name: payload.name, kind: payload.kind, role: 'host', joinedAt: iso(now), token: secret() };
+      const participant = { id: randomUUID(), name: payload.name, kind: payload.kind, role: 'host', joinedAt: iso(now), token: secret(), ...(actor ? { authId: actor.agentId } : {}) };
       const room = {
-        id: randomUUID(), state: 'active', purpose: payload.purpose, context: payload.context, hostId: participant.id,
+        id: randomUUID(), state: 'active', purpose: payload.purpose, context: payload.context, hostId: participant.id, ...(actor ? { ownerId: actor.accountId, ownerAgentId: actor.agentId } : {}),
         participants: new Map([[participant.id, participant]]), inviteToken: secret(), viewToken: secret(),
         createdAt: now, expiresAt: now + meetingTtlMs, readyBy: new Set(),
         events: [], seq: 0, bytes: Buffer.byteLength(JSON.stringify(payload)), polls: new Set(), mutations: new Map(), creationId: id,
@@ -251,7 +276,7 @@ export function createMeetings(options = {}) {
         invitationUrl: `${options.getUrl()}/meeting#id=${room.id}&invite=${room.inviteToken}`, viewUrl: viewUrl(room),
       };
       if (id !== undefined) { creations.set(id, room.id); save(room, 'create', payload, response, recoveryHash); }
-      return write(res, 201, response);
+      return reply(res, 201, response);
     }
     const match = /^\/v1\/meetings\/([a-zA-Z0-9-]+)(?:\/(invitation|join|events|messages|ready|leave|end))?$/.exec(parsed.pathname);
     if (!match) fail(404, 'not_found', 'Route not found.');
@@ -260,7 +285,7 @@ export function createMeetings(options = {}) {
     if (operation === 'invitation') {
       if (!equal(token(req), room.inviteToken)) fail(401, 'invalid_invitation', 'A valid invitation Bearer token is required.');
       if (req.method !== 'GET') fail(405, 'method_not_allowed', 'Invitation details are read-only.');
-      return write(res, 200, { meeting: summary(room) });
+      return reply(res, 200, { meeting: summary(room) });
     }
     if (operation === 'join') {
       if (req.method !== 'POST') fail(405, 'method_not_allowed', 'Use POST to join a meeting.');
@@ -272,28 +297,28 @@ export function createMeetings(options = {}) {
       const recoveryHash = retryTokenHash(body, id);
       const key = id === undefined ? undefined : `join:${id}`;
       const repeated = replay(room, key, payload, recoveryHash);
-      if (repeated) return write(res, 200, repeated);
+      if (repeated) return reply(res, 200, repeated);
       active(room);
-      if (room.participants.size >= MAX_PARTICIPANTS) fail(429, 'meeting_full', 'At most 32 participants can join a meeting.');
+      if (room.participants.size >= maxParticipants) fail(429, 'meeting_full', `At most ${maxParticipants} participants can join a meeting.`);
       capacity(room, payload, key);
-      const participant = { id: randomUUID(), ...payload, role: 'participant', joinedAt: iso(Date.now()), token: secret() };
+      const participant = { id: randomUUID(), ...payload, role: 'participant', joinedAt: iso(Date.now()), token: secret(), ...(req.noknokActor ? { authId: req.noknokActor.agentId } : {}) };
       room.participants.set(participant.id, participant);
       room.readyBy.clear();
       append(room, 'joined', 'system', { participant: publicParticipant(participant) });
       const response = save(room, key, payload, { meeting: summary(room), participant: { ...participant }, viewUrl: viewUrl(room) }, recoveryHash);
       wake(room);
-      return write(res, 200, response);
+      return reply(res, 200, response);
     }
 
     const readable = req.method === 'GET' && (operation === undefined || operation === 'events');
     const participant = authenticate(req, room, readable);
-    if (readable && operation === undefined) return write(res, 200, readableResult(room, 0, participant));
+    if (readable && operation === undefined) return reply(res, 200, readableResult(room, 0, participant));
     if (readable && operation === 'events') {
       const after = integerParam(parsed, 'after', 0, Number.MAX_SAFE_INTEGER);
       const waitMs = integerParam(parsed, 'waitMs', 25_000, 25_000);
       if (after > room.seq) fail(400, 'invalid_cursor', 'after is beyond the last event sequence.');
       const body = readableResult(room, after, participant);
-      if (body.events.length || waitMs === 0 || room.state !== 'active') return write(res, 200, body);
+      if (body.events.length || waitMs === 0 || room.state !== 'active') return reply(res, 200, body);
       if (room.polls.size >= 64 || [...room.polls].filter(poll => poll.participantId === participant.id).length >= 4) fail(429, 'too_many_polls', 'At most four simultaneous waits per credential and 64 per meeting are allowed.');
       let timer;
       const poll = {
@@ -301,9 +326,12 @@ export function createMeetings(options = {}) {
         finish() {
           if (!room.polls.delete(poll)) return;
           clearTimeout(timer); res.off('close', disconnected);
-          if (closing) write(res, 503, { error: { code: 'relay_closing', message: 'Relay is shutting down.' } });
-          else if (Date.now() >= (room.closedAt ?? room.expiresAt) + retentionMs) write(res, 404, { error: { code: 'meeting_not_found', message: 'Meeting does not exist or its retention period has elapsed.' } });
-          else write(res, 200, readableResult(room, after, participant));
+          if (closing) reply(res, 503, { error: { code: 'relay_closing', message: 'Relay is shutting down.' } });
+          else if (Date.now() >= (room.closedAt ?? room.expiresAt) + retentionMs) reply(res, 404, { error: { code: 'meeting_not_found', message: 'Meeting does not exist or its retention period has elapsed.' } });
+          else {
+            try { getRoom(meetingId); authenticate(req, room, true); reply(res, 200, readableResult(room, after, participant)); }
+            catch (error) { reply(res, error.status || 500, { error: { code: error.code || 'internal_error', message: error.status ? error.message : 'Meeting access failed.' } }); }
+          }
         },
       };
       function disconnected() { room.polls.delete(poll); clearTimeout(timer); }
@@ -318,6 +346,7 @@ export function createMeetings(options = {}) {
     if (operation === 'leave' && participant.role === 'host') fail(409, 'host_must_end', 'The host must end the meeting instead of leaving.');
     const body = await readBody(req);
     getRoom(meetingId);
+    authenticate(req, room, false); // A revocation may happen while the request body arrives.
     const id = requestId(body);
     const key = id === undefined ? undefined : `${participant.id}:${operation}:${id}`;
     let payload;
@@ -337,10 +366,11 @@ export function createMeetings(options = {}) {
       payload = { text: string(body, 'text'), reason: string(body, 'reason', { max: 4096, fallback: 'host_ended' }) };
     } else payload = {};
     const repeated = replay(room, key, payload);
-    if (repeated) return write(res, 200, repeated);
+    if (repeated) return reply(res, 200, repeated);
     active(room);
     if (participant.leftAt !== undefined) fail(403, 'participant_left', 'A participant who has left can read but cannot change the meeting.');
     if (operation !== 'end') capacity(room, payload, key);
+    options.beforeMutation?.(room, participant, operation);
     let event;
     if (operation === 'messages') {
       if (payload.replyTo !== undefined && !MESSAGE_TYPES.has(room.events.find(item => item.seq === payload.replyTo)?.type)) fail(400, 'invalid_request', 'replyTo must reference an existing message sequence.');
@@ -361,7 +391,7 @@ export function createMeetings(options = {}) {
     } else event = closeRoom(room, 'ended', payload.reason, payload.text, Date.now(), participant.id);
     const response = save(room, key, payload, mutationResult(room, event));
     wake(room);
-    return write(res, 200, response);
+    return reply(res, 200, response);
   }
 
   const timer = setInterval(cleanup, Math.max(10, Math.min(1000, meetingTtlMs, retentionMs)));
@@ -371,11 +401,13 @@ export function createMeetings(options = {}) {
       if (parsed.pathname !== '/v1/meetings' && !parsed.pathname.startsWith('/v1/meetings/')) return false;
       try { await route(req, res, parsed); }
       catch (error) {
-        if (error instanceof MeetingError) write(res, error.status, { error: { code: error.code, message: error.message } });
-        else write(res, 500, { error: { code: 'internal_error', message: 'Unexpected meeting relay error.' } });
+        if (error instanceof MeetingError || (Number.isInteger(error.status) && error.status >= 400 && error.status < 600)) reply(res, error.status, { error: { code: error.code, message: error.message } });
+        else reply(res, 500, { error: { code: 'internal_error', message: 'Unexpected meeting relay error.' } });
       }
       return true;
     },
+    inspect(id) { cleanup(); const room = rooms.get(id); return room ? { ...summary(room), ownerId: room.ownerId, ownerAgentId: room.ownerAgentId } : undefined; },
+    stats() { cleanup(); return { rooms: rooms.size, bytes: [...rooms.values()].reduce((n, room) => n + room.bytes, 0) }; },
     close() {
       if (closing) return;
       closing = true;

@@ -1,0 +1,17 @@
+{
+    # Runtime error logs can also contain request paths.
+    log {
+        output discard
+    }
+}
+
+{$NOKNOK_DOMAIN} {
+    # Private MCP credential URLs must not enter access logs.
+    log {
+        output discard
+    }
+    request_body {
+        max_size 128KB
+    }
+    reverse_proxy noknok:4317
+}

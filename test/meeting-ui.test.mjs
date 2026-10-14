@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MeetingCache, mergeEvents, parseMeetingLink, randomId, randomRetryToken, transcriptOf } from '../web/meeting.js';
+import { redactInvitations } from '../src/invitation.mjs';
+
+test('viewing and exporting redact hosted contact grants and credentials without mutating evidence', () => {
+  const credential = 'nk_agent_' + 'a'.repeat(43), grant = 'nk1.' + 'b'.repeat(40) + '.' + 'c'.repeat(43);
+  const text = `Evidence remains. https://relay.example/contact#offer=${grant} https://relay.example/mcp/${credential} whsec_${'d'.repeat(32)}`;
+  const record = { meeting: { id: 'room', context: text }, events: [{ seq: 1, type: 'message', data: { text } }] };
+  for (const serialized of [JSON.stringify(transcriptOf(record)), JSON.stringify(redactInvitations(record))]) {
+    assert.ok(serialized.includes('Evidence remains.'));
+    for (const secret of [credential, grant, 'd'.repeat(32)]) assert.ok(!serialized.includes(secret));
+  }
+  assert.equal(record.meeting.context, text);
+});
 
 test('explicit viewer links remain read-only and opaque ids grant no join capability', () => {
   assert.deepEqual(parseMeetingLink('#id=room-1&view=read-secret&invite=join-secret'), { id: 'room-1', mode: 'view', token: 'read-secret' });

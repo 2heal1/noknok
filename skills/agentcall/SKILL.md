@@ -1,6 +1,6 @@
 ---
 name: agentcall
-description: 通过邀请链接创建或加入临时会议，让多个原生 agent 与人交流、补充信息并共同解决问题。使用可达的自部署服务，发起者主持和结束，记录保存在各端；不要求好友关系，不自动唤醒其他会话。
+description: 通过邀请链接创建或加入临时会议，让多个原生 agent 与人交流、补充信息并共同解决问题。使用可达的自部署服务，发起者主持和结束，记录保存在各端；支持托管服务的好友联系与用户授权的原生 Events；邀请模式不要求好友。
 ---
 
 # NokNok 会议
@@ -11,11 +11,17 @@ description: 通过邀请链接创建或加入临时会议，让多个原生 age
 
 使用已安装的 `agentcall`，源码方式是 `node /absolute/path/to/noknok/bin/agentcall.mjs`。当前外部版本尚未发布公共 npm；使用用户提供的源码或已更新安装，不假定远程服务支持新协议。
 
-服务取用户提供的 `--server`、`AGENTCALL_SERVER`，否则新会议默认 `http://127.0.0.1:4317`。加入链接自带地址。云端 localhost 不指向用户电脑；跨电脑需双方可达。不要为开会自行配置公网入口、Tunnel、好友系统或自动唤醒。
+邀请模式的服务取用户提供的 `--server`、`AGENTCALL_SERVER`，否则新会议默认 `http://127.0.0.1:4317`。加入链接自带地址。云端 localhost 不指向用户电脑；跨电脑需双方可达。不要为开会自行配置公网入口、Tunnel、好友系统或自动唤醒。
 
 首次 `meeting create/join` 自动生成独立本地绑定；保存返回的 `localAgent` 和自己的 `session`，后续命令带 `--agent <localAgent>`。已有明确绑定或用户指定的 `--state-dir` 时复用。不要扫描最近、唯一、同名的其他身份。共享会议 ID 不能替代各自的本地句柄。
 
 知道自己的产品时自行加 `--product codex`、`--product dot`、`--product doubaowork` 等；未知则用通用名称，不猜测。用户无需填写名称或目录，明确指定名字时用 `--name`。失败返回 localAgent/requestId 时保存并复用重试。
+
+## 使用托管服务、好友与原生唤醒
+
+用户要使用内测服务、加好友或自动通知时，读 [托管服务指引](references/hosted.md)。使用 `noknok hosted` 或已连接的 `noknok_*` MCP 工具；好友联系也创建同一种多人会议。加好友完成即返回，不启动 `listen`、轮询或自动订阅。后台接听需用户另行授权宿主建立原生 Events 订阅。
+
+用户只有会议邀请时直接加入，无需注册长期身份或兑换内测码。不要为了邀请会议自行新增好友或更改服务配置。
 
 ## 创建并立即展示邀请
 
@@ -76,4 +82,4 @@ CLI 自动保存取得的记录。`meeting history <session> --agent <localAgent
 
 ## 旧版兼容
 
-收到 `/invite/`、`agentcall://invite/` 链接或用户明确要求好友/Events 时，读取 [旧版流程](references/legacy-calls.md)。旧 `ac_...` 两方句柄与新 `am_...` 会议句柄不能互换。不自动配置 App Server、后台唤醒或 Tunnel。
+收到旧 `/invite/`、`agentcall://invite/` 链接，或用户明确要求旧本机接收器时，读取 [旧版流程](references/legacy-calls.md)。旧 `ac_...` 两方句柄与新 `am_...` 会议句柄不能互换。不自动配置 App Server、后台唤醒或 Tunnel。

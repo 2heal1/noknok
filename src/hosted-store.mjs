@@ -1,0 +1,322 @@
+import { DatabaseSync } from 'node:sqlite';
+import { mkdirSync, lstatSync, existsSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import { randomBytes, createHash, createHmac, timingSafeEqual, createCipheriv, createDecipheriv } from 'node:crypto';
+
+const DAY = 86_400_000;
+const MAX_GRANT_MS = 90 * DAY;
+const MAX_RECORD_BYTES = 64 * 1024;
+
+export class HostedStoreError extends Error {
+  constructor(status, code, message) {
+    super(message);
+    this.name = 'HostedStoreError';
+    this.status = status;
+    this.statusCode = status;
+    this.code = code;
+  }
+}
+const fail = (status, code, message) => { throw new HostedStoreError(status, code, message); };
+const digest = (value) => createHash('sha256').update(value).digest('hex');
+const opaqueId = (prefix) => `${prefix}_${randomBytes(18).toString('base64url')}`;
+function boundedInteger(value, label, min, max) {
+  if (!Number.isSafeInteger(value) || value < min || value > max) fail(400, 'INVALID_ARGUMENT', `${label} is out of range`);
+  return value;
+}
+function text(value, label, max = 256) {
+  if (typeof value !== 'string' || !value || value.length > max) fail(400, 'INVALID_ARGUMENT', `${label} is invalid`);
+  return value;
+}
+function retrySecret(value) {
+  text(value, 'requestId', 256);
+  if (!/^[a-zA-Z0-9_-]{24,256}$/.test(value)) fail(400, 'INVALID_ARGUMENT', 'requestId must be a random secret of at least 24 URL-safe characters');
+  return value;
+}
+function canonicalRealm(value) {
+  let url;
+  try { url = new URL(value); } catch { fail(400, 'INVALID_REALM', 'realm must be an HTTP(S) origin'); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+    fail(400, 'INVALID_REALM', 'realm must be an HTTP(S) origin');
+  }
+  return url.origin;
+}
+function privateFile(path) {
+  if (existsSync(path)) {
+    const stat = lstatSync(path);
+    if (!stat.isFile() || stat.isSymbolicLink()) fail(500, 'INVALID_STORE', 'Control store files must be regular files');
+    chmodSync(path, 0o600);
+  }
+}
+function keyFile(path, mustExist) {
+  if (!existsSync(path)) {
+    if (mustExist) fail(500, 'MISSING_STORE_KEY', 'A control store key is missing; restore its original key file');
+    writeFileSync(path, randomBytes(32), { mode: 0o600, flag: 'wx' });
+  }
+  privateFile(path);
+  const key = readFileSync(path);
+  if (key.length !== 32) fail(500, 'INVALID_STORE_KEY', 'Control store key has an invalid length');
+  return key;
+}
+
+/** Synchronous persistent control state. Chat bodies and contact directories never belong here. */
+export function openHostedStore(options) { return new HostedStore(options); }
+export class HostedStore {
+  constructor({ dataDir, realm, maxAccounts = 10, maxAgentsPerAccount = 2, now = Date.now } = {}) {
+    this.realm = canonicalRealm(realm);
+    this.maxAccounts = boundedInteger(maxAccounts, 'maxAccounts', 1, 10_000);
+    this.maxAgentsPerAccount = boundedInteger(maxAgentsPerAccount, 'maxAgentsPerAccount', 1, 100);
+    this.maxAgentRecords = Math.min(100_000, maxAccounts * maxAgentsPerAccount * 8);
+    if (typeof now !== 'function') fail(400, 'INVALID_ARGUMENT', 'now must be a function');
+    this.now = now;
+    this.dataDir = resolve(text(dataDir, 'dataDir', 4096));
+    mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
+    const directory = lstatSync(this.dataDir);
+    if (!directory.isDirectory() || directory.isSymbolicLink()) fail(500, 'INVALID_STORE', 'Control store directory must not be a symbolic link');
+    chmodSync(this.dataDir, 0o700);
+    const databasePath = join(this.dataDir, 'control.sqlite');
+    const existing = existsSync(databasePath);
+    privateFile(databasePath);
+    this.signingKey = keyFile(join(this.dataDir, 'signing.key'), existing);
+    this.encryptionKey = keyFile(join(this.dataDir, 'subscriptions.key'), existing);
+    this.db = new DatabaseSync(databasePath);
+    privateFile(databasePath);
+    try {
+      this.db.exec(`PRAGMA journal_mode=DELETE; PRAGMA secure_delete=ON; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
+        CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS codes (hash TEXT PRIMARY KEY, remaining INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, code_hash TEXT NOT NULL, request_hash TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, UNIQUE(code_hash, request_hash));
+        CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id), token_hash TEXT NOT NULL UNIQUE, request_hash TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, UNIQUE(account_id, request_hash));
+        CREATE TABLE IF NOT EXISTS offer_claims (id TEXT PRIMARY KEY, claimant TEXT NOT NULL REFERENCES agents(id), accepted_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS revocations (id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS quotas (owner TEXT NOT NULL, bucket TEXT NOT NULL, window_start INTEGER NOT NULL, expires_at INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY(owner,bucket));
+        CREATE TABLE IF NOT EXISTS subscriptions (agent_id TEXT PRIMARY KEY REFERENCES agents(id), subscription_id TEXT NOT NULL, encrypted TEXT NOT NULL, expires_at INTEGER NOT NULL);
+      `);
+      this._transaction(() => {
+        for (const [name, value] of [['realm', this.realm], ['signing_key', digest(this.signingKey)], ['subscription_key', digest(this.encryptionKey)], ['schema_version', '1']]) {
+          const saved = this.db.prepare('SELECT value FROM meta WHERE name=?').get(name);
+          if (saved && saved.value !== value) fail(500, 'STORE_CONFIGURATION_MISMATCH', 'Control store realm, schema, or keys do not match the saved configuration');
+          this.db.prepare('INSERT OR IGNORE INTO meta(name,value) VALUES (?,?)').run(name, value);
+        }
+      });
+      this.cleanup();
+    } catch (error) { this.db.close(); throw error; }
+  }
+  close() { this.db.close(); }
+  _transaction(fn) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try { const result = fn(); this.db.exec('COMMIT'); return result; }
+    catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+  _derive(...parts) { return createHmac('sha256', this.signingKey).update(JSON.stringify([this.realm, ...parts])).digest('base64url'); }
+  _credential(kind, id, secret) { return `nk_${kind}_${this._derive('credential', kind, id, secret)}`; }
+  _account(token) {
+    if (typeof token !== 'string' || token.length > 256) fail(401, 'UNAUTHENTICATED', 'Invalid account credential');
+    const account = this.db.prepare('SELECT id FROM accounts WHERE token_hash=? AND active=1').get(digest(token));
+    if (!account) fail(401, 'UNAUTHENTICATED', 'Invalid account credential');
+    return account;
+  }
+  accountForAgent(agentId) {
+    const row = this.db.prepare('SELECT a.account_id FROM agents a JOIN accounts u ON u.id=a.account_id WHERE a.id=? AND a.active=1 AND u.active=1').get(text(agentId, 'agentId'));
+    if (!row) fail(403, 'AGENT_UNAVAILABLE', 'Agent is not active');
+    return row.account_id;
+  }
+  isAgentActive(agentId) {
+    try { this.accountForAgent(agentId); return true; } catch { return false; }
+  }
+  authenticate(token) {
+    if (typeof token !== 'string' || token.length > 256) fail(401, 'UNAUTHENTICATED', 'Invalid agent credential');
+    const row = this.db.prepare('SELECT a.id, a.account_id FROM agents a JOIN accounts u ON u.id=a.account_id WHERE a.token_hash=? AND a.active=1 AND u.active=1').get(digest(token));
+    if (!row) fail(401, 'UNAUTHENTICATED', 'Invalid agent credential');
+    return { agentId: row.id, accountId: row.account_id };
+  }
+  mintCode({ uses = 1, expiresInMs = 7 * DAY } = {}) {
+    boundedInteger(uses, 'uses', 1, this.maxAccounts);
+    boundedInteger(expiresInMs, 'expiresInMs', 1_000, 365 * DAY);
+    this.cleanup();
+    if (this.db.prepare('SELECT COUNT(*) n FROM codes').get().n >= 1000) fail(429, 'CODE_CAPACITY', 'Too many unexpired beta codes');
+    const code = `nk_beta_${randomBytes(24).toString('base64url')}`;
+    const expiresAt = this.now() + expiresInMs;
+    this.db.prepare('INSERT INTO codes(hash,remaining,expires_at) VALUES (?,?,?)').run(digest(code), uses, expiresAt);
+    return { code, uses, expiresAt };
+  }
+  redeem(code, requestId) {
+    text(code, 'code', 256); retrySecret(requestId);
+    const codeHash = digest(code), requestHash = digest(requestId);
+    return this._transaction(() => {
+      const previous = this.db.prepare('SELECT id,active FROM accounts WHERE code_hash=? AND request_hash=?').get(codeHash, requestHash);
+      if (previous) {
+        if (!previous.active) fail(403, 'ACCOUNT_REVOKED', 'Account has been revoked');
+        return { accountId: previous.id, accountToken: this._credential('account', previous.id, requestId) };
+      }
+      const invitation = this.db.prepare('SELECT remaining,expires_at FROM codes WHERE hash=?').get(codeHash);
+      if (!invitation || invitation.remaining < 1 || invitation.expires_at <= this.now()) fail(403, 'INVALID_BETA_CODE', 'Beta code is invalid, expired, or exhausted');
+      if (this.db.prepare('SELECT COUNT(*) n FROM accounts').get().n >= this.maxAccounts) fail(429, 'ACCOUNT_CAPACITY', 'The service account limit has been reached');
+      const accountId = opaqueId('account');
+      const accountToken = this._credential('account', accountId, requestId);
+      this.db.prepare('UPDATE codes SET remaining=remaining-1 WHERE hash=? AND remaining>0').run(codeHash);
+      this.db.prepare('INSERT INTO accounts(id,token_hash,code_hash,request_hash) VALUES (?,?,?,?)').run(accountId, digest(accountToken), codeHash, requestHash);
+      return { accountId, accountToken };
+    });
+  }
+  registerAgent(accountToken, { requestId } = {}) {
+    const account = this._account(accountToken); retrySecret(requestId);
+    return this._transaction(() => {
+      const existing = this.db.prepare('SELECT id,active FROM agents WHERE account_id=? AND request_hash=?').get(account.id, digest(requestId));
+      if (existing) {
+        if (!existing.active) fail(403, 'AGENT_REVOKED', 'Agent has been revoked; use a new registration request');
+        return { agentId: existing.id, agentToken: this._credential('agent', existing.id, requestId) };
+      }
+      if (this.db.prepare('SELECT COUNT(*) n FROM agents WHERE account_id=? AND active=1').get(account.id).n >= this.maxAgentsPerAccount) fail(429, 'AGENT_CAPACITY', 'The account agent limit has been reached');
+      if (this.db.prepare('SELECT COUNT(*) n FROM agents').get().n >= this.maxAgentRecords) fail(429, 'IDENTITY_CAPACITY', 'The service identity history limit has been reached');
+      const agentId = opaqueId('agent');
+      const agentToken = this._credential('agent', agentId, requestId);
+      this.db.prepare('INSERT INTO agents(id,account_id,token_hash,request_hash) VALUES (?,?,?,?)').run(agentId, account.id, digest(agentToken), digest(requestId));
+      return { agentId, agentToken };
+    });
+  }
+  revokeAgent(agentId) {
+    // Administrative method: callers must authenticate the owner before exposing it remotely.
+    this.db.prepare('UPDATE agents SET active=0 WHERE id=?').run(text(agentId, 'agentId'));
+    this.db.prepare('DELETE FROM subscriptions WHERE agent_id=?').run(agentId);
+  }
+  _sign(payload) {
+    const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    return `nk1.${body}.${this._derive('signed-token', body)}`;
+  }
+  _verify(token, kind, { allowExpired = false } = {}) {
+    if (typeof token !== 'string' || token.length > 4096) fail(403, 'INVALID_CAPABILITY', 'Contact credential is invalid');
+    const [version, body, signature, extra] = token.split('.');
+    const expected = this._derive('signed-token', body);
+    if (version !== 'nk1' || extra !== undefined || typeof signature !== 'string' || Buffer.byteLength(signature) !== Buffer.byteLength(expected) || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) fail(403, 'INVALID_CAPABILITY', 'Contact credential is invalid');
+    let payload;
+    try { payload = JSON.parse(Buffer.from(body, 'base64url').toString()); } catch { fail(403, 'INVALID_CAPABILITY', 'Contact credential is invalid'); }
+    if (!payload || payload.kind !== kind || payload.realm !== this.realm || typeof payload.id !== 'string' || !Number.isSafeInteger(payload.exp) || (!allowExpired && payload.exp <= this.now())) fail(403, 'INVALID_CAPABILITY', 'Contact credential is invalid or expired');
+    return payload;
+  }
+  issueOffer(agentId, { ttlMs = DAY } = {}) {
+    this.accountForAgent(agentId);
+    boundedInteger(ttlMs, 'ttlMs', 1000, 7 * DAY);
+    return this._sign({ kind: 'offer', realm: this.realm, id: opaqueId('offer'), issuer: agentId, scope: 'reciprocal-contact', exp: this.now() + ttlMs });
+  }
+  _exchange(offer, claim) {
+    const grant = (issuer, subject) => this._sign({ kind: 'contact', realm: this.realm, id: this._derive('grant', offer.id, issuer, subject), issuer, subject, recipient: issuer, scope: 'meeting:invite', exp: claim.expires_at });
+    return { exchangeId: offer.id, contact: { peerId: offer.issuer, capability: grant(offer.issuer, claim.claimant) }, reciprocal: { peerId: claim.claimant, capability: grant(claim.claimant, offer.issuer) }, issuedCapability: grant(claim.claimant, offer.issuer), expiresAt: claim.expires_at };
+  }
+  acceptOffer(agentId, token) {
+    this.accountForAgent(agentId);
+    const offer = this._verify(token, 'offer', { allowExpired: true });
+    this.cleanup();
+    this.accountForAgent(offer.issuer);
+    if (offer.issuer === agentId || offer.scope !== 'reciprocal-contact') fail(403, 'INVALID_OFFER', 'Cannot accept this contact offer');
+    return this._transaction(() => {
+      let claim = this.db.prepare('SELECT claimant,accepted_at,expires_at FROM offer_claims WHERE id=?').get(offer.id);
+      if (claim) {
+        if (claim.claimant !== agentId) fail(409, 'OFFER_CONSUMED', 'Contact offer has already been accepted');
+        if (claim.expires_at <= this.now()) fail(403, 'INVALID_OFFER', 'Contact exchange has expired');
+      } else {
+        if (offer.exp <= this.now()) fail(403, 'INVALID_OFFER', 'Contact offer has expired');
+        if (this.db.prepare('SELECT COUNT(*) n FROM offer_claims').get().n >= 10_000) fail(429, 'EXCHANGE_CAPACITY', 'The contact exchange limit has been reached');
+        claim = { claimant: agentId, accepted_at: this.now(), expires_at: this.now() + MAX_GRANT_MS };
+        this.db.prepare('INSERT INTO offer_claims(id,claimant,accepted_at,expires_at) VALUES (?,?,?,?)').run(offer.id, claim.claimant, claim.accepted_at, claim.expires_at);
+      }
+      return this._exchange(offer, claim);
+    });
+  }
+  claimOffer(agentId, token) {
+    this.accountForAgent(agentId);
+    const offer = this._verify(token, 'offer', { allowExpired: true });
+    if (offer.issuer !== agentId) fail(403, 'FORBIDDEN', 'Only the offer issuer can collect the reciprocal contact');
+    const claim = this.db.prepare('SELECT claimant,accepted_at,expires_at FROM offer_claims WHERE id=?').get(offer.id);
+    if (!claim || claim.expires_at <= this.now()) return { accepted: false, expired: offer.exp <= this.now(), exchangeId: offer.id };
+    this.accountForAgent(claim.claimant);
+    const exchange = this._exchange(offer, claim);
+    return { accepted: true, exchangeId: offer.id, contact: exchange.reciprocal, issuedCapability: exchange.contact.capability, expiresAt: exchange.expiresAt };
+  }
+  verifyCapability(callerId, recipientId, token) {
+    this.accountForAgent(callerId); this.accountForAgent(recipientId);
+    const grant = this._verify(token, 'contact');
+    if (grant.subject !== callerId || grant.issuer !== recipientId || grant.recipient !== recipientId || grant.scope !== 'meeting:invite') fail(403, 'FORBIDDEN', 'Contact credential does not authorize this caller and recipient');
+    if (this.db.prepare('SELECT 1 FROM revocations WHERE id=?').get(grant.id)) fail(403, 'CAPABILITY_REVOKED', 'Contact permission has been revoked');
+    return { id: grant.id, issuer: grant.issuer, subject: grant.subject, recipient: grant.recipient, expiresAt: grant.exp };
+  }
+  revokeCapability(agentId, token) {
+    this.accountForAgent(agentId);
+    const grant = this._verify(token, 'contact', { allowExpired: true });
+    if (grant.issuer !== agentId) fail(403, 'FORBIDDEN', 'Only the granting agent can revoke contact permission');
+    this.cleanup();
+    if (grant.exp <= this.now()) return { revoked: true };
+    if (this.db.prepare('SELECT COUNT(*) n FROM revocations').get().n >= 20_000 && !this.db.prepare('SELECT 1 FROM revocations WHERE id=?').get(grant.id)) fail(429, 'REVOCATION_CAPACITY', 'The revocation limit has been reached');
+    this.db.prepare('INSERT OR IGNORE INTO revocations(id,expires_at) VALUES (?,?)').run(grant.id, grant.exp);
+    return { revoked: true };
+  }
+  consumeQuota(agentId, bucket, { limit, windowMs, scope = 'agent', amount = 1 } = {}) {
+    const accountId = this.accountForAgent(agentId);
+    if (!['agent', 'account'].includes(scope)) fail(400, 'INVALID_ARGUMENT', 'Invalid quota scope');
+    return this._consumeQuota(scope === 'account' ? accountId : agentId, bucket, { limit, windowMs, amount });
+  }
+  consumeServiceQuota(bucket, { limit, windowMs, amount = 1 } = {}) {
+    // Internal operator-controlled budget, not an anonymous quota API.
+    return this._consumeQuota('service', bucket, { limit, windowMs, amount, service: true });
+  }
+  _consumeQuota(owner, bucket, { limit, windowMs, amount, service = false }) {
+    if (typeof bucket !== 'string' || !/^[a-zA-Z0-9_.:-]{1,64}$/.test(bucket)) fail(400, 'INVALID_ARGUMENT', 'Invalid quota bucket');
+    boundedInteger(limit, 'limit', 1, Number.MAX_SAFE_INTEGER);
+    boundedInteger(amount, 'amount', 1, limit);
+    boundedInteger(windowMs, 'windowMs', 100, 365 * DAY);
+    const now = this.now(), start = Math.floor(now / windowMs) * windowMs, resetAt = start + windowMs;
+    return this._transaction(() => {
+      this.db.prepare('DELETE FROM quotas WHERE expires_at<=?').run(now);
+      const previous = this.db.prepare('SELECT window_start,count FROM quotas WHERE owner=? AND bucket=?').get(owner, bucket);
+      const count = previous?.window_start === start ? previous.count : 0;
+      // Subtraction avoids overflowing safe integers when count + amount is huge.
+      if (count > limit - amount) fail(429, 'QUOTA_EXCEEDED', 'Operation quota exhausted');
+      if (!previous && service && this.db.prepare('SELECT COUNT(*) n FROM quotas WHERE owner=?').get(owner).n >= 256) fail(429, 'QUOTA_CAPACITY', 'The service quota bucket limit has been reached');
+      if (!previous && this.db.prepare('SELECT COUNT(*) n FROM quotas').get().n >= Math.min(100_000, this.maxAgentRecords * 100) + 256) fail(429, 'QUOTA_CAPACITY', 'The service quota counter limit has been reached');
+      this.db.prepare('INSERT INTO quotas(owner,bucket,window_start,expires_at,count) VALUES (?,?,?,?,?) ON CONFLICT(owner,bucket) DO UPDATE SET window_start=excluded.window_start,expires_at=excluded.expires_at,count=excluded.count').run(owner, bucket, start, resetAt, count + amount);
+      return { remaining: limit - count - amount, resetAt };
+    });
+  }
+  _encrypt(agentId, value) {
+    const nonce = randomBytes(12), cipher = createCipheriv('aes-256-gcm', this.encryptionKey, nonce);
+    cipher.setAAD(Buffer.from(`${this.realm}:${agentId}`));
+    const ciphertext = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+    return Buffer.concat([nonce, cipher.getAuthTag(), ciphertext]).toString('base64');
+  }
+  _decrypt(agentId, value) {
+    try {
+      const packed = Buffer.from(value, 'base64'), decipher = createDecipheriv('aes-256-gcm', this.encryptionKey, packed.subarray(0, 12));
+      decipher.setAAD(Buffer.from(`${this.realm}:${agentId}`));
+      decipher.setAuthTag(packed.subarray(12, 28));
+      return JSON.parse(Buffer.concat([decipher.update(packed.subarray(28)), decipher.final()]).toString());
+    } catch { fail(500, 'SUBSCRIPTION_CORRUPT', 'Stored subscription could not be authenticated'); }
+  }
+  putSubscription(agentId, record) {
+    this.accountForAgent(agentId);
+    if (!record || typeof record !== 'object' || Array.isArray(record)) fail(400, 'INVALID_ARGUMENT', 'Invalid subscription');
+    text(record.id, 'subscription.id', 256);
+    const expiry = record.expiresAt ?? record.refreshBefore;
+    const expiresAt = typeof expiry === 'string' ? Date.parse(expiry) : expiry;
+    if (!Number.isSafeInteger(expiresAt) || expiresAt <= this.now() || expiresAt > this.now() + 31 * DAY) fail(400, 'INVALID_ARGUMENT', 'Subscription expiry must be within 31 days');
+    const serialized = JSON.stringify(record);
+    if (Buffer.byteLength(serialized) > MAX_RECORD_BYTES) fail(413, 'SUBSCRIPTION_TOO_LARGE', 'Subscription is too large');
+    this.db.prepare('INSERT INTO subscriptions(agent_id,subscription_id,encrypted,expires_at) VALUES (?,?,?,?) ON CONFLICT(agent_id) DO UPDATE SET subscription_id=excluded.subscription_id,encrypted=excluded.encrypted,expires_at=excluded.expires_at').run(agentId, record.id, this._encrypt(agentId, serialized), expiresAt);
+    return structuredClone(record);
+  }
+  setSubscription(agentId, record) { return this.putSubscription(agentId, record); }
+  getSubscription(agentId) {
+    this.accountForAgent(agentId);
+    const row = this.db.prepare('SELECT encrypted,expires_at FROM subscriptions WHERE agent_id=?').get(agentId);
+    if (!row || row.expires_at <= this.now()) return null;
+    return this._decrypt(agentId, row.encrypted);
+  }
+  deleteSubscription(agentId, subscriptionId) {
+    this.accountForAgent(agentId);
+    return Boolean(subscriptionId === undefined
+      ? this.db.prepare('DELETE FROM subscriptions WHERE agent_id=?').run(agentId).changes
+      : this.db.prepare('DELETE FROM subscriptions WHERE agent_id=? AND subscription_id=?').run(agentId, text(subscriptionId, 'subscriptionId')).changes);
+  }
+  cleanup() {
+    const now = this.now();
+    for (const table of ['codes', 'offer_claims', 'revocations', 'quotas', 'subscriptions']) this.db.prepare(`DELETE FROM ${table} WHERE expires_at<=?`).run(now);
+  }
+}

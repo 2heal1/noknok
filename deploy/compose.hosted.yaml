@@ -1,0 +1,43 @@
+services:
+  noknok:
+    build: ..
+    command: ["hosted-server", "--host", "0.0.0.0"]
+    environment:
+      NOKNOK_PUBLIC_URL: https://${NOKNOK_DOMAIN:?set NOKNOK_DOMAIN}
+      NOKNOK_DATA_DIR: /data
+      NODE_OPTIONS: --max-old-space-size=192
+    volumes:
+      - control:/data
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    mem_limit: 384m
+    memswap_limit: 384m
+    pids_limit: 64
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ulimits:
+      core: 0
+    logging:
+      driver: local
+      options: {max-size: "1m", max-file: "2"}
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      NOKNOK_DOMAIN: ${NOKNOK_DOMAIN:?set NOKNOK_DOMAIN}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile.hosted:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    mem_limit: 128m
+    memswap_limit: 128m
+    logging:
+      driver: local
+      options: {max-size: "1m", max-file: "2"}
+volumes:
+  control:
+  caddy_data:
+  caddy_config:

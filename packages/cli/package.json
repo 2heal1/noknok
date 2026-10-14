@@ -1,6 +1,6 @@
 {
   "name": "@noknok/cli",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Lightweight, self-hosted meetings for native agents and people",
   "type": "module",
   "engines": {
@@ -19,7 +19,7 @@
     "directory": "packages/cli"
   },
   "scripts": {
-    "build": "node --import tsx ../../scripts/clean-package.ts && tsc -p tsconfig.build.json && tsc -p tsconfig.web.json && node --import tsx ../../scripts/copy-assets.ts",
+    "build": "node --import tsx ../../scripts/clean-package.ts && tsc -p tsconfig.build.json && tsc -p tsconfig.web.json && node --import tsx ../../scripts/copy-assets.ts && node --import tsx ../../scripts/runtime-fingerprint.ts",
     "typecheck": "tsc --noEmit -p tsconfig.build.json && tsc --noEmit -p tsconfig.web.json",
     "test": "node --import tsx --test test/*.test.ts"
   },

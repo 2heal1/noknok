@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """Root-only, fixed-policy release deployment. No shell, uploaded code or paths."""
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -190,13 +191,22 @@ def load_state(config):
     return {'schema': 1, 'current': bootstrap(config, image), 'previous': None, 'highWaterVersion': None}
 
 
+def policy_fingerprint():
+    fingerprint = hashlib.sha256()
+    for name in ('Dockerfile.release', 'compose.release.yaml', 'fetch-package.ts'):
+        fingerprint.update(name.encode())
+        fingerprint.update((BUNDLE / name).read_bytes())
+    return fingerprint.hexdigest()
+
+
 def deploy(config, state, version):
     requested = version_tuple(version)
     if state.get('pending'):
         raise DeploymentError('An interrupted deployment needs administrator rollback previous before retrying.')
     if state.get('highWaterVersion') and requested < version_tuple(state['highWaterVersion']):
         raise DeploymentError('Automatic downgrades are refused; use administrator rollback previous.')
-    if state['current']['version'] == version:
+    policy = policy_fingerprint()
+    if state['current']['version'] == version and state['current'].get('policyFingerprint') == policy:
         healthy(config, state['current'])
         return {'status': 'unchanged', 'version': version}
     for key in ('controlVolume', 'caddyDataVolume', 'caddyConfigVolume'):
@@ -208,7 +218,26 @@ def deploy(config, state, version):
     image = run(DOCKER, 'image', 'inspect', '--format', '{{.Id}}', tag)
     if not IMAGE.fullmatch(image):
         raise DeploymentError('Build did not return an immutable image ID.')
+    manifest = json.loads(run(DOCKER, 'run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
+                              '--security-opt', 'no-new-privileges:true', '--memory', '64m', '--pids-limit', '32',
+                              '--entrypoint', 'node', image, '-e',
+                              'const fs=require("node:fs"),p="/app/dist/runtime-fingerprint.json";process.stdout.write(fs.existsSync(p)?fs.readFileSync(p,"utf8"):JSON.stringify({schema:0}))'))
+    # A release built before fingerprints existed cannot prove equality; deploy
+    # it normally rather than assuming its runtime is unchanged.
+    missing = isinstance(manifest, dict) and manifest == {'schema': 0}
+    if not missing and (not isinstance(manifest, dict) or manifest.get('schema') != 1 or not re.fullmatch(r'[a-f0-9]{64}', str(manifest.get('sha256', '')))):
+        raise DeploymentError('Published package has no valid runtime fingerprint.')
+    # Policy changes must also take effect, even if application bytes are equal.
+    digest = hashlib.sha256((str(manifest.get('sha256', '')) + policy).encode()).hexdigest()
+    if not missing and state['current'].get('runtimeFingerprint') == digest:
+        healthy(config, state['current'])
+        state.update(highWaterVersion=version, lastCheckedVersion=version, checkedAt=timestamp())
+        save(DATA / 'state.json', state)
+        return {'status': 'unchanged-runtime', 'version': version, 'runningVersion': state['current']['version']}
     candidate = release_spec(config, version, image)
+    candidate['policyFingerprint'] = policy
+    if not missing:
+        candidate['runtimeFingerprint'] = digest
     previous = state['current']
     state['pending'] = candidate
     save(DATA / 'state.json', state)

@@ -30,6 +30,8 @@ class DeploymentTests(unittest.TestCase):
         self.bundle = root / 'bundle'
         self.bundle.mkdir()
         (self.bundle / 'compose.release.yaml').write_text((SOURCE / 'compose.release.yaml').read_text())
+        for name in ('Dockerfile.release', 'fetch-package.ts'):
+            (self.bundle / name).write_text((SOURCE / name).read_text())
         (root / 'compose.yaml').write_text('services:\n  noknok:\n    build: ..\n    volumes: ["control:/data"]\nvolumes:\n  control: {}\n')
         (root / 'deployment.env').write_text('NOKNOK_DOMAIN=example.test\n')
         self.config = {'domain': 'example.test', 'project': 'noknok', 'controlVolume': 'noknok_control_v2',
@@ -42,6 +44,7 @@ class DeploymentTests(unittest.TestCase):
         self.fail_new_health = False
         self.fail_rollback = False
         self.fail_build = False
+        self.runtime_digest = 'd' * 64
         self.health_responses = {
             OLD: {'ok': True, 'mode': 'hosted', 'transcriptStorage': 'memory'},
             NEW: {'ok': True, 'mode': 'hosted', 'transcriptStorage': 'participant',
@@ -78,6 +81,8 @@ class DeploymentTests(unittest.TestCase):
             return ''
         if args[1:3] == ('image', 'inspect'):
             return NEW
+        if args[1] == 'run':
+            return json.dumps({'schema': 1, 'sha256': self.runtime_digest})
         if args[1] == 'compose':
             self.assertEqual(args[args.index('--project-name') + 1], self.config['project'])
             env = dict(line.split('=', 1) for line in Path(args[args.index('--env-file') + 1]).read_text().splitlines())
@@ -190,6 +195,22 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(self.current_image, OLD)
         with self.assertRaisesRegex(deploy.DeploymentError, 'downgrades'):
             deploy.deploy(self.config, self.state(), '0.0.9')
+
+    def test_equal_runtime_keeps_live_version_and_skips_container_recreation(self):
+        deploy.deploy(self.config, deploy.load_state(self.config), '0.1.0')
+        self.commands.clear()
+        result = deploy.deploy(self.config, self.state(), '0.1.1')
+        self.assertEqual(result, {'status': 'unchanged-runtime', 'version': '0.1.1', 'runningVersion': '0.1.0'})
+        self.assertEqual(self.state()['current']['version'], '0.1.0')
+        self.assertEqual(self.state()['highWaterVersion'], '0.1.1')
+        self.assertFalse(any(command[1] == 'compose' for command in self.commands))
+        self.runtime_digest = 'e' * 64
+        self.assertEqual(deploy.deploy(self.config, self.state(), '0.1.2')['status'], 'deployed')
+
+    def test_deployment_policy_change_is_not_skipped_for_equal_package_runtime(self):
+        deploy.deploy(self.config, deploy.load_state(self.config), '0.1.0')
+        (self.bundle / 'compose.release.yaml').write_text((self.bundle / 'compose.release.yaml').read_text() + '\n# policy change\n')
+        self.assertEqual(deploy.deploy(self.config, self.state(), '0.1.0')['status'], 'deployed')
 
     def test_concurrent_deployment_is_refused_without_mutation(self):
         with deploy.deployment_lock():

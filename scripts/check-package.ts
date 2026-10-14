@@ -6,6 +6,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gunzipSync } from 'node:zlib';
+import { fingerprintFiles } from './runtime-fingerprint.js';
 
 const exec = promisify(execFile);
 const ROOT = fileURLToPath(new URL('../packages/cli/', import.meta.url));
@@ -13,7 +14,7 @@ const MAX_ARCHIVE_BYTES = 32 * 1024 * 1024;
 const EXPECTED_NAME = '@noknok/cli';
 const REGISTRY = 'https://registry.npmjs.org';
 const REQUIRED = [
-  'package.json', 'README.md', 'LICENSE', 'NOTICE', 'dist/bin/noknok.js',
+  'package.json', 'README.md', 'LICENSE', 'NOTICE', 'dist/bin/noknok.js', 'dist/runtime-fingerprint.json',
   'dist/src/cli.js', 'dist/src/mcp-stdio.js', 'dist/src/hosted-service.js',
   'dist/src/deploy/server.js', 'dist/src/deploy/hosted-server.js', 'dist/poc/mcp-events/server.js',
   'skills/noknok/SKILL.md', 'skills/noknok/references/hosted.md',
@@ -87,7 +88,7 @@ export function readPackageArchive(archive: Buffer) {
 }
 
 function allowedFile(path: string): boolean {
-  if (['package.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'LICENSE.md', 'NOTICE'].includes(path)) return true;
+  if (['package.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'LICENSE.md', 'NOTICE', 'dist/runtime-fingerprint.json'].includes(path)) return true;
   if (path.split('/').some(part => part.startsWith('.'))) return false;
   if (/^dist\/(?:bin|src|poc)\/[a-zA-Z0-9_/-]+\.js$/.test(path)) return true;
   if (/^dist\/web\/[a-zA-Z0-9_/-]+\.(?:js|css|html|svg)$/.test(path)) return true;
@@ -124,6 +125,10 @@ export function validatePackageFiles(files: Map<string, Buffer>, expectedManifes
   for (const bin of Object.values(packed.bin as Record<string, string>)) if (!files.get(bin)?.toString('utf8').startsWith('#!/usr/bin/env node\n')) fail('INVALID_BIN_ENTRY');
   if (Object.keys(packed.dependencies || {}).length || Object.keys(packed.optionalDependencies || {}).length || packed.bundleDependencies?.length || packed.bundledDependencies?.length) fail('UNEXPECTED_RUNTIME_DEPENDENCIES');
   for (const hook of ['preinstall', 'install', 'postinstall']) if (packed.scripts?.[hook]) fail('UNEXPECTED_INSTALL_HOOK');
+  let fingerprint;
+  try { fingerprint = JSON.parse(files.get('dist/runtime-fingerprint.json')!.toString('utf8')); }
+  catch { fail('INVALID_RUNTIME_FINGERPRINT'); }
+  if (JSON.stringify(fingerprint) !== JSON.stringify(fingerprintFiles(files, packed))) fail('INVALID_RUNTIME_FINGERPRINT');
   return { name: packed.name, version: packed.version, fileCount: files.size };
 }
 

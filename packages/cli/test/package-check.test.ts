@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
 import { readPackageArchive, validatePackageFiles } from '../../../scripts/check-package.js';
+import { fingerprintFiles } from '../../../scripts/runtime-fingerprint.js';
 
 const manifest = {
   name: '@noknok/cli', version: '0.0.1', type: 'module', license: 'Apache-2.0',
@@ -22,7 +23,9 @@ function packageFiles(overrides = {}) {
     ['skills/noknok/references/two-party-calls.md', '# Legacy\n'],
     ['dist/web/meeting.html', '<!doctype html>\n'], ['dist/web/meeting.js', 'export {};\n'], ['dist/web/meeting-invitation.js', 'export {};\n'],
   ]);
-  return new Map([...files].map(([path, text]) => [path, Buffer.from(text)]));
+  const bytes = new Map([...files].map(([path, text]) => [path, Buffer.from(text)]));
+  bytes.set('dist/runtime-fingerprint.json', Buffer.from(JSON.stringify(fingerprintFiles(bytes, { ...manifest, ...overrides }))));
+  return bytes;
 }
 
 function archive(entries) {

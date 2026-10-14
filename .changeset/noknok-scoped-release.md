@@ -1,5 +1,5 @@
 ---
-"@noknok/noknok": patch
+"@noknok/cli": patch
 ---
 
-Distribute NokNok under the @noknok scope, with package-content checks, isolated preview releases, and GitHub Actions trusted publishing.
+Distribute the NokNok CLI as @noknok/cli, with package-content checks, isolated preview releases, and GitHub Actions trusted publishing.

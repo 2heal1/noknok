@@ -10,7 +10,7 @@ import { gunzipSync } from 'node:zlib';
 const exec = promisify(execFile);
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const MAX_ARCHIVE_BYTES = 32 * 1024 * 1024;
-const EXPECTED_NAME = '@noknok/noknok';
+const EXPECTED_NAME = '@noknok/cli';
 const REGISTRY = 'https://registry.npmjs.org';
 const REQUIRED = [
   'package.json', 'README.md', 'Dockerfile', 'bin/noknok.mjs', 'bin/agentcall.mjs',
@@ -180,7 +180,7 @@ export async function checkPackage({ root = ROOT, archivePath } = {}) {
     const checkedTarball = join(temp, 'checked.tgz');
     await writeFile(checkedTarball, archive, { mode: 0o600 });
     await npm(['install', '--prefix', prefix, '--offline', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', '--no-save', checkedTarball]);
-    const installed = join(prefix, 'node_modules', '@noknok', 'noknok');
+    const installed = join(prefix, 'node_modules', '@noknok', 'cli');
     const installedManifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'));
     if (installedManifest.name !== expected.name || installedManifest.version !== expected.version) fail('INSTALLED_IDENTITY_MISMATCH');
     const installedSkill = join(installed, 'skills', 'agentcall', 'SKILL.md');
@@ -194,12 +194,16 @@ export async function checkPackage({ root = ROOT, archivePath } = {}) {
       const path = await command(executable, ['skill', '--path'], { cwd: work, env });
       if (skill.stderr || skill.stdout !== expectedSkill || path.stderr || path.stdout.trim() !== await realpath(installedSkill)) fail('INSTALLED_SKILL_MISMATCH');
     }
+    // The package name differs from both binary names, so npm exec must select
+    // the binary explicitly. Use only the inspected tarball, never the registry.
+    const invoked = await npm(['exec', '--offline', '--yes', `--package=${checkedTarball}`, '--', 'noknok', '--version']);
+    if (invoked.stderr || JSON.stringify(JSON.parse(invoked.stdout)) !== JSON.stringify({ name: expected.name, version: expected.version })) fail('NPM_EXEC_VERSION_MISMATCH');
     try { await stat(env.AGENTCALL_HOME); fail('UNEXPECTED_AGENT_STATE'); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     return {
       ok: true, ...inspection, npmVersion,
       integrity: `sha512-${createHash('sha512').update(archive).digest('base64')}`,
-      checks: ['archive-contents', 'publish-metadata', 'secret-patterns', 'offline-tarball-install', 'both-cli-bins', 'bundled-skill', 'no-agent-state'],
+      checks: ['archive-contents', 'publish-metadata', 'secret-patterns', 'offline-tarball-install', 'offline-npm-exec', 'both-cli-bins', 'bundled-skill', 'no-agent-state'],
     };
   } finally {
     await rm(temp, { recursive: true, force: true });

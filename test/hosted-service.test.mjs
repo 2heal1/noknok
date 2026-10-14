@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { startHostedService } from '../src/hosted-service.mjs';
 import { hostedDeploymentConfig } from '../deploy/hosted-server.mjs';
 
+const PACKAGE = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const secret = () => randomBytes(32).toString('base64url');
 async function fixture(t, options = {}) {
   const dataDir = await mkdtemp(join(tmpdir(), 'noknok-service-'));
@@ -72,6 +73,9 @@ test('hosted service gates all creation and disables legacy registration/proxy r
   const a = await f.register();
   const discovery = await f.rpc(a, 'server/discover');
   assert.deepEqual(discovery.supportedVersions, ['2026-07-28']);
+  assert.deepEqual(discovery.serverInfo, { name: 'noknok-hosted', version: PACKAGE.version });
+  const initialized = await f.rpc(a, 'initialize', { protocolVersion: '2025-03-26' });
+  assert.equal(initialized.serverInfo.version, PACKAGE.version);
   assert.ok(discovery.capabilities.events);
   const tools = await f.rpc(a, 'tools/list');
   assert.ok(tools.tools.some(tool => tool.name === 'noknok_meeting_create'));

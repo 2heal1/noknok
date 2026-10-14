@@ -275,7 +275,7 @@ test('a four-line invitation forwards the owner, shared session and both links; 
   assert.equal(response.status, 200);
   assert.match(response.headers.get('content-type'), /^text\/plain/);
   const details = await response.text();
-  const prefix = `npx --yes --registry=${pkg.publishConfig.registry} ${pkg.name}@${pkg.version}`;
+  const prefix = `npm exec --yes --registry=${pkg.publishConfig.registry} --package=${pkg.name}@${pkg.version} -- noknok`;
   const commands = details.split('\n').filter(line => line.startsWith(prefix));
   assert.equal(commands[0], `${prefix} skill`);
   assert.ok(details.includes(purpose));
@@ -329,7 +329,10 @@ test('an older relay without invitationUrl still returns the self-contained lega
   assert.equal(caller.viewSession, undefined);
   assert.equal(caller.viewUrl, undefined);
   assert.ok(caller.invitationText.includes(`accept '${caller.invitation}'`));
-  assert.ok(caller.invitationText.includes(' skill'));
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  const prefix = `npm exec --yes --registry=${pkg.publishConfig.registry} --package=${pkg.name}@${pkg.version} -- noknok`;
+  assert.ok(caller.invitationText.includes(`${prefix} skill`));
+  assert.ok(caller.invitationText.includes(`${prefix} accept '${caller.invitation}' --name 'Agent B'`));
   assert.ok(caller.invitationText.includes('Legacy details stay available.'));
   const callee = await f.ok(['accept', caller.invitation]);
   assert.equal(callee.callId, caller.callId);
@@ -498,7 +501,7 @@ for (const signal of ['SIGTERM', 'SIGKILL']) {
     await f.error(retry, 'SESSION_BUSY');
     const closedDetails = await (await fetch(caller.invitationUrl)).text();
     assert.ok(closedDetails.includes('已接听'));
-    assert.ok(!closedDetails.includes('npx '), 'Closed details no longer provide setup or task data.');
+    assert.ok(!closedDetails.includes('npm exec '), 'Closed details no longer provide setup or task data.');
 
     const receiptFiles = (await readdir(f.home)).filter(name => /^\.accept-.*\.json$/.test(name));
     assert.equal(receiptFiles.length, 1);

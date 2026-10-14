@@ -6,19 +6,19 @@
 
 **上线阻断项：端到端加密尚未实现，必须完成后才能开放真实用户内测。** 当前可进行合成内容的受限联调；发布前逐项检查 [上线前 TODO](docs/launch-checklist.md)。
 
-项目名称为 NokNok，npm 包名为 `@noknok/noknok`。主命令为 `noknok`，保留 `agentcall` 命令别名；现有 `AGENTCALL_*` 环境变量、`agentcall://` 邀请协议、MCP 工具名与本地状态目录继续兼容，避免失效已有身份和邀请。 基础邀请会议无需账号或好友关系，模型 API Key 由各参会 Agent 自己管理。模型和执行能力由参会者已有的 agent 提供。
+项目名称为 NokNok，npm 包名为 `@noknok/cli`。主命令为 `noknok`，保留 `agentcall` 命令别名；现有 `AGENTCALL_*` 环境变量、`agentcall://` 邀请协议、MCP 工具名与本地状态目录继续兼容，避免失效已有身份和邀请。 基础邀请会议无需账号或好友关系，模型 API Key 由各参会 Agent 自己管理。模型和执行能力由参会者已有的 agent 提供。
 
 ## 安装
 
 通过公开 npm 安装 CLI（首次发布进度与维护流程见 [发布说明](docs/releasing.md)）：
 
 ```sh
-npm install --global @noknok/noknok
+npm install --global @noknok/cli
 noknok --version
 noknok skill
 ```
 
-无需全局安装时，可用 `npm exec --yes --package=@noknok/noknok -- noknok skill` 读取随包发布的 Skill。让 Agent 先读 Skill，再使用 `noknok` 创建会议、添加好友或参与交流。使用源码开发时，下文的 `node bin/noknok.mjs` 与安装后的 `noknok` 等价；安装包不会自动配置服务、身份或后台订阅。
+无需全局安装时，可用 `npm exec --yes --package=@noknok/cli -- noknok skill` 读取随包发布的 Skill。让 Agent 先读 Skill，再使用 `noknok` 创建会议、添加好友或参与交流。使用源码开发时，下文的 `node bin/noknok.mjs` 与安装后的 `noknok` 等价；安装包不会自动配置服务、身份或后台订阅。
 
 ## 本地启动
 

@@ -249,13 +249,13 @@ function invitationText(invitation, call, invitationUrl, viewUrl) {
   // invitation working until that relay is upgraded.
   const registry = PACKAGE.publishConfig.registry;
   const packageSpec = `${PACKAGE.name}@${PACKAGE.version}`;
-  const command = `npx --yes --registry=${registry} ${packageSpec}`;
+  const command = `npm exec --yes --registry=${registry} --package=${packageSpec} -- noknok`;
   // Only the validated invitation enters a command. Task context remains prose,
   // so quotes, code fences, and shell syntax in evidence cannot alter commands.
   return `请通过 NokNok 接听同事的 agent，与它直接交流并推进下面的任务。
 
 准备：需要 Node.js 22+，并能访问本次交换机。
-CLI 包名是 ${packageSpec}，发布后可从公开 npm（${registry}）获取。未发布版本请使用接收方本地源码 CLI 替换下面的 npx 前缀。
+CLI 包名是 ${packageSpec}，发布后可从公开 npm（${registry}）获取。未发布版本请使用接收方本地源码 CLI 替换下面的 npm exec 前缀。
 NokNok Skill 已包含在同一个包中，无需单独安装。先执行这条命令读取 Skill，并按说明操作：
 ${command} skill
 
@@ -263,7 +263,7 @@ ${command} skill
 ${command} accept '${invitation}' --name 'Agent B'
 
 邀请有效期至 ${call.expiresAt}，只能接入一名对方。若已过期，请让发起方重新邀请。
-后续 Skill 中的 agentcall 命令都使用上述 npx 前缀。保存接听返回的本地 session，持续接收并回应对方；需要我补充信息或授权时，在当前会话问我，并通知对方正在等待。双方确认完成后结束，再向我汇报结果。
+后续 Skill 中的 agentcall 命令都使用上述 npm exec 前缀。保存接听返回的本地 session，持续接收并回应对方；需要我补充信息或授权时，在当前会话问我，并通知对方正在等待。双方确认完成后结束，再向我汇报结果。
 
 本次目标（发起方提供）：
 ${call.purpose}

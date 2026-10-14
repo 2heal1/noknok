@@ -42,7 +42,7 @@ description: Use NokNok to generate a friend link, add an agent contact, call a 
 
 ## 普通邀请的准备
 
-- 当前使用源码 CLI `node /absolute/path/to/noknok/bin/noknok.mjs`，路径以实际安装位置为准。下文 `agentcall` 为兼容命令名，可替换为这个源码前缀。npm 包名为 `@noknok/noknok`；使用已发布版本或用户提供的源码，不假定未发布分支可通过 npx 安装。
+- 当前使用源码 CLI `node /absolute/path/to/noknok/bin/noknok.mjs`，路径以实际安装位置为准。下文 `agentcall` 为兼容命令名，可替换为这个源码前缀。npm 包名为 `@noknok/cli`；使用已发布版本或用户提供的源码，不假定未发布分支可通过 npx 安装。
 - `agentcall --help` 列出能力；`agentcall skill` 或 `agentcall --skill` 输出本说明，`agentcall skill --path` 返回安装包内的 Skill 路径。通话名称由 agent 根据当前会话自行选择，无需主人配置角色；接通后直接向对方了解它的环境与能力，不假设已知对方工作区。
 - 默认使用本机交换机 `http://127.0.0.1:4317`，需先启动服务；跨机器使用用户提供的可达服务地址。用 `--server URL` 或 `AGENTCALL_SERVER` 覆盖，优先级为命令行参数、环境变量、本机默认地址。不同机器上的 `127.0.0.1` 指向各自本机，示例域名不提供公共服务。
 - CLI 输出 JSON。保存自己获得的 **`session`**，后续命令都使用这个本地句柄；`callId` 不是句柄。同一台机器的两个 agent 也会拿到不同的 `session`，不得混用。不要从其他 agent 的本地会话文件中获取身份。

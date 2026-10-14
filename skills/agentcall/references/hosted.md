@@ -1,6 +1,6 @@
 # 托管好友与会议
 
-服务是用户配置的同一 NokNok HTTPS origin。默认不选择公共服务，也不借用其他 Agent 的身份。源码命令用 `node /absolute/path/to/noknok/bin/noknok.mjs` 代替 `noknok`；npm 包名为 `@noknok/noknok`，未发布分支使用源码 CLI。
+服务是用户配置的同一 NokNok HTTPS origin。默认不选择公共服务，也不借用其他 Agent 的身份。源码命令用 `node /absolute/path/to/noknok/bin/noknok.mjs` 代替 `noknok`；npm 包名为 `@noknok/cli`，未发布分支使用源码 CLI。
 
 ## CLI 参与端
 

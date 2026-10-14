@@ -1,10 +1,11 @@
 # Releasing NokNok
 
-The npm package is **`@noknok/noknok`**; its executable remains **`noknok`**
+The npm package is **`@noknok/cli`**; its executable remains **`noknok`**
 (`agentcall` is a compatibility alias). It is a public package on
 `https://registry.npmjs.org`, released from `2heal1/noknok` through
-`.github/workflows/release.yml`. The existing package version, **0.6.0**, is the
-initial bootstrap version. Public npm distribution does not open the hosted
+`.github/workflows/release.yml`. The first public CLI version is **0.0.1**.
+Earlier versions in historical validation notes describe unpublished development
+milestones, not npm releases. Public npm distribution does not open the hosted
 service to real users: end-to-end encryption remains a launch requirement, and
 hosted testing still uses synthetic content. See the [launch checklist](launch-checklist.md).
 
@@ -23,7 +24,7 @@ hosted testing still uses synthetic content. See the [launch checklist](launch-c
 4. Review and merge that release pull request. The next push to `main` publishes
    the version through npm OIDC and verifies the version and `latest` tag online.
 
-The initial patch changeset prepares **0.6.1** after the **0.6.0** bootstrap; it
+The initial patch changeset prepares **0.0.2** after the **0.0.1** bootstrap; it
 must not silently change the version selected for the first publication.
 Subsequent pushes without a new version are safe: Changesets skips versions
 already on npm. The workflow verifies registry state rather than claiming every
@@ -32,11 +33,11 @@ run uploaded a new version. No GitHub Release is created by this workflow.
 For consumer use after the selected version is published:
 
 ```sh
-npm install --global @noknok/noknok
+npm install --global @noknok/cli
 noknok --help
 
 # Explicitly choose the binary because the package includes two CLI aliases.
-npm exec --yes --package=@noknok/noknok@0.6.0 -- noknok --help
+npm exec --yes --package=@noknok/cli@0.0.1 -- noknok --help
 ```
 
 ## Repository and npm setup
@@ -55,7 +56,7 @@ Before the first automated release:
 - Merge `release.yml` onto the default branch before relying on **Run workflow**.
   An unmerged workflow file on a feature branch does not establish the manual
   dispatch entry point. After that, select the intended branch in the UI.
-- Bootstrap `@noknok/noknok@0.6.0` as described below, then configure its npm
+- Bootstrap `@noknok/cli@0.0.1` as described below, then configure its npm
   trusted publisher with GitHub owner **`2heal1`**, repository **`noknok`**,
   workflow filename **`release.yml`**, **no environment**, and direct publishing
   allowed. The filename is not `.github/workflows/release.yml`.
@@ -81,7 +82,7 @@ already run CI. See [GitHub's workflow-trigger rules](https://docs.github.com/en
 ## First publication only
 
 npm trust attaches to an existing package. An npm organization/scope alone does
-not create `@noknok/noknok`, authenticate this machine, or configure a publisher.
+not create `@noknok/cli`, authenticate this machine, or configure a publisher.
 Use a logged-in npm maintainer with permission to publish into `@noknok` for the
 one-time bootstrap. If `npm whoami` returns 401, complete `npm login` locally
 before proceeding; do not substitute an automation token.
@@ -93,14 +94,14 @@ the actual publish:
 node --version
 npm --version
 npm whoami --registry=https://registry.npmjs.org
-npm view @noknok/noknok versions dist-tags --json --registry=https://registry.npmjs.org
+npm view @noknok/cli versions dist-tags --json --registry=https://registry.npmjs.org
 npm ci
 npm run check
 npm run check:package
 npm pack --dry-run
 mkdir -p /tmp/noknok-npm-bootstrap
 npm pack --pack-destination /tmp/noknok-npm-bootstrap
-node scripts/check-package.mjs --archive /tmp/noknok-npm-bootstrap/noknok-noknok-0.6.0.tgz
+node scripts/check-package.mjs --archive /tmp/noknok-npm-bootstrap/noknok-cli-0.0.1.tgz
 ```
 
 A registry `E404` means the package was not visible to that request; an
@@ -110,15 +111,15 @@ failures do not establish availability. Verify the archive's file list,
 package name, and version. Publish that inspected archive as public with the
 `latest` tag, using the maintainer's interactive authentication/OTP. Never store
 or paste an OTP into repository files or logs. Do not run the version script
-before this bootstrap: **0.6.0** is the intended initial version.
+before this bootstrap: **0.0.1** is the intended initial version.
 
 After successful publication, configure trust using the npm package settings or
 the supported CLI command (interactive proof of presence may be required):
 
 ```sh
-npm trust github @noknok/noknok --repo 2heal1/noknok --file release.yml --allow-publish --yes
-npm view @noknok/noknok@0.6.0 version repository --json --registry=https://registry.npmjs.org
-npm view @noknok/noknok dist-tags --json --registry=https://registry.npmjs.org
+npm trust github @noknok/cli --repo 2heal1/noknok --file release.yml --allow-publish --yes
+npm view @noknok/cli@0.0.1 version repository --json --registry=https://registry.npmjs.org
+npm view @noknok/cli dist-tags --json --registry=https://registry.npmjs.org
 ```
 
 Verify the trusted publisher settings online and run an OIDC release. A local

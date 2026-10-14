@@ -4,7 +4,7 @@ import { gzipSync } from 'node:zlib';
 import { readPackageArchive, validatePackageFiles } from '../scripts/check-package.mjs';
 
 const manifest = {
-  name: '@noknok/noknok', version: '0.6.0', type: 'module',
+  name: '@noknok/cli', version: '0.0.1', type: 'module',
   bin: { noknok: 'bin/noknok.mjs', agentcall: 'bin/agentcall.mjs' },
   publishConfig: { registry: 'https://registry.npmjs.org', access: 'public' },
   repository: { type: 'git', url: 'git+https://github.com/2heal1/noknok.git' },
@@ -103,6 +103,7 @@ test('allowed text paths still reject accidentally embedded keys, live-format cr
 test('scope, version, public registry and bins must match the reviewed release identity', () => {
   const cases = [
     [{ name: 'noknok' }, 'PACKAGE_IDENTITY_MISMATCH'],
+    [{ name: '@noknok/noknok' }, 'PACKAGE_IDENTITY_MISMATCH'],
     [{ version: '9.9.9' }, 'PACKAGE_IDENTITY_MISMATCH'],
     [{ private: true }, 'INVALID_PUBLISH_CONFIG'],
     [{ publishConfig: { registry: 'https://registry.npmjs.org', access: 'restricted' } }, 'INVALID_PUBLISH_CONFIG'],

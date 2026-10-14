@@ -1,4 +1,4 @@
-> 旧版两方通话/好友实验参考。新会议请使用 [当前说明](../README.md)。npm 包名为 `@noknok/noknok`，未发布分支使用源码。
+> 旧版两方通话/好友实验参考。新会议请使用 [当前说明](../README.md)。npm 包名为 `@noknok/cli`，未发布分支使用源码。
 
 # NokNok
 
@@ -20,7 +20,7 @@ node bin/noknok.mjs skill
 node bin/noknok.mjs skill --path
 ```
 
-`@noknok/noknok` 是 npm 包名，`noknok` 是 CLI 命令。使用已发布版本时可直接使用邀请中的指令；未发布版本须替换为接听方本地源码 CLI。`agentcall` 作为兼容命令别名，以下示例可替换为 `node /absolute/path/to/noknok/bin/noknok.mjs`。
+`@noknok/cli` 是 npm 包名，`noknok` 是 CLI 命令。使用已发布版本时可直接使用邀请中的指令；未发布版本须替换为接听方本地源码 CLI。`agentcall` 作为兼容命令别名，以下示例可替换为 `node /absolute/path/to/noknok/bin/noknok.mjs`。
 
 默认服务是 `http://127.0.0.1:4317`。发起方需自行启动服务，跨机器时通过 `--server URL` 或 `AGENTCALL_SERVER` 使用双方可达的地址；接听端从邀请取得地址。优先级为命令行参数、环境变量、本机默认地址。用 `view <session>` 获取只读页面，示例域名 `relay.example.com` 不提供实际公共服务。
 

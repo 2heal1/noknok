@@ -1,6 +1,6 @@
 # Self-hosting
 
-NokNok provides two modes: `server` hosts temporary invitation-based meetings; `hosted-server` adds independent identities, authorized contacts, and native MCP Events. Both serve meeting pages and APIs in one process without running a model. Both require the [encrypted meeting protocol](e2ee.md). Upgrade clients, servers, and browser assets together; review [validation](validation.md#evidence-still-needed-per-target-releaseenvironment) for outstanding acceptance work.
+NokNok provides two modes: `server` hosts temporary invitation-based meetings; `hosted-server` adds independent identities, authorized contacts, OAuth and native MCP Events. Both serve meeting pages and APIs in one process without running a model. The OAuth authorization endpoints are embedded in the hosted process and use the existing SQLite control database; no separate identity service is needed. Both modes require the [encrypted meeting protocol](e2ee.md). Upgrade clients, servers, and browser assets together; review [validation](validation.md#evidence-still-needed-per-target-releaseenvironment) for outstanding acceptance work.
 
 `/meeting` supports people and agents. Meetings are created through CLI/local MCP; the page has no meeting-creation form without an invitation. `/health` reports service health. Browser encryption requires HTTPS or localhost. Meeting ciphertext waits in bounded memory until acknowledged or expired; hosted control state uses built-in SQLite.
 
@@ -66,9 +66,13 @@ An optional read-only dashboard at `/admin` shows usage and runtime health. Conf
 
 ## Identity storage upgrades
 
-The current startup path upgrades control schema 1 to 2, removes retired admission records, and preserves registered accounts, agent credentials, contact grants, revocations, quotas, and subscriptions. Incomplete legacy registrations must restart with a new profile. Back up the database and both service keys before upgrading, retaining the same origin.
+The current startup path upgrades control schemas 1 and 2 to 3, removes retired admission records when upgrading schema 1, and preserves registered accounts, Agent credentials, contact grants, revocations and quotas. Schema 3 stores multiple subscriptions by subscription ID and preserves existing single-subscription records under their Agent owner. OAuth metadata and credentials use the same control database. Incomplete legacy registrations must restart with a new profile. Back up the database and both service keys before upgrading, retaining the same origin.
 
-Older programs cannot read schema 2. Image rollback alone cannot downgrade the database. Downgrading requires stopping the application and restoring the matching older database and service keys; never overwrite live files. Automatic deployment does not restore databases.
+Older programs cannot read schema 3. Image rollback alone cannot downgrade the database. Downgrading requires stopping the application and restoring the matching older database and service keys; never overwrite live files. Automatic deployment does not restore databases.
+
+Upgrade the service during an idle window: restarting or replacing the application process loses active in-memory meetings, pending ciphertext and transient notification work. OAuth does not move those rooms into SQLite. Ask participants to finish, save and end active meetings first; existing local histories remain at their endpoints. OAuth grant revocation by itself does not restart the service or end meetings.
+
+For clients upgrading from 0.3.1, stop the old host's subscription, connect `/mcp` with OAuth and pair the original CLI identity, then recreate and verify the subscription before removing the old token-bearing connection. If the old host cannot unsubscribe, use `noknok hosted subscription-status --agent HANDLE` and `noknok hosted subscription-stop SUBSCRIPTION_ID --agent HANDLE` in the original local environment, or allow the old subscription to expire. The new OAuth grant cannot manage legacy Agent-owned subscriptions. Permanent credentials remain local; path-token URLs are disabled. See [MCP migration](mcp.md#oauth-authorization-and-existing-identity-pairing).
 
 ## Deployment after npm publication
 
@@ -115,7 +119,7 @@ noknok server --host 0.0.0.0 --port 4317 --public-url https://relay.example.com
 
 Use `NOKNOK_SERVER_KEY` to gate basic meeting creation. This shared key is not hosted multi-identity authentication. `packages/cli/dist/src/deploy/server.js` also accepts `PORT`, `NOKNOK_PUBLIC_URL`, `NOKNOK_SERVER_KEY`, `NOKNOK_MAX_MEETINGS`, and related configuration; it does not enable hosted mode.
 
-Hosted control data includes account/agent bindings, quotas, revocations, minimal invitation-redemption metadata, and active subscriptions. Redemption IDs, claimants, and expiry can reveal relationships, although the service does not keep a complete contact directory. It signs contact grants with its HMAC key. Subscription fields are encrypted at rest; this does not hide them from the operator. Meeting content keys stay at endpoints. See [hosted architecture](hosted-service.md) and [E2EE boundaries](e2ee.md).
+Hosted control data includes account/agent bindings, OAuth client/authorization records and credential hashes, quotas, revocations, minimal invitation-redemption metadata, and active subscriptions. Redemption IDs, claimants, and expiry can reveal relationships, although the service does not keep a complete contact directory. It signs contact grants with its HMAC key. Subscription fields are encrypted at rest; this does not hide them from the operator. Meeting content keys stay at endpoints. See [hosted architecture](hosted-service.md) and [E2EE boundaries](e2ee.md).
 
 Meetings default to a two-hour lifetime and ten-minute terminal metadata retention. Pending ciphertext has a separate five-minute default deadline and is removed earlier after all required participants save and acknowledge it. Initial content also waits for the first peer within that same deadline. Reads, successful callbacks, disconnects, and retries do not extend retention. Remaining event metadata cannot reconstruct removed content.
 

@@ -113,7 +113,7 @@ export class HostedStore {
         CREATE TABLE IF NOT EXISTS offer_claims (id TEXT PRIMARY KEY, claimant TEXT NOT NULL REFERENCES agents(id), accepted_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS revocations (id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS quotas (owner TEXT NOT NULL, bucket TEXT NOT NULL, window_start INTEGER NOT NULL, expires_at INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY(owner,bucket));
-        CREATE TABLE IF NOT EXISTS subscriptions (agent_id TEXT PRIMARY KEY REFERENCES agents(id), subscription_id TEXT NOT NULL, encrypted TEXT NOT NULL, expires_at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS subscriptions (agent_id TEXT NOT NULL REFERENCES agents(id), subscription_id TEXT NOT NULL, encrypted TEXT NOT NULL, expires_at INTEGER NOT NULL, PRIMARY KEY(agent_id,subscription_id));
       `);
       this._transaction(() => {
         for (const [name, value] of [['realm', this.realm], ['signing_key', digest(this.signingKey)], ['subscription_key', digest(this.encryptionKey)]]) {
@@ -128,7 +128,7 @@ export class HostedStore {
   }
   private upgradeSchema() {
     const version = this._row('SELECT value FROM meta WHERE name=?', 'schema_version')?.value;
-    if (version && !['1', '2'].includes(version)) fail(500, 'STORE_CONFIGURATION_MISMATCH', 'Unsupported control store schema');
+    if (version && !['1', '2', '3'].includes(version)) fail(500, 'STORE_CONFIGURATION_MISMATCH', 'Unsupported control store schema');
     if (version === '1') {
       // Preserve existing identities and their keys while removing admission data.
       // Rebuild without renaming the old table so agents' foreign keys stay valid.
@@ -145,8 +145,19 @@ export class HostedStore {
           this.db.prepare('UPDATE meta SET value=? WHERE name=?').run('2', 'schema_version');
         });
       } finally { this.db.exec('PRAGMA foreign_keys=ON'); }
+    }
+    if (version === '1' || version === '2') {
+      this._transaction(() => {
+        // Retain encrypted callback records and their identity-bound AAD. A new
+        // destination is an additional subscription, never an implicit replace.
+        this.db.exec(`CREATE TABLE subscriptions_next (agent_id TEXT NOT NULL REFERENCES agents(id), subscription_id TEXT NOT NULL, encrypted TEXT NOT NULL, expires_at INTEGER NOT NULL, PRIMARY KEY(agent_id,subscription_id));
+          INSERT INTO subscriptions_next SELECT agent_id,subscription_id,encrypted,expires_at FROM subscriptions;
+          DROP TABLE subscriptions;
+          ALTER TABLE subscriptions_next RENAME TO subscriptions;`);
+        this.db.prepare('UPDATE meta SET value=? WHERE name=?').run('3', 'schema_version');
+      });
     } else {
-      this.db.prepare('INSERT OR IGNORE INTO meta(name,value) VALUES (?,?)').run('schema_version', '2');
+      this.db.prepare('INSERT OR IGNORE INTO meta(name,value) VALUES (?,?)').run('schema_version', '3');
     }
   }
   private _row(sql: string, ...values: SQLInputValue[]): StoreRow | undefined {
@@ -351,15 +362,22 @@ export class HostedStore {
     if (!Number.isSafeInteger(expiresAt) || expiresAt <= this.now() || expiresAt > this.now() + 31 * DAY) fail(400, 'INVALID_ARGUMENT', 'Subscription expiry must be within 31 days');
     const serialized = JSON.stringify(record);
     if (Buffer.byteLength(serialized) > MAX_RECORD_BYTES) fail(413, 'SUBSCRIPTION_TOO_LARGE', 'Subscription is too large');
-    this.db.prepare('INSERT INTO subscriptions(agent_id,subscription_id,encrypted,expires_at) VALUES (?,?,?,?) ON CONFLICT(agent_id) DO UPDATE SET subscription_id=excluded.subscription_id,encrypted=excluded.encrypted,expires_at=excluded.expires_at').run(agentId, record.id, this._encrypt(agentId, serialized), expiresAt);
+    this.db.prepare('INSERT INTO subscriptions(agent_id,subscription_id,encrypted,expires_at) VALUES (?,?,?,?) ON CONFLICT(agent_id,subscription_id) DO UPDATE SET encrypted=excluded.encrypted,expires_at=excluded.expires_at').run(agentId, record.id, this._encrypt(agentId, serialized), expiresAt);
     return structuredClone(record);
   }
   setSubscription(agentId, record) { return this.putSubscription(agentId, record); }
-  getSubscription(agentId: string): HostedSubscription | null {
+  getSubscription(agentId: string, subscriptionId?: string): HostedSubscription | null {
     this.accountForAgent(agentId);
-    const row = this._row('SELECT encrypted,expires_at FROM subscriptions WHERE agent_id=?', agentId);
+    const row = subscriptionId === undefined
+      ? this._row('SELECT encrypted,expires_at FROM subscriptions WHERE agent_id=? AND expires_at>? ORDER BY subscription_id LIMIT 1', agentId, this.now())
+      : this._row('SELECT encrypted,expires_at FROM subscriptions WHERE agent_id=? AND subscription_id=?', agentId, text(subscriptionId, 'subscriptionId'));
     if (!row || row.expires_at <= this.now()) return null;
     return this._decrypt(agentId, row.encrypted);
+  }
+  listSubscriptions(agentId: string): HostedSubscription[] {
+    this.accountForAgent(agentId);
+    return (this.db.prepare('SELECT encrypted FROM subscriptions WHERE agent_id=? AND expires_at>? ORDER BY subscription_id').all(agentId, this.now()) as unknown as StoreRow[])
+      .map(row => this._decrypt(agentId, row.encrypted));
   }
   deleteSubscription(agentId: string, subscriptionId?: string): boolean {
     this.accountForAgent(agentId);

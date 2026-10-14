@@ -116,7 +116,7 @@ test('hosted service gates all creation and disables legacy registration/proxy r
   assert.equal((await f.raw('/v1/meetings', { value: { name: 'anonymous', purpose: 'bypass' } })).status, 401);
   for (const path of ['/v1/hosted/redeem', '/v1/calls', '/v1/contacts/register', '/v1/gateway', '/proxy', '/mcp/invalid']) {
     const result = await f.raw(path, { value: { op: 'register' } });
-    assert.ok([401, 404].includes(result.status), path);
+    assert.ok([401, 404, 410].includes(result.status), path);
   }
   assert.equal((await f.raw('/v1/hosted/accounts', { value: { requestId: 'guessable' } })).status, 400);
   assert.equal((await f.raw('/v1/hosted/accounts', { value: { requestId: secret(), code: 'removed' } })).status, 400);
@@ -131,7 +131,8 @@ test('hosted service gates all creation and disables legacy registration/proxy r
   assert.ok(tools.tools.some(tool => tool.name === 'noknok_meeting_create'));
   assert.ok(!tools.tools.some(tool => /shell|proxy|fetch_url/.test(tool.name)));
   const endpoint = await f.raw(`/mcp/${a.agentToken}`, { value: { jsonrpc: '2.0', id: 1, method: 'ping' } });
-  assert.deepEqual(endpoint.body.result, {});
+  assert.equal(endpoint.status, 410);
+  assert.equal(endpoint.body.error.code, 'url_credentials_retired');
   const asset = await fetch(f.service.origin + '/meeting-invitation.js');
   assert.equal(asset.status, 200);
   assert.match(asset.headers.get('content-type'), /javascript/);
@@ -471,9 +472,9 @@ test('revocation during native MCP uploads prevents joining and exposing pending
   const f = await fixture(t);
   const host = await f.register();
   const room = await f.tool(host, 'meeting_create', { purpose: 'never-disclose-to-revoked-agent', request_id: 'slow-join' });
-  for (const privateUrl of [false, true]) {
+  {
     const peer = await f.register();
-    const path = privateUrl ? `/mcp/${peer.agentToken}` : '/mcp';
+    const path = '/mcp';
     let arrive;
     const arriving = new Promise(resolve => { arrive = resolve; });
     const listen = req => { if (req.url === path) arrive(); };
@@ -483,7 +484,7 @@ test('revocation during native MCP uploads prevents joining and exposing pending
     let writer;
     const response = new Promise((resolve, reject) => {
       writer = http.request(f.service.origin + path, { method: 'POST', headers: {
-        'Content-Type': 'application/json', ...(privateUrl ? {} : { Authorization: `Bearer ${peer.agentToken}` }),
+        'Content-Type': 'application/json', Authorization: `Bearer ${peer.agentToken}`,
       } }, res => {
         const chunks = [];
         res.on('data', chunk => chunks.push(chunk));

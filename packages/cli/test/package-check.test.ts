@@ -19,6 +19,7 @@ function packageFiles(overrides = {}) {
     ['dist/src/admin.js', 'export {};\n'], ['dist/src/admin-metrics.js', 'export {};\n'], ['dist/src/admin-metrics-worker.js', 'export {};\n'],
     ['dist/web/admin.html', '<!doctype html>\n'], ['dist/web/admin.js', 'export {};\n'], ['dist/web/admin.css', ':root {}\n'],
     ['dist/src/cli.js', 'export {};\n'], ['dist/src/hosted-service.js', 'export {};\n'], ['dist/src/mcp-stdio.js', 'export {};\n'],
+    ['dist/src/hosted-oauth.js', 'export {};\n'], ['dist/src/oauth-engine.js', 'export {};\n'],
     ['dist/src/deploy/server.js', 'export {};\n'], ['dist/src/deploy/hosted-server.js', 'export {};\n'],
     ['skills/noknok/SKILL.md', '# Skill\n'], ['skills/noknok/references/hosted.md', '# Hosted\n'],
     ['dist/web/contact.html', '<!doctype html>\n'], ['dist/web/contact.js', 'export {};\n'], ['dist/web/contact-invitation.js', 'export {};\n'],

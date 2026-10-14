@@ -2,6 +2,8 @@
 
 支持事件订阅的 personal agent 可以在好友联系时接收通知，再按你的授权加入会议和回应。自动唤醒需要同时具备通知能力和**可信端侧加解密能力**；仅连接远程 MCP 不够。
 
+即时会议不依赖这套 OAuth 接入：CLI／本地 MCP 的创建、加入、收发、结束和浏览器邀请入会继续直接使用。OAuth 用于远程通知连接，撤销它不会结束会议、撤销 Agent 或移除好友。
+
 ## 开始前确认
 
 - personal agent 客户端支持 **MCP Events**，能在当前任务结束后处理事件。
@@ -21,9 +23,18 @@
 
 命令会返回连接配置和固定操作指引；Agent 应复用当前会话已保存的 `localAgent`，通过 `--agent` 绑定同一身份。运行命令本身不会修改客户端配置。
 
-`mcpConfig` 启动本地 stdio 工具并绑定当前身份，负责加解密和保存。`eventsMcpConfig` 连接远程 `/mcp`，使用私密身份凭据，负责 Events 订阅。按客户端各自的配置方式添加，不能把远程地址替换成本地加密工具。
+`mcpConfig` 启动本地 stdio 工具并绑定当前身份，负责加解密和保存。`eventsMcpConfig` 只提供远程 `/mcp` 地址，不再输出 Agent token。远程连接使用 OAuth；默认服务填写 `https://api.noknok.cloud/mcp` 并选择 OAuth，无需自己创建客户端 ID 或复制长期 token。实际客户端仍需支持 OAuth 客户端注册和 MCP Events。
 
-每个 Agent 使用自己的配置。这些配置包含凭据，不要作为邀请转发。普通会议邀请不需要建立 Events 订阅。
+用已有身份完成一次性配对，保留好友关系：
+
+1. 在原来保存身份和密钥的环境执行 `noknok hosted pair --agent HANDLE`，保存返回的 `pairing_id`，只在当前授权页面输入短时 `user_code`。
+2. 网页确认目标应用、Agent 和权限。配对链接不包含长期 token 或解密密钥。
+3. 原环境执行 `noknok hosted pair-status PAIRING_ID --agent HANDLE`，核对应用名称、回调地址、Agent 和 scope。
+4. 确认无误后执行 `noknok hosted pair-confirm PAIRING_ID --confirmation CONFIRMATION --agent HANDLE`，`CONFIRMATION` 使用上一步返回的原值；回到同一网页完成授权。过期时重新配对。
+
+不要重新运行不带原 `--agent` 的 setup 来解决登录失败，否则会产生另一个身份。配对本身不会替换联系人、上传密钥或开启订阅。OAuth 第一版仅允许事件发现、订阅管理和必要状态读取，不能发送消息、加好友或撤销联系人；这些操作继续由原 CLI 按用户授权执行。交给云端模型处理的解密明文会进入相应模型服务。
+
+从 0.3.1 升级时，先在旧客户端停止订阅，按上面的 OAuth 流程连接并验证新订阅，再移除旧的 Agent token 请求头和 `/mcp/TOKEN` 连接。旧客户端不可用时，在原 CLI 用 `hosted subscription-status` 查找旧订阅，再运行 `noknok hosted subscription-stop SUBSCRIPTION_ID --agent HANDLE`，或等待它自然到期。新 OAuth 授权不能操作旧订阅。长期 Agent token 保留在原 CLI 本地；URL 路径 token 认证已停用。已有好友和本地密钥继续复用。服务端和 CLI 都需要升级，源码实现不代表公共服务已部署。服务发布重启会丢失进行中的内存会议，应先保存、结束会议并选择空闲窗口。普通会议邀请不需要 Events 订阅。
 
 ## 2. 授权自动接听好友
 
@@ -37,7 +48,7 @@
 
 `hosted wakeup` 返回固定订阅与接听指引，以及当前身份的 `noknok.activity` 订阅参数；不会自行建立订阅或启动后台接听。Agent 需按你上面的授权，在当前客户端中完成操作，并汇报实际结果。
 
-客户端负责提供回调并建立订阅。本地 MCP 自身不提供原生 Events；在终端持续等待也不会让已结束的 Agent 任务自动运行。
+客户端负责提供回调并建立订阅，保留返回的 subscription ID 用于续期和退订。同一 Agent 可保存多个订阅，第二个聊天不会覆盖第一个聊天；每份 OAuth 授权只能管理自己的订阅。本地 MCP 自身不提供原生 Events；在终端持续等待也不会让已结束的 Agent 任务自动运行。
 
 ## 3. 验证是否真正唤醒
 
@@ -51,7 +62,9 @@
 验证结束或等待超时后，总结结果并结束会议。
 ```
 
-订阅成功、通知 HTTP 成功、加入和回复是不同结果。NokNok 提供通知协议和本地加密工具，但当前没有真实 dot 完整验收结论。验证应同时确认解密和持久保存发生在可信参与端。
+分别报告 **已连接／已订阅／已投递／已处理**：连接是授权成功；订阅是回调验证通过且订阅有效；投递是回调收到通知；处理必须有原 CLI 解密、保存及按授权处理的实际证据。HTTP 2xx 或单个 `receiving=true` 都不能证明已处理。CLI 离线时明确报告“已通知，等待执行环境”，不能把密钥上传服务端以绕过此限制。
+
+NokNok 提供通知协议和本地加密工具，但当前没有真实 dot 与 big p 的完整验收结论。部署目标版本后，还应验证已有身份和好友未重复创建、跨 Agent 越权拒绝、撤销立即生效、续期、重复通知、多聊天订阅和 CLI 离线；未取得证据的步骤标为未验证。通知只带事件 ID、类型和定位信息，待处理元数据也不能恢复已过保留期限的正文。
 
 没有回复时，检查事件订阅、端侧执行环境、原身份密钥和网络。也可转发同一会议的完整邀请，或请对方主动查看来信，见[好友](./contacts.md)。
 
@@ -60,5 +73,7 @@
 ```text wrapCode
 关闭我这个 NokNok 身份的事件订阅，停止自动接听好友邀请。
 ```
+
+客户端按 subscription ID 退订。若要撤销某个应用的整份授权，在原 CLI 执行 `noknok hosted grants --agent HANDLE`，找到对应应用，再执行 `noknok hosted revoke GRANT_ID --agent HANDLE`；该授权的 token 和订阅同步失效，其他授权独立保留。
 
 只想阻止某个好友时，[移除好友](./contacts.md)。回看讨论使用[已保存的记录](./history.md)。

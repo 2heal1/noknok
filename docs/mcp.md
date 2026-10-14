@@ -5,7 +5,7 @@ Meeting content is encrypted and decrypted at the CLI, browser, or local stdio M
 | Connection | Entry point | Purpose | Wake an idle task |
 | --- | --- | --- | --- |
 | Local MCP | `noknok mcp`, stdio | Encrypted meetings; contacts, calls, and acceptance for a configured hosted profile | No native Events; waiting remains inside the active task |
-| Hosted remote MCP | `https://your-domain.example/mcp` | Ciphertext protocol, identity metadata, native Events subscriptions | Requires host support and user authorization |
+| Hosted remote MCP with OAuth | `https://your-domain.example/mcp` | Event discovery, owned subscriptions and minimal identity/pending status | Requires host support and user authorization |
 | Complete invitation | `noknok meeting join` or browser | Join using the key in the link fragment | The user forwards or opens it |
 
 NokNok does not provide a replacement agent, arbitrary URL fetch, remote shell, or local file-reading tools. Communication and local history use the meeting tools.
@@ -57,7 +57,34 @@ noknok hosted config --agent <returned-localAgent>
 `hosted config` returns two separate configurations:
 
 - `mcpConfig` starts local stdio MCP pinned to the profile. This endpoint handles plaintext and keys.
-- `eventsMcpConfig` connects to remote `/mcp` with `Authorization: Bearer …` for native Events. Keep these identity credentials private.
+- `eventsMcpConfig` contains only the remote `/mcp` URL. Choose OAuth in the host and pair the existing Agent; the CLI no longer exports its permanent Agent token in configuration.
+
+Ordinary CLI/local-MCP meeting creation, invitation joining, sending, receiving and ending do not require OAuth. Browser invitation guests still join using their invitation. OAuth is an additional authorization for remote Events; revoking it does not end meetings, revoke the Agent, remove contacts or erase local keys.
+
+## OAuth authorization and existing-identity pairing
+
+The hosted service embeds its OAuth endpoints in the existing process and SQLite control store. It publishes protected-resource metadata at `/.well-known/oauth-protected-resource/mcp` and authorization-server metadata at `/.well-known/oauth-authorization-server`. The resource is the exact canonical `${origin}/mcp` URL. Clients use Authorization Code with S256 PKCE and dynamic client registration; authorization codes are single-use and bound to the client, exact registered redirect URI and resource. Redirect URI matching has no wildcard expansion. See [OpenAI MCP authentication](https://developers.openai.com/api/docs/guides/custom-mcp-server).
+
+The default access scopes are `noknok:events:read`, `noknok:events:manage` and `noknok:status:read`. The server enforces them on every method/tool; a token cannot send meeting messages, create calls, change contacts or act for another Agent. Access tokens last five minutes. Refresh tokens rotate and the authorization has a 30-day absolute lifetime; reuse of an old refresh token revokes its family. Tokens are audience-bound to the MCP resource.
+
+In the original trusted CLI environment:
+
+```sh
+noknok hosted pair --agent LOCAL_AGENT
+# Enter the short-lived user_code on the current OAuth authorization page.
+noknok hosted pair-status PAIRING_ID --agent LOCAL_AGENT
+# Review the application, callback, Agent and scope before passing its exact confirmation value.
+noknok hosted pair-confirm PAIRING_ID --confirmation CONFIRMATION --agent LOCAL_AGENT
+# Return to the same browser page to complete authorization.
+noknok hosted grants --agent LOCAL_AGENT
+noknok hosted revoke GRANT_ID --agent LOCAL_AGENT
+```
+
+Pairings expire, are single-use and rate-limited. The browser and original CLI must approve the same request. A pairing URL contains neither the short code, a permanent token nor a content key. Pairing reuses the existing identity and preserves contacts. A new `setup` without the original profile creates a different identity and is not a login repair. Grant revocation invalidates its tokens and cancels only its subscriptions; other grants and ordinary meetings continue independently.
+
+Upgrade both service and CLI from 0.3.1. Stop the old host subscription, reconnect `/mcp` using OAuth, verify the new subscription, then remove remote Agent-token headers and retired `/mcp/TOKEN` connections. Permanent CLI credentials remain local and can still authenticate the trusted CLI ciphertext transport; path-token authentication is disabled. Old subscriptions survive the database upgrade under their Agent owner, so the new OAuth grant cannot manage them. If the old host cannot unsubscribe, the original CLI can inspect `hosted subscription-status` and run `hosted subscription-stop SUBSCRIPTION_ID --agent LOCAL_AGENT`, or wait for expiry. Do not copy a permanent token into a remote client to work around a failed authorization.
+
+## Local hosted tools
 
 | Local tool | Purpose |
 | --- | --- |
@@ -66,14 +93,14 @@ noknok hosted config --agent <returned-localAgent>
 | `noknok_hosted_friends` | Sync acceptance and recover the initiating side's locally saved contact key |
 | `noknok_hosted_call` / `noknok_hosted_create` | Encrypt purpose/context and create a meeting; contact calls also wrap its key |
 | `noknok_hosted_inbox` / `noknok_hosted_accept` | Inspect directed invitations, authenticate/unwrap the key locally, and join |
-| `noknok_hosted_subscription_status` | Inspect the separate Events subscription |
+| `noknok_hosted_subscription_status` | Inspect separate Events subscriptions and delivery outcomes |
 | `noknok_hosted_friend_remove` | Revoke contact authorization |
 
 Creation, calling, and acceptance return a local `am_…` session. Continue with the same connection's `noknok_meeting_*` tools. Guests can still use `noknok_meeting_join` without a hosted account. Missing endpoint contact keys prevent encrypted contact calls.
 
-## Remote MCP ciphertext contract
+## Trusted-client ciphertext contract
 
-The remote interface uses `meeting_id`, not a local session handle. Custom clients must implement endpoint encryption:
+The trusted CLI transport uses `meeting_id`, not a local session handle, and authenticates with the original local Agent credential. The minimal OAuth Events grant cannot call these messaging tools. Custom trusted clients must implement endpoint encryption:
 
 - Create/call requires `purpose_ciphertext`, `context_ciphertext`, and `encryption_id`; directed calls also require `encrypted_key`.
 - Send requires `text_ciphertext`; end requires `reason_ciphertext` and optionally `text_ciphertext`.
@@ -88,7 +115,7 @@ A remote-only cloud host without a trusted encryption execution environment cann
 
 The remote server exposes `server/discover`, `events/list`, `events/subscribe`, and `events/unsubscribe`, with event `noknok.activity` and declared protocol version `2026-07-28`. Host support and policy depend on the [official MCP Events documentation](https://developers.openai.com/plugins/build/mcp-events) and the actual host. Local stdio does not expose these event methods.
 
-Adding a contact does not authorize background handling. With explicit user authorization, a supporting host subscribes its own identity; `recipient_id` must equal its `agentId`. The host supplies a public HTTPS callback URL and `whsec_…` signing key. NokNok verifies the challenge, stores an expiring subscription, and preserves it across restarts. The host renews it.
+Adding a contact does not authorize background handling. With explicit user authorization, a supporting host subscribes its OAuth-bound identity; `recipient_id` must equal its `agentId`. The host supplies a public HTTPS callback URL and `whsec_…` signing key. NokNok verifies the challenge, stores expiring subscriptions by subscription ID, and preserves them across restarts. Each host retains its ID for renewal and removal; a second subscription does not replace another chat's callback. OAuth clients can manage only subscriptions owned by their own grant.
 
 ```text
 User authorizes B -> B's host subscribes through remote Events
@@ -101,12 +128,14 @@ A / B             -> Continue through their own local meeting_* sessions
 
 Events contain activity type, recipient ID, and meeting or contact-exchange ID, without message content or keys. Permissions are checked during contact, subscription, queueing, retries, and connection establishment. Without a subscription, the sender can privately forward the complete invitation produced by local tools.
 
-`queued`, callback `delivered`, `joined`, and `replied` describe different outcomes. Acceptance testing must end the setup task, call from another identity, and observe the recipient start a task, decrypt with its original profile, join, and reply substantively without new human input. Mock-client tests cannot establish native-host wake-up.
+Report connected, subscribed, delivered and processed separately. `noknok_subscription_status` reports connection/subscriptions and per-subscription deliveries with `processing: "not_observed"` and `executionEnvironment: "requires_original_cli"`; it cannot detect whether the original CLI is online or prove a model acted. HTTP 2xx establishes callback receipt only. If the trusted execution environment is unavailable, report “Notified, waiting for execution environment” without uploading keys. The metadata-only `noknok_pending` tool can locate pending invitations or active meetings; it supplies no message bodies, encrypted keys or long-lived credentials and cannot recover expired bodies.
+
+Acceptance testing must end the setup task, call from another identity, and observe the recipient start a task, decrypt with its original profile, join, and reply substantively without new human input. Mock-client tests cannot establish native-host wake-up. Actual dot and big p validation remains pending until that evidence is recorded.
 
 ## Transport and trust
 
 The service sees identities, names, membership, routes, sizes, and timing. It issues contact grants; endpoints generate contact keys. Shared meeting keys do not provide independent participant signatures or forward secrecy. Local plaintext history, hosts/model providers, key distribution, and browser-script publication remain trust boundaries; see [E2EE](e2ee.md). HTTPS protects credentials and metadata.
 
-Callback validation checks every DNS address, rejects private/local/non-public addresses, pins the connection IP while retaining TLS hostname verification, and follows no redirects. Transient failures have bounded retries; `410` disables the current callback and `413` is not retried. Events have no historical replay; `cursor` is `null`.
+Callback validation checks every DNS address, rejects private/local/non-public addresses, pins the connection IP while retaining TLS hostname verification, and follows no redirects. Transient failures have bounded retries; `410` disables the current callback and `413` is not retried. Consumers deduplicate event IDs. Events have no historical replay; `cursor` is `null`. The bounded pending metadata list is a recovery aid only within the current process and retention window.
 
 A source implementation does not prove that a deployed package or actual host has been upgraded. See [validation](validation.md#evidence-still-needed-per-target-releaseenvironment) for acceptance requirements and the [user guide](../apps/docs/docs/en/guide/mcp.md) for host-facing instructions.

@@ -27,9 +27,10 @@ function memoryStore(now) {
   const records = new Map(); const quotas = new Map();
   return {
     records, quotas,
-    getSubscription: agentId => structuredClone(records.get(agentId) ?? null),
-    putSubscription: (agentId, value) => records.set(agentId, structuredClone(value)),
-    deleteSubscription(agentId, id) { if (records.get(agentId)?.id === id) return records.delete(agentId); return false; },
+    getSubscription: (agentId, id) => structuredClone([...records.values()].find(value => value.arguments.recipient_id === agentId && (id === undefined || value.id === id)) ?? null),
+    listSubscriptions: agentId => structuredClone([...records.values()].filter(value => value.arguments.recipient_id === agentId && value.expiresAt > now())),
+    putSubscription: (agentId, value) => records.set(`${agentId}:${value.id}`, structuredClone(value)),
+    deleteSubscription(agentId, id) { return records.delete(`${agentId}:${id}`); },
     consumeQuota(agentId, bucket, { limit, windowMs }) {
       const key = `${agentId}:${bucket}:${Math.floor(now() / windowMs)}`;
       const count = quotas.get(key) ?? 0;
@@ -148,7 +149,7 @@ test('real control-store restart restores an encrypted callback and has no persi
   await assert.rejects(app.notify(agentId, event('evt_after_revoke')), error => error.status === 403);
 });
 
-test('key rotation emits both signatures briefly, never to a replaced URL', async t => {
+test('key rotation emits both signatures briefly and new URLs retain independent subscriptions', async t => {
   const f = fixture(t, { rotationWindowMs: 1500 });
   const first = await f.app.subscribe('B', params());
   const second = await f.app.subscribe('B', params('B', { delivery: { mode: 'webhook', url: URL, secret: ROTATED } }));
@@ -162,14 +163,15 @@ test('key rotation emits both signatures briefly, never to a replaced URL', asyn
   const replacement = await f.app.subscribe('B', params('B', { delivery: { mode: 'webhook', url: `${URL}/new`, secret: SECRET } }));
   assert.notEqual(second.id, replacement.id);
   await f.app.flush();
-  assert.equal(f.sent.length, 2);
-  assert.equal(f.app.status('B').deliveries.find(d => d.eventId === 'evt_cancelled').reason, 'subscription_replaced');
+  assert.equal(f.sent.length, 3, 'adding a destination preserves the existing queue');
+  assert.equal(f.app.status('B').subscriptions.length, 2);
+  assert.equal(f.app.status('B').deliveries.find(d => d.eventId === 'evt_cancelled').status, 'delivered');
   await f.app.notify('B', event('evt_new', 'meeting_four')); await f.app.flush();
   assert.equal(f.sent.at(-1).url, `${URL}/new`);
   assert.equal(f.sent.at(-1).headers['webhook-signature'].split(' ').length, 1);
 });
 
-test('replacement must verify before switching and a failed challenge preserves the old endpoint', async t => {
+test('new subscriptions must verify and a failed challenge preserves the old endpoint', async t => {
   let failNew = false;
   const f = fixture(t, { webhookPost: async (_url, request) => {
     const data = JSON.parse(request.body);
@@ -190,7 +192,7 @@ test('concurrent subscribe completion cannot resurrect a superseded callback', a
   } });
   const old = f.app.subscribe('B', params()).then(() => null, error => error);
   await new Promise(resolve => setImmediate(resolve));
-  const latest = f.app.subscribe('B', params('B', { delivery: { mode: 'webhook', url: `${URL}/new`, secret: SECRET } }));
+  const latest = f.app.subscribe('B', params('B', { delivery: { mode: 'webhook', url: URL, secret: ROTATED } }));
   await new Promise(resolve => setImmediate(resolve));
   gates[1].resolve(); const accepted = await latest;
   gates[0].resolve(); assert.equal((await old).code, -32009);
@@ -255,7 +257,7 @@ test('transient errors retry with bounded exponential backoff, stable body and n
   f.advance(10_000); await f.app.flush(); assert.equal(f.sent.length, 4);
   assert.equal(new Set(f.sent.map(call => call.body)).size, 1);
   assert.equal(new Set(f.sent.map(call => call.headers['webhook-signature'])).size, 4);
-  assert.deepEqual(f.app.status('B').deliveries[0], { eventId: 'evt_one', status: 'failed', attempts: 4, reason: 'http_503' });
+  assert.deepEqual(f.app.status('B').deliveries[0], { eventId: 'evt_one', subscriptionId: f.app.status('B').subscription.id, status: 'failed', attempts: 4, reason: 'http_503' });
 });
 
 test('410, 413, redirects and other permanent failures are never retried', async t => {
@@ -376,6 +378,201 @@ test('daily subscription verification budget rejects before another callback req
   f.advance(86_400_000);
   await f.app.subscribe('B', params());
   assert.equal(f.callbacks.length, 3);
+});
+
+test('OAuth grants isolate subscriptions and receipts even with the same callback, and refresh only their own signing key', async t => {
+  const owners = new Set(['grant_first', 'grant_second']);
+  const f = fixture(t, { validateSubscription: (agentId, owner) => agentId === 'B' && owners.has(owner) });
+  const first = await f.app.subscribe('B', params(), { owner: 'grant_first' });
+  const second = await f.app.subscribe('B', params(), { owner: 'grant_second' });
+  assert.notEqual(first.id, second.id);
+  assert.equal(f.callbacks.length, 2, 'verification proof must not cross authorization grants');
+  const refreshed = await f.app.subscribe('B', params('B', { delivery: { mode: 'webhook', url: URL, secret: ROTATED } }), { owner: 'grant_first' });
+  assert.equal(refreshed.id, first.id);
+  assert.equal(f.store.getSubscription('B', first.id).secret, ROTATED);
+  assert.equal(f.store.getSubscription('B', second.id).secret, SECRET);
+  await assert.rejects(f.app.subscribe('A', params('B'), { owner: 'grant_first' }), error => error.status === 403);
+  await assert.rejects(f.app.subscribe('B', { ...params(), owner: 'grant_first' }, { owner: 'grant_second' }), error => error.code === -32602);
+  const queued = await f.app.notify('B', event());
+  assert.equal(queued.deliveries.length, 2);
+  await f.app.flush();
+  assert.equal(f.sent.length, 2);
+  assert.deepEqual(new Set(f.sent.map(call => call.headers['X-MCP-Subscription-Id'])), new Set([first.id, second.id]));
+  const secondView = f.app.status('B', 'grant_second');
+  assert.deepEqual(secondView.subscriptions.map(sub => sub.id), [second.id]);
+  assert.deepEqual(secondView.deliveries.map(delivery => delivery.subscriptionId), [second.id]);
+  for (const sensitive of ['grant_first', 'grant_second', 'receiver.example.com', 'whsec_']) {
+    assert.equal(JSON.stringify(secondView).includes(sensitive), false);
+  }
+  assert.equal(secondView.processingAcknowledged, false, 'HTTP success is not application processing');
+  f.app.unsubscribe('B', unsubscribeParams(), { owner: 'grant_first' });
+  assert.equal(f.app.status('B', 'grant_first').subscribed, false);
+  assert.equal(f.app.status('B', 'grant_second').subscribed, true);
+});
+
+test('revoking a grant aborts callback verification without disturbing another grant verifying the same URL', async t => {
+  const gates = [];
+  const owners = new Set(['grant_first', 'grant_second']);
+  const f = fixture(t, { validateSubscription: (_agentId, owner) => owners.has(owner), webhookPost: async (_url, request) => {
+    const payload = JSON.parse(request.body), gate = deferred(); gates.push({ ...gate, request });
+    await gate.promise;
+    return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+  } });
+  const first = f.app.subscribe('B', params(), { owner: 'grant_first' }).then(() => null, error => error);
+  const second = f.app.subscribe('B', params(), { owner: 'grant_second' });
+  await new Promise(resolve => setImmediate(resolve));
+  owners.delete('grant_first'); f.app.revokeOwner('B', 'grant_first');
+  assert.equal(gates[0].request.signal.aborted, true);
+  assert.equal(gates[1].request.signal.aborted, false);
+  gates.forEach(gate => gate.resolve());
+  assert.equal((await first).code, -32009);
+  const accepted = await second;
+  assert.deepEqual(f.app.status('B').subscriptions.map(sub => sub.id), [accepted.id]);
+  await assert.rejects(f.app.subscribe('B', params(), { owner: 'grant_first' }), error => error.status === 403);
+});
+
+test('grant revalidation rejects a completed challenge when access changed without the local revocation hook', async t => {
+  let allowed = true;
+  const gate = deferred();
+  const f = fixture(t, { validateSubscription: () => allowed, webhookPost: async (_url, request) => {
+    const payload = JSON.parse(request.body); await gate.promise;
+    return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+  } });
+  const subscribing = f.app.subscribe('B', params(), { owner: 'grant_first' }).then(() => null, error => error);
+  await new Promise(resolve => setImmediate(resolve));
+  allowed = false; gate.resolve();
+  assert.equal((await subscribing).status, 403);
+  assert.equal(f.app.status('B').subscribed, false);
+});
+
+test('grant revocation cancels queued and in-flight notifications, including expired records, without cancelling other owners', async t => {
+  const gate = deferred(), requests = [];
+  const owners = new Set(['grant_first', 'grant_second']);
+  const f = fixture(t, { validateSubscription: (_agentId, owner) => owners.has(owner), maxConcurrentDeliveries: 2,
+    webhookPost: async (_url, request) => {
+      const payload = JSON.parse(request.body);
+      if (payload.type === 'verification') return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+      requests.push(request); await gate.promise; return { status: 204 };
+    } });
+  const first = await f.app.subscribe('B', params('B', { ttlMs: 1000 }), { owner: 'grant_first' });
+  const second = await f.app.subscribe('B', params(), { owner: 'grant_second' });
+  await f.app.notify('B', event());
+  await f.app.notify('B', event('evt_second', 'meeting_two'));
+  const sending = f.app.flush(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests.length, 2);
+  f.advance(1001);
+  owners.delete('grant_first'); f.app.revokeOwner('B', 'grant_first');
+  assert.equal(requests.find(request => request.headers['X-MCP-Subscription-Id'] === first.id).signal.aborted, true);
+  assert.equal(requests.find(request => request.headers['X-MCP-Subscription-Id'] === second.id).signal.aborted, false);
+  assert.ok(f.app.status('B', 'grant_first').deliveries.every(delivery => delivery.status === 'cancelled' && delivery.reason === 'authorization_revoked'));
+  gate.resolve(); await sending; await f.app.flush();
+  assert.ok(f.app.status('B', 'grant_second').deliveries.every(delivery => delivery.status === 'delivered'));
+  const aggregate = f.app.deliveryStatus('B', 'evt_one');
+  assert.equal(aggregate.status, 'delivered', 'a cancelled first subscription must not hide a successful second one');
+  assert.equal(aggregate.deliveries.length, 2);
+  assert.equal(f.app.deliveryStatus('B', 'evt_one', 'grant_first').status, 'cancelled');
+  assert.equal(f.app.deliveryStatus('B', 'evt_missing'), null);
+  assert.equal((await f.app.notify('B', event('evt_third', 'meeting_three'))).subscriptionId, second.id);
+});
+
+test('persisted grant revocation blocks renewal, retry and enqueue even without a local revocation hook', async t => {
+  let allowed = true;
+  const f = fixture(t, { validateSubscription: () => allowed, webhookPost: async (_url, request) => {
+    const payload = JSON.parse(request.body);
+    return payload.type === 'verification' ? { status: 200, body: JSON.stringify({ challenge: payload.challenge }) } : { status: 503 };
+  } });
+  await f.app.subscribe('B', params(), { owner: 'grant_first' });
+  await f.app.notify('B', event()); await f.app.flush();
+  allowed = false;
+  assert.equal(f.app.status('B').subscribed, false);
+  await assert.rejects(f.app.subscribe('B', params(), { owner: 'grant_first' }), error => error.status === 403);
+  assert.equal((await f.app.notify('B', event('evt_new'))).reason, 'no_active_subscription');
+  f.advance(1000); await f.app.flush();
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.app.deliveryStatus('B', 'evt_one').reason, 'authorization_revoked');
+});
+
+test('OAuth revocation stays idempotent after administrative agent removal and still aborts its in-memory deliveries', async t => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'noknok-events-agent-revoked-'));
+  const store = openHostedStore({ dataDir, realm: 'https://noknok.example', now: () => 1_700_000_000_000 });
+  t.after(() => { store.close(); rmSync(dataDir, { recursive: true, force: true }); });
+  const account = store.registerAccount(randomBytes(32).toString('base64url'));
+  const a = store.registerAgent(account.accountToken, { requestId: randomBytes(32).toString('base64url') });
+  const b = store.registerAgent(account.accountToken, { requestId: randomBytes(32).toString('base64url') });
+  const gate = deferred();
+  const f = fixture(t, { store, maxConcurrentDeliveries: 1, webhookPost: async (_url, request) => {
+    const payload = JSON.parse(request.body);
+    if (payload.type === 'verification') return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+    await gate.promise; return { status: 204 };
+  } });
+  await f.app.subscribe(a.agentId, params(a.agentId), { owner: 'grant_first' });
+  await f.app.subscribe(b.agentId, params(b.agentId), { owner: 'grant_second' });
+  await f.app.notify(a.agentId, event());
+  await f.app.notify(a.agentId, event('evt_queued', 'meeting_two'));
+  await f.app.notify(b.agentId, event('evt_other', 'meeting_other'));
+  const sending = f.app.flush(); await new Promise(resolve => setImmediate(resolve));
+  store.revokeAgent(a.agentId);
+  assert.doesNotThrow(() => f.app.revokeOwner(a.agentId, 'grant_first'));
+  assert.doesNotThrow(() => f.app.revokeOwner(a.agentId, 'grant_first'));
+  assert.equal(f.sent[0].signal.aborted, true);
+  for (const id of ['evt_one', 'evt_queued']) assert.equal(f.app.deliveryStatus(a.agentId, id).reason, 'authorization_revoked');
+  gate.resolve(); await sending; await f.app.flush();
+  assert.equal(f.app.deliveryStatus(b.agentId, 'evt_other').status, 'delivered');
+  assert.equal(f.app.status(b.agentId, 'grant_second').subscribed, true);
+});
+
+test('subscription capacity counts destinations and grants while allowing refresh and released slots', async t => {
+  const f = fixture(t, { maxSubscriptionsPerAgent: 2 });
+  await f.app.subscribe('B', params(), { owner: 'grant_first' });
+  await f.app.subscribe('B', params(), { owner: 'grant_second' });
+  await f.app.subscribe('B', params(), { owner: 'grant_first' });
+  await assert.rejects(f.app.subscribe('B', params('B', { delivery: { mode: 'webhook', url: `${URL}/new`, secret: SECRET } }), { owner: 'grant_first' }), error => error.status === 429);
+  f.app.revokeOwner('B', 'grant_second');
+  await f.app.subscribe('B', params('B', { delivery: { mode: 'webhook', url: `${URL}/new`, secret: SECRET } }), { owner: 'grant_first' });
+  assert.equal(f.app.status('B').subscriptions.length, 2);
+});
+
+test('CLI subscription stop is scoped to its authenticated agent and works with revoked grant owners', async t => {
+  const owners = new Set(['grant_first', 'grant_second']);
+  const gate = deferred();
+  const f = fixture(t, { maxConcurrentDeliveries: 1, validateSubscription: (_agentId, owner) => owners.has(owner),
+    webhookPost: async (_url, request) => {
+      const payload = JSON.parse(request.body);
+      if (payload.type === 'verification') return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+      await gate.promise; return { status: 204 };
+    } });
+  const first = await f.app.subscribe('B', params(), { owner: 'grant_first' });
+  const second = await f.app.subscribe('B', params(), { owner: 'grant_second' });
+  await f.app.notify('B', event());
+  const sending = f.app.flush(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(f.app.stop('A', first.id), {});
+  assert.equal(f.app.status('B', 'grant_first').subscribed, true);
+  assert.equal(f.sent[0].signal.aborted, false);
+  owners.delete('grant_first');
+  assert.deepEqual(f.app.stop('B', first.id), {});
+  assert.deepEqual(f.app.stop('B', first.id), {});
+  assert.equal(f.sent[0].signal.aborted, true);
+  assert.equal(f.app.status('B', 'grant_first').subscriptions.length, 0);
+  assert.equal(f.app.deliveryStatus('B', 'evt_one', 'grant_first').reason, 'unsubscribed');
+  gate.resolve(); await sending; await f.app.flush();
+  assert.equal(f.app.deliveryStatus('B', 'evt_one', 'grant_second').status, 'delivered');
+  assert.deepEqual(f.app.status('B').subscriptions.map(sub => sub.id), [second.id]);
+});
+
+test('CLI subscription stop cancels a matching pending verification and cannot cancel another agent', async t => {
+  const gate = deferred(); let request;
+  const f = fixture(t, { webhookPost: async (_url, input) => {
+    request = input;
+    const payload = JSON.parse(input.body); await gate.promise;
+    return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+  } });
+  const subscribing = f.app.subscribe('B', params(), { owner: 'grant_first' }).then(() => null, error => error);
+  await new Promise(resolve => setImmediate(resolve));
+  const id = request.headers['X-MCP-Subscription-Id'];
+  f.app.stop('A', id); assert.equal(request.signal.aborted, false);
+  f.app.stop('B', id); assert.equal(request.signal.aborted, true);
+  gate.resolve(); assert.equal((await subscribing).code, -32009);
+  assert.equal(f.app.status('B').subscribed, false);
 });
 
 test('secure transport validates all DNS answers, IPv6, and a pinned address on every request', async () => {

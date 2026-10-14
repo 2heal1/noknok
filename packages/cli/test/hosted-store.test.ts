@@ -72,7 +72,7 @@ test('schema upgrade removes admission records while preserving identities, cont
   rejectsCode(() => env.store.authenticate(c.agentToken), 'UNAUTHENTICATED');
   env.store.verifyCapability(a.agentId, b.agentId, exchange.contact.capability);
   assert.equal(env.store.db.prepare('SELECT count FROM quotas WHERE owner=?').get(a.accountId).count, 7);
-  assert.equal(env.store.db.prepare("SELECT value FROM meta WHERE name='schema_version'").get().value, '2');
+  assert.equal(env.store.db.prepare("SELECT value FROM meta WHERE name='schema_version'").get().value, '3');
   assert.equal(env.store.db.prepare("SELECT name FROM sqlite_master WHERE name='codes'").get(), undefined);
   assert.deepEqual(env.store.db.prepare('PRAGMA foreign_key_check').all(), []);
   assert.ok(env.store.registerAgent(a.accountToken, { requestId: secret() }).agentId);
@@ -154,7 +154,7 @@ test('agent and account quotas persist and reset at bounded window boundaries', 
   assert.equal(env.store.consumeQuota(a.agentId, 'wake.daily', budget).remaining, 1);
 });
 
-test('subscriptions persist encrypted, switch atomically, cannot cross identity AAD, and expire', (t) => {
+test('subscriptions persist encrypted, coexist, cannot cross identity AAD, and expire', (t) => {
   const env = setup(t), a = env.agent(), b = env.agent();
   const record = { id: 'subscription-1', eventName: 'noknok.activity', deliveryUrl: 'https://host.example/private-target', secret: 'whsec_very-secret-value', expiresAt: env.args.now() + 60_000 };
   env.store.putSubscription(a.agentId, record);
@@ -173,11 +173,42 @@ test('subscriptions persist encrypted, switch atomically, cannot cross identity 
   } finally { raw.close(); }
   const rotated = { ...record, id: 'subscription-2', secret: 'whsec_new-private-value' };
   env.store.setSubscription(a.agentId, rotated);
+  assert.deepEqual(env.store.getSubscription(a.agentId, rotated.id), rotated);
+  assert.equal(env.store.listSubscriptions(a.agentId).length, 2);
+  assert.equal(env.store.deleteSubscription(a.agentId, record.id), true);
   assert.deepEqual(env.store.getSubscription(a.agentId), rotated);
-  assert.equal(env.store.deleteSubscription(a.agentId, record.id), false);
   env.advance(60_001);
   assert.equal(env.store.getSubscription(a.agentId), null);
   env.store.cleanup();
+});
+
+test('schema 2 subscription migration preserves the existing callback, identity and contacts while allowing more destinations', t => {
+  const env = setup(t), a = env.agent(), b = env.agent();
+  const contact = env.store.acceptOffer(a.agentId, env.store.issueOffer(b.agentId));
+  const previous = { id: 'sub_existing', owner: a.agentId, name: 'noknok.activity', arguments: { recipient_id: a.agentId },
+    url: 'https://receiver.example/previous', secret: 'whsec_existing', active: true, expiresAt: env.args.now() + 60_000 };
+  env.store.putSubscription(a.agentId, previous);
+  const encrypted = env.store.db.prepare('SELECT encrypted FROM subscriptions WHERE agent_id=?').get(a.agentId).encrypted;
+  env.store.db.exec(`BEGIN IMMEDIATE;
+    CREATE TABLE subscriptions_previous (agent_id TEXT PRIMARY KEY REFERENCES agents(id), subscription_id TEXT NOT NULL, encrypted TEXT NOT NULL, expires_at INTEGER NOT NULL);
+    INSERT INTO subscriptions_previous SELECT agent_id,subscription_id,encrypted,expires_at FROM subscriptions;
+    DROP TABLE subscriptions;
+    ALTER TABLE subscriptions_previous RENAME TO subscriptions;
+    UPDATE meta SET value='2' WHERE name='schema_version';
+    COMMIT;`);
+  env.restart();
+  assert.equal(env.store.db.prepare("SELECT value FROM meta WHERE name='schema_version'").get().value, '3');
+  assert.equal(env.store.db.prepare('SELECT encrypted FROM subscriptions WHERE agent_id=?').get(a.agentId).encrypted, encrypted);
+  assert.deepEqual(env.store.getSubscription(a.agentId, previous.id), previous);
+  assert.deepEqual(env.store.authenticate(a.agentToken), { agentId: a.agentId, accountId: a.accountId });
+  env.store.verifyCapability(a.agentId, b.agentId, contact.contact.capability);
+  const next = { ...previous, id: 'sub_additional', owner: 'grant_new', url: 'https://receiver.example/new' };
+  env.store.putSubscription(a.agentId, next);
+  env.restart();
+  assert.deepEqual(new Set(env.store.listSubscriptions(a.agentId).map(sub => sub.id)), new Set([previous.id, next.id]));
+  env.store.deleteSubscription(a.agentId, next.id);
+  assert.deepEqual(env.store.listSubscriptions(a.agentId), [previous]);
+  assert.deepEqual(env.store.db.prepare('PRAGMA foreign_key_check').all(), []);
 });
 
 test('stored control fields omit plaintext bearer credentials and use restrictive file permissions', (t) => {

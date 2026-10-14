@@ -11,6 +11,7 @@ Tests below live in `packages/cli/test/` unless otherwise specified.
 | Cryptography and encoding | `e2ee.test.ts`: AES-GCM vectors, Node/Web Crypto interoperability, canonical encoding, wrong keys, AAD, tampering, and size limits |
 | HTTP and clients | `meeting-e2ee.test.ts`, `meeting-crypto.test.ts`, `meeting-cli.test.ts`: no test plaintext/keys on the wire, exact-ciphertext retries, and rejection without ACK on wrong keys, tampering, downgrade, or replay |
 | Contacts and local MCP | `hosted-client.test.ts`, `hosted-service.test.ts`, `hosted-stdio.test.ts`: endpoint contact keys, wrapped meeting keys, and CLI/local-tool exchanges |
+| OAuth and Events | `hosted-oauth.test.ts`, `hosted-client.test.ts`, `hosted-events.test.ts`, `hosted-store.test.ts`: discovery/PKCE, existing-profile pairing, scoped grants, renewal/revocation, token-free config and multiple persisted subscriptions; synthetic callbacks do not prove native-host wake-up |
 | Browser and links | `meeting-ui.test.ts`, `meeting-link-security.test.ts`: local decryption, fragments, save-before-ACK, gaps, export, persistent retries, and local clearing |
 | Delivery and permissions | Meeting/hosted tests: per-event receipt tokens, required recipients, expiry, revocation, read-only limits, and retries not restoring cleared content |
 | Release and deployment | `github-release.test.ts`, `release-verification.test.ts`, `release-deployment.test.ts`, `docs-deployment.test.ts`: source tagging, retries, package verification, deployment/recovery, and static publishing; isolated/mock checks do not prove a live deployment |
@@ -21,6 +22,22 @@ Tests below live in `packages/cli/test/` unless otherwise specified.
 Development included automated tests and synthetic Chrome checks: a wrong key failed before joining, CLI/browser traffic carried ciphertext, and refreshing after a lost send response reused the same request ID/ciphertext without creating a duplicate event. These checks did not establish an independent audit, a browser support matrix, or real native-host wake-up.
 
 Exact historical counts and reproduction notes remain in [this file's Git history](https://github.com/2heal1/noknok/commits/main/docs/validation.md) and the associated PRs. Keeping them as the current page's headline would confuse an old run with the current code.
+
+## Two separate regression scenarios
+
+Validate both scenarios on the target build. OAuth is not a prerequisite for instant meetings.
+
+| Scenario | Required evidence |
+| --- | --- |
+| Instant meeting without OAuth | Original CLI creates a meeting, another CLI or browser invitation guest joins, both send/receive encrypted messages, endpoints save before ACK, host ends, and local history remains readable. No OAuth grant is created. |
+| Instant meeting while OAuth changes | With a meeting open, authorize an Events client, then revoke that grant. The same meeting/session still sends, receives and ends; existing Agent ID, contacts and keys remain intact. Only that grant's tokens and subscriptions stop. |
+| Automatic wake-up protocol | Existing-profile pairing → OAuth code/PKCE exchange → verified subscription → authorized contact call → signed metadata-only delivery → original CLI inbox/accept/decrypt/save/respond. Verify cross-Agent and ungranted-tool rejection, refresh rotation/reuse, revocation, duplicate events, subscription renewal and two independent callbacks. |
+| Original CLI unavailable | Retain distinct connected/subscribed/delivered states and report processing as unobserved / waiting for execution environment. No remote plaintext fallback or key upload. Recover only available pending metadata/bodies after the trusted environment returns. |
+| Actual dot and big p | End the setup task, then initiate an authorized contact call and observe dot start a task, use the existing trusted CLI profile, decrypt, save and respond without new human input. Record host/deployed versions and separate connected/subscribed/delivered/processed evidence. This remains unverified until performed in the real host. |
+
+Tests using an HTTP callback fixture cover protocol delivery and local decryption, not whether ChatGPT/dot schedules an idle task. `processing: not_observed` is intentional: the server does not infer CLI availability or successful handling from HTTP 2xx. Notification metadata cannot restore expired ciphertext.
+
+Publishing or deploying a package may restart the service and lose active in-memory meetings. Finish/save/end meetings and schedule an idle deployment window before testing the deployed target; do not confuse deployment interruption with OAuth revocation behavior.
 
 ## Historical infrastructure evidence
 

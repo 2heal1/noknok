@@ -22,11 +22,17 @@ Hosted service (automatic first-use identity plus optional native MCP Events):
   noknok hosted friend-link [--agent HANDLE] [--server URL] [--product PRODUCT]
   noknok hosted friend-add LINK [--agent HANDLE] [--product PRODUCT]
   noknok hosted friends|inbox|subscription-status --agent HANDLE
+  noknok hosted subscription-stop SUBSCRIPTION_ID --agent HANDLE
   noknok hosted friend-remove PEER --agent HANDLE
   noknok hosted call PEER --purpose TEXT --agent HANDLE
   noknok hosted accept INVITATION_ID --agent HANDLE
   noknok hosted create --purpose TEXT --agent HANDLE
-  noknok hosted config --agent HANDLE  (private MCP config and connection instructions)
+  noknok hosted config --agent HANDLE  (local MCP and remote OAuth settings; no tokens)
+  noknok hosted pair --agent HANDLE
+  noknok hosted pair-status PAIRING_ID --agent HANDLE
+  noknok hosted pair-confirm PAIRING_ID --confirmation VALUE --agent HANDLE
+  noknok hosted grants --agent HANDLE
+  noknok hosted revoke GRANT_ID --agent HANDLE
   noknok hosted wakeup --agent HANDLE  (native subscription and auto-accept instructions)
 Hosted setup stores credentials locally. Keep localAgent; never guess a profile.
 Friend addition returns immediately. Native Events subscription is a separate action.
@@ -105,7 +111,8 @@ Each participant uses its own am_ session. Links contain the content key in thei
 share complete links only with intended readers. Browser participation requires HTTPS or localhost.
 Use meeting ready to signal completion and meeting end as the host to close the meeting.
 CLI / stdio tools do not wake an idle model by themselves.
-Hosted config provides local stdio MCP for endpoint encryption plus separate remote Events credentials.
+Hosted config provides local stdio MCP for endpoint encryption plus a remote OAuth Events URL.
+Pair the existing identity, review its application/permissions, then confirm in the original CLI.
 Remote MCP accepts ciphertext only. Authorize native noknok.activity subscriptions separately;
 delivery is not proof that a host ran its agent. Plaintext remote-tool fallback is unavailable.
 `;
@@ -125,6 +132,7 @@ const HOSTED_OPTIONS: Record<string, string[]> = {
   call: ['purpose', 'context', 'context-file', 'name', 'request-id'],
   create: ['purpose', 'context', 'context-file', 'name', 'product', 'server', 'request-id'],
   accept: ['name', 'request-id'], inbox: [], 'subscription-status': [], config: [], wakeup: [],
+  pair: [], 'pair-status': [], 'pair-confirm': ['confirmation'], grants: [], revoke: [], 'subscription-stop': [],
 };
 
 const MEETING_OPTIONS: Record<string, string[]> = {
@@ -165,7 +173,7 @@ function parse(argv: string[]): ParsedCommand {
   if (!flags.help && !flags.version && command && command !== 'help') {
     if (!Object.hasOwn(COMMAND_OPTIONS, command)) throw fail('INVALID_COMMAND', `Unknown command '${command}'. Run noknok --help.`);
     if (command === 'meeting' && !Object.hasOwn(MEETING_OPTIONS, args[0])) throw fail('INVALID_COMMAND', 'Use noknok meeting create|join|send|receive|status|ready|end|leave|history|view|sessions.');
-    if (command === 'hosted' && !Object.hasOwn(HOSTED_OPTIONS, args[0])) throw fail('INVALID_COMMAND', 'Use noknok hosted setup|identity|friend-link|friend-add|friends|friend-remove|call|create|accept|inbox|subscription-status|config|wakeup.');
+    if (command === 'hosted' && !Object.hasOwn(HOSTED_OPTIONS, args[0])) throw fail('INVALID_COMMAND', 'Use noknok hosted setup|identity|friend-link|friend-add|friends|friend-remove|call|create|accept|inbox|subscription-status|subscription-stop|config|wakeup|pair|pair-status|pair-confirm|grants|revoke.');
     const allowed = new Set([...(command === 'hosted' ? HOSTED_OPTIONS[args[0]] : command === 'meeting' ? MEETING_OPTIONS[args[0]] : COMMAND_OPTIONS[command]), 'state-dir', ...(['server', 'local-server', 'skill'].includes(command) ? [] : ['agent'])]);
     for (const key of Object.keys(options)) if (!allowed.has(key)) throw fail('INVALID_ARGUMENT', `Unknown option --${key} for ${command}.`);
   }

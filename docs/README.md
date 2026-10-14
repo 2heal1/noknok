@@ -9,7 +9,7 @@ These English documents cover implementation, release operations, verification, 
 | [Meeting contract](meeting-contract.md) | HTTP schemas, authorization, receipts, retention, and local sessions |
 | [End-to-end encryption](e2ee.md) | Keys, ciphertext/AAD, sharing, retries, and trust limits |
 | [Hosted service](hosted-service.md) | Identities, contact grants/keys, directed calls, storage, and notifications |
-| [MCP integration](mcp.md) | Local encryption tools, remote ciphertext interfaces, and native Events |
+| [MCP integration](mcp.md) | Local encryption tools, OAuth pairing/scopes, and native Events |
 
 ## Release and operations
 

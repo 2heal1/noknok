@@ -19,7 +19,8 @@ export interface HostedSubscription {
 }
 export interface QuotaOptions { limit: number; windowMs: number; amount?: number; scope?: 'agent' | 'account' }
 export interface EventStore {
-  getSubscription(agentId: string): HostedSubscription | null;
+  getSubscription(agentId: string, subscriptionId?: string): HostedSubscription | null;
+  listSubscriptions(agentId: string): HostedSubscription[];
   putSubscription(agentId: string, record: HostedSubscription): HostedSubscription;
   deleteSubscription(agentId: string, subscriptionId?: string): boolean;
   consumeQuota(agentId: string, bucket: string, options: QuotaOptions): { remaining: number; resetAt: number };
@@ -41,10 +42,14 @@ export type ActivityKind = 'incoming_meeting' | 'meeting_activity' | 'friend_add
 export interface ActivityEvent { eventId: string; kind: ActivityKind; meetingId?: string; exchangeId?: string }
 export interface ActivityData { recipient_id: string; kind: ActivityKind; meeting_id?: string; exchange_id?: string }
 export type DeliveryStatus = 'queued' | 'cancelled' | 'failed' | 'delivered' | 'unavailable' | 'coalesced' | 'unknown';
-export interface DeliveryView { eventId: string; status: DeliveryStatus; attempts?: number; reason?: string }
+export interface DeliveryView { eventId: string; subscriptionId?: string; status: DeliveryStatus; attempts?: number; reason?: string }
+export interface DeliverySummary extends DeliveryView { deliveries?: DeliveryView[] }
 export interface DeliveryAuthorization { authorize?: () => boolean | Promise<boolean> }
+/** The authenticated principal is supplied by the MCP service, never by RPC arguments. */
+export interface SubscriptionAuthorization { owner?: string }
 export interface Delivery extends DeliveryView {
   agentId: string;
+  owner: string;
   data: ActivityData;
   authorize: () => boolean | Promise<boolean>;
   subscriptionId: string;
@@ -61,6 +66,7 @@ export interface EventsOptions {
   webhookPost?: WebhookPost;
   now?: () => number;
   validateDelivery?: (agentId: string, data: ActivityData) => boolean | Promise<boolean>;
+  validateSubscription?: (agentId: string, owner: string) => boolean;
   eventName?: string;
   ttlMs?: number;
   rotationWindowMs?: number;
@@ -72,6 +78,7 @@ export interface EventsOptions {
   maxHistory?: number;
   maxConcurrentDeliveries?: number;
   maxConcurrentVerifications?: number;
+  maxSubscriptionsPerAgent?: number;
   subscriptionLimit?: number;
   dailySubscriptionLimit?: number;
   notificationLimit?: number;

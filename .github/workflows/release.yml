@@ -110,10 +110,6 @@ jobs:
           NOKNOK_DEPLOY_SSH_KEY: ${{ secrets.NOKNOK_DEPLOY_SSH_KEY }}
           NOKNOK_DEPLOY_KNOWN_HOSTS: ${{ secrets.NOKNOK_DEPLOY_KNOWN_HOSTS }}
         run: node scripts/deploy-hosted.ts
-      - name: Record deployment result
-        env:
-          RELEASE_VERSION: ${{ needs.stable.outputs.published-version }}
-        run: printf 'Deployed and verified hosted service `@noknok/cli@%s`.\n' "$RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"
 
   preview:
     if: github.repository == '2heal1/noknok' && github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/')

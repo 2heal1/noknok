@@ -37,6 +37,7 @@ test('CI deployment pins SSH trust, limits the command, isolates credentials, an
       identityPath = args[args.indexOf('-i') + 1];
       assert.equal((await stat(identityPath)).mode & 0o777, 0o600);
       assert.equal((await readFile(identityPath, 'utf8')).trim(), env.NOKNOK_DEPLOY_SSH_KEY);
+      return JSON.stringify({ status: 'deployed', version: '0.1.0' });
     },
     fetch: async (url, options) => {
       assert.equal(url, 'https://api.example.test/health');
@@ -53,7 +54,7 @@ test('CI rejects a legacy or incorrectly configured transcript endpoint after a 
     { ok: true, mode: 'hosted', transcriptStorage: 'memory' },
     { ok: true, mode: 'hosted', transcriptStorage: 'participant', deliveryStorage: 'disk' },
   ]) await assert.rejects(deployHosted(fixture(), {
-    run: async () => {}, fetch: async () => Response.json(health),
+    run: async () => JSON.stringify({ status: 'deployed', version: '0.1.0' }), fetch: async () => Response.json(health),
   }), /participant-owned transcripts/);
 });
 
@@ -64,4 +65,13 @@ test('failed SSH never runs public health verification and still removes credent
     fetch: async () => { assert.fail('must not verify a failed deployment'); },
   }), /failed deployment/);
   await assert.rejects(stat(identityPath!), { code: 'ENOENT' });
+});
+
+test('runtime diff skips report the actual running version after health verification', async () => {
+  const result = await deployHosted(fixture(), {
+    run: async () => JSON.stringify({ status: 'unchanged-runtime', version: '0.1.0', runningVersion: '0.0.9' }),
+    fetch: async () => Response.json({ ok: true, mode: 'hosted', transcriptStorage: 'participant', deliveryStorage: 'pending_memory' }),
+  });
+  assert.equal(result.status, 'unchanged-runtime');
+  assert.equal(result.runningVersion, '0.0.9');
 });

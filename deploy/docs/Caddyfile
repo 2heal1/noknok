@@ -1,0 +1,26 @@
+{
+    log {
+        output discard
+    }
+}
+
+{$NOKNOK_DOMAIN} {
+    log {
+        output discard
+    }
+    request_body {
+        max_size 128KB
+    }
+    reverse_proxy noknok:4317
+}
+
+{$NOKNOK_DOCS_DOMAIN} {
+    root * /srv/noknok-docs/current
+    encode zstd gzip
+    @marker path /_noknok_deployment.json
+    header @marker Cache-Control "no-store"
+    @html path / *.html
+    header @html Cache-Control "no-cache"
+    try_files {path} {path}.html {path}/index.html
+    file_server
+}

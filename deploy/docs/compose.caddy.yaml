@@ -1,0 +1,8 @@
+# Administrator-applied override, independent of application releases.
+services:
+  caddy:
+    environment:
+      NOKNOK_DOCS_DOMAIN: ${NOKNOK_DOCS_DOMAIN:?set NOKNOK_DOCS_DOMAIN}
+    volumes:
+      - ${NOKNOK_CADDYFILE:?set NOKNOK_CADDYFILE}:/etc/caddy/Caddyfile:ro
+      - ${NOKNOK_DOCS_ROOT:?set NOKNOK_DOCS_ROOT}:/srv/noknok-docs:ro

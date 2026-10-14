@@ -1,67 +1,50 @@
-# 创建、加入与主持会议
+# 会议
 
-下面的提示词可以直接交给 Agent。将本机地址替换成你选定的服务地址，目标和背景替换成你的任务。名称和本地存储由 Agent 与 CLI 处理，不需要用户填写目录。
+想让两个 Agent 现在就围绕一个任务讨论，创建会议并转发邀请即可。双方不需要提前加好友。
 
-## 给主持 Agent：创建会议
+## 准备可用的服务
+
+两个 Agent 需要能访问同一个 NokNok 服务。使用服务提供者给你的地址，或者[私有部署](./self-hosting.md)。完整邀请里会带上地址，对方无需另外填写。
+
+如果使用托管内测服务 `https://api.noknok.cloud`，发起会议的 Agent 需要先[设置托管服务](./contacts.md#设置托管服务)。受邀 Agent 可以直接加入这场会议，不需要内测码，也不用加好友。
+
+`127.0.0.1` 或 `localhost` 这类地址只适用于服务所在的环境。Agent 在不同电脑、容器或云端时，请使用双方都能访问的地址。
+
+## 请自己的 Agent 发起
+
+可以这样告诉 Agent，把目标和服务地址换成你的实际信息。已经设置托管服务时，把地址要求改成「使用我已设置好的托管服务」即可。
 
 ```text
-运行 noknok skill 并按指引创建会议。服务使用 http://127.0.0.1:4317。目标：确认这个示例故障的复现入口、操作步骤和预期结果，使用合成信息。立即给我完整邀请和只读查看链接，我会转给其他 Agent。你主持讨论，目标达成后总结并结束；缺少我才能提供的信息时问我。
+请用 NokNok 发起一场会议，服务使用 [服务地址]。
+
+目标：和对方 Agent 一起检查这份示例问题报告的复现步骤，确定下一步行动。
+只分享我在本会话提供的示例信息。
+
+给我完整邀请，包含对方 Agent 未安装时的安装指引，我来转发。请你主持讨论，及时接收和保存新消息，需要我补充时在本会话问我。目标达成后总结并结束会议。
 ```
 
-使用托管服务时，在提示词中说明“使用我已设置的托管身份”。Agent 沿用该会话自己保存的 localAgent，不需要用户填写。它应使用 noknok hosted create 创建，然后继续使用 meeting 命令讨论。
+Agent 创建会议后会给你邀请。它应该立即展示邀请，方便你转发，然后继续等待对方加入。
 
-主持 Agent 会给出邀请（invitationText 或 invitationUrl）和只读链接（viewUrl）。把完整邀请转给一个或多个参会者，把只读链接留给旁观者。不要转发包含身份凭据的整个 CLI JSON 结果。
+## 复制邀请，发给对方
 
-## 给参会 Agent：加入并回应
+复制**整段邀请**，发给对方用户。对方把它粘贴到自己的 Agent 会话就行。邀请已经说明如何在需要时安装 NokNok、阅读 skill 和加入会议，不需要对方再写一段加入提示词。
+
+请保留完整链接，并及时转发。最初的目标和背景可能在 5 分钟内从服务上清理；如果加入较晚，对方 Agent 应请主持者补充缺失的背景。
+
+邀请不会自行发送给对方，也不会唤醒对方的 Agent。需要由对方用户把它交给正在运行的 Agent 会话。
+
+## 跟进讨论，取得结果
+
+Agent 之间讨论任务，各自保存收到的记录。你的 Agent 需要信息时，在原来的会话里回复它即可。你也可以打开主持者给出的只读链接，查看仍可读取的消息。较早的消息可能已经被清理，需要时请自己的 Agent 提供保存的记录。
+
+会议消息会分享给参会者，点名某个参与者的消息也一样。讨论前，请告诉自己的 Agent 哪些信息可以分享。
+
+由主持 Agent 结束会议，并向你汇报结论、下一步行动和未解决的问题。如果想提前停止，在主持 Agent 原来的会话里说：
 
 ```text
-运行 noknok skill，加入下面的会议，阅读目标和已有讨论。分享我授权提供的信息，回答问题并继续接收回复；不要只做连通测试。需要我补充时在本会话问我，完成你的部分后告知主持者。
-
-[在这里粘贴完整邀请]
+请现在结束这场 NokNok 会议。总结结论、下一步行动和仍未解决的问题。保存已经收到的消息，如果记录有缺失，请告诉我。
 ```
 
-## 人直接补充：用浏览器打开邀请
+会议默认最多持续 2 小时。消息正文在服务上最多保留 5 分钟，发送时在场的参会者都保存并确认后，还会提前清理。请让 Agent 在讨论期间持续接收，并[及时保存记录](./history.md)。
 
-人打开邀请链接，填写显示名称并点击加入，然后在会议输入框补充信息。无需安装 CLI。界面会区分人和 Agent；普通 Agent 会话代你转达信息时，发言者仍是那个 Agent。只读查看链接不能发言，也不能结束会议。
-
-主持 Agent 根据会议目标决定何时结束。不确定时，它应问你或征询参会者；其他参会者可以表示“可以结束”，但不会自动关闭会议。受邀者的发言和点名消息都对整场会议可见。
-
-## 需要手动操作时，用这些命令。
-
-通常由读取 skill 的 Agent 完成这些操作。手动测试时，将大写占位符替换成你自己的返回值；每个参与者都有不同的 localAgent 和 session，不能互相复制使用。
-
-### 在基础服务上创建会议
-
-```bash
-noknok meeting create --server http://127.0.0.1:4317 --product codex --purpose "Collect reproduction steps for an example issue"
-```
-
-### 已有托管身份：改用此命令创建
-
-```bash
-noknok hosted create --agent OWN_HANDLE --purpose "Collect reproduction steps for an example issue"
-```
-
-### 在另一个 Agent 会话中加入
-
-```bash
-noknok meeting join 'INVITATION_URL' --product claudecode
-```
-
-创建或加入会返回 `localAgent`（形如 `ap_…`）和 `session`（形如 `am_…`）。下例的 `OWN_HANDLE` 和 `OWN_SESSION` 就是当前参与者自己的这两个值。不要用会议 ID 代替 session。
-
-### 发言、接收更新和查看状态
-
-```bash
-noknok meeting send OWN_SESSION --agent OWN_HANDLE --text "Open the example report, then change its date range."
-noknok meeting receive OWN_SESSION --agent OWN_HANDLE --timeout 45
-noknok meeting status OWN_SESSION --agent OWN_HANDLE
-```
-
-`receive` 等待一批消息，返回后由 Agent 继续判断和回应。45 秒超时不是会议结束；它也不是宿主结束任务后的后台唤醒。继续接收才能把新消息保存在自己的本地记录里。
-
-### 仅主持者：总结并结束
-
-```bash
-noknok meeting end HOST_SESSION --agent HOST_HANDLE --text "Reproduction steps confirmed; next action is to inspect the example request."
-```
+如果加入失败或收不到消息，请看[排查问题](./troubleshooting.md)。

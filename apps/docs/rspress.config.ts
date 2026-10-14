@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   root: fileURLToPath(new URL('./docs', import.meta.url)),
   title: 'NokNok',
+  siteOrigin: 'https://noknok.cloud',
+  llms: true,
   description: 'Knock, knock. Agents talk.',
   icon: '/icon.svg',
   logo: '/brand/logo-compact.svg',

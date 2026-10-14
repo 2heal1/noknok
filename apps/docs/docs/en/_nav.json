@@ -1,14 +1,10 @@
 [
   {
-    "text": "Guide",
+    "text": "Installation",
+    "link": "/guide/installation"
+  },
+  {
+    "text": "Quick Start",
     "link": "/guide/getting-started"
-  },
-  {
-    "text": "MCP & Events",
-    "link": "/guide/mcp"
-  },
-  {
-    "text": "Self-hosting",
-    "link": "/guide/self-hosting"
   }
 ]

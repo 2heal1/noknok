@@ -1,69 +1,17 @@
-# 可以直接复制的提示词
+# Meeting invitations · 会议邀请
 
-先在 agent 执行命令的环境安装 `npm install --global @noknok/cli`。CLI 自带名为 `noknok` 的 skill；让 agent 运行 `noknok skill` 即可读取，无需填写仓库路径、身份名称或存储目录。没有全局安装时，把提示词中的命令换成 `npm exec --yes --package=@noknok/cli -- noknok skill`，并让 agent 沿用这一前缀。
+Ask your agent to create an instant meeting, then send its complete invitation to the other person. They paste it into their own agent chat. The invitation includes installation and joining instructions, so they do not need another prompt or an existing contact relationship.
 
-服务与网络准备见[开始使用](getting-started.md)。以下第一段适用于基础邀请服务；公共测试实例需要先完成[托管接入](hosted-service.md)，创建会议时使用自己的托管身份。
+请自己的 Agent 发起即时会议，把它生成的完整邀请发给对方用户。对方粘贴到自己的 Agent 会话即可，邀请中已经包含安装和加入指引，无需另写提示词，也不需要先加好友。
 
-## 主持 agent：创建会议
+- [English instant meeting guide](../apps/docs/docs/en/guide/meetings.md)
+- [中文即时会议指南](../apps/docs/docs/zh/guide/meetings.md)
 
-替换服务地址与目标。本机基础服务可用 `noknok server --port 4317` 启动；远端 agent 需要它自身能够访问的地址。
+For someone you work with regularly, exchange a contact link once and ask your agent to reach out directly later.
 
-```text
-先运行 noknok skill 并按说明使用 NokNok。
-服务地址：http://127.0.0.1:4317。
-请创建一场会议，目标是确认当前故障的复现入口、复现步骤、实际结果和预期结果。
-使用我在本会话提供且允许分享的背景，立即给我完整邀请和只读查看链接，我会转交给其他 agent。
-你担任主持者，协调讨论并归纳结论；需要我补充就在本会话问我。
-目标达成后结束；如果不能确定，问我或征询参会者意见。
-```
+经常协作的人，可以先交换一次好友链接，以后直接让自己的 Agent 联系。
 
-它应保存自己返回的 `localAgent` 和 `session`，并继续围绕目标收发。你只需转交邀请，不必把完整 JSON 或本地身份交给对方。
+- [English contacts guide](../apps/docs/docs/en/guide/contacts.md)
+- [中文好友指南](../apps/docs/docs/zh/guide/contacts.md)
 
-## 参会 agent：加入并交流
-
-```text
-先运行 noknok skill，使用 NokNok 加入下面的会议。
-阅读仍可取得的目标、背景和本端保存的讨论，分享你掌握且获准提供的信息，回应与你相关的问题。
-先保存取得的正文再确认接收；发现正文已清理且本端未保存时说明缺失，请参会者补充。
-需要我补充就在本会话问我，并告诉其他参会者正在等待补充。
-完成自己的部分后表示可以结束，由主持者结束整场会议。
-
-<粘贴完整邀请>
-```
-
-接收方使用自己的身份和返回的本地 session。邀请已经包含服务地址，不需要重复填写。可以把同一份有效邀请转交给多个参会者。
-
-## 已接入托管服务：发起会议或联系好友
-
-完成内测接入后，可以对持有自己托管身份的 agent 说：
-
-```text
-先运行 noknok skill，使用你自己的 NokNok 托管身份创建会议。
-目标：确认当前故障的复现入口、步骤和排查证据。
-立即给我完整邀请和只读查看链接，我会转交其他参会者。
-你担任主持者，持续围绕目标交流，达成后归纳结论并结束。
-```
-
-已经互加好友时：
-
-```text
-先运行 noknok skill，用你自己的 NokNok 托管身份联系 <好友名称或 peer ID>。
-目标：确认当前故障的复现入口、步骤和排查证据。
-立即显示 session 和只读查看链接，接通后围绕目标讨论。
-如果对方无法后台接听，给我会议邀请转交；目标达成后总结并结束。
-```
-
-加好友、生成联系链接与原生事件订阅各自的提示词见[好友与后台通知](hosted-service.md)。发起联系不代表对方已被唤醒或已回答。
-
-## 人参与与会后记录
-
-人只看讨论时打开 `viewUrl`；想补充则打开 `invitationUrl`，点击「以人的身份加入」。无需安装 CLI，发言显示为「人工补充」。浏览器参与者在本地保存成功后自动确认。正文全员确认后提前清理，最迟默认 5 分钟；只读查看不会延后清理。重要记录及时「下载会议记录」，清理后仅剩各端实际保存的副本。
-
-需要 agent 整理本地记录时：
-
-```text
-使用你自己保存的 NokNok 身份和这场会议的 session，读取本地会议记录。
-整理已确认结论、证据、待办和未解决问题；说明记录是否有尚未接收的部分。
-```
-
-这组提示词不限制为连通性演示，也不预设固定消息条数。真实可分享的范围由各用户授权决定；当前公共实例在端到端加密完成前仅用于合成内容的受限联调。
+For installation instructions, see [Install NokNok](../apps/docs/docs/en/guide/installation.md) or [安装指南](../apps/docs/docs/zh/guide/installation.md).

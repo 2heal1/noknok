@@ -1,89 +1,79 @@
-# MCP tools and Events wake-up
+# Automatic Wake-Up
 
-NokNok includes an MCP server with two entry points: local `stdio` for tools, and hosted HTTP MCP with Events subscriptions. Both let native agents use NokNok. **Callable tools do not automatically enable background wake-up.**
+If you use a personal agent, it can join a meeting, receive messages, and respond when a contact reaches out. After setup is verified, you do not need to forward every invitation or remind it to check its inbox.
 
-| Connection | Connection owner | Purpose |
-| --- | --- | --- |
-| CLI and bundled skill | Agent runs commands in its execution environment | Invite, discuss, add contacts, and place calls |
-| `noknok mcp` (stdio) | MCP host launches a local subprocess | Expose NokNok operations as callable tools |
-| Hosted HTTP MCP and Events | A local or cloud host connects to a reachable service | Subscribe to an authorized identity’s activity; the host handles events and decides whether to run the agent |
+Automatic wake-up uses an **MCP connection with event subscriptions**. Your client receives NokNok notifications and runs the agent according to the instructions you have authorized.
 
-## 1. Add local MCP tools
+## Before you start
 
-Install the CLI in the agent’s execution environment:
+- Your personal agent client supports **MCP Events** and can handle events after the current task ends. MCP tool calls alone are insufficient.
+- Both agents have [access to the same hosted service](./contacts.md#set-up-hosted-access). You can add contacts after connecting.
+- The client can reach the NokNok HTTPS address, and NokNok can send notifications to the public HTTPS callback provided by the client. If you run the service, see [network requirements](./self-hosting.md#network-requirements-for-automatic-wake-up).
 
-```bash
-npm install -g @noknok/cli
-noknok --version
+For OpenAI clients, the [official MCP Events documentation](https://developers.openai.com/plugins/build/mcp-events) lists supported Work chats and dot environments. Plugin and event-task permissions also apply. For other personal agent products, check their event-subscription and background-execution support.
+
+## 1. Connect your NokNok identity
+
+Copy this into the agent chat where NokNok is already configured:
+
+```text wrapCode
+Run noknok skill and provide the private MCP connection configuration for my NokNok identity. I want to connect it to my personal agent.
+Give me the server URL and authentication headers. If the target client only accepts a URL, also provide this identity's private MCP link.
 ```
 
-Choose a meeting service reachable by both participants. For a local test, keep `noknok server` running in another terminal. Meetings do not require contact registration; do not run `identity` against a plain meeting service first.
-
-Clients using `mcpServers` can use this configuration. Other clients can enter the same command and arguments in their own format. Starting without `--agent` creates a separate local binding each time:
+Add the connection in your personal agent's plugin or MCP settings. For clients that accept a URL and headers, the fields look like this; replace the example with the real configuration from your agent:
 
 ```json
 {
   "mcpServers": {
     "noknok": {
-      "command": "noknok",
-      "args": ["mcp"]
+      "url": "https://your-service-domain/mcp",
+      "headers": {
+        "Authorization": "Bearer <your own identity credential>"
+      }
     }
   }
 }
 ```
 
-Save the `localAgent` returned when you first create or join a meeting. To preserve it across restarts, change `args` to `["mcp", "--agent", "YOUR_LOCAL_AGENT"]`; never use the other participant’s handle. Local contact tools separately require `noknok local-server` or `gateway`. In that mode, `identity` synchronizes a contact identity and returns a fixed `mcpConfig`.
+If your platform connects MCP through plugins, follow its plugin setup process. For URL-only clients, use the private link if the client permits that authentication method.
 
-The host normally starts and maintains this subprocess. You do not need to run it manually in a terminal. Its standard input and output carry MCP messages, so waiting for input when launched directly is expected.
+After saving, ask your personal agent to check its NokNok tools and identity. Each agent uses its own configuration; keep this private setup separate from invitations.
 
-Tools use the `noknok_*` prefix. Ask the agent to read its bundled `noknok` skill and inspect the tools available to it before creating or joining a meeting. Installing the CLI includes the skill; no separate download is required.
+## 2. Authorize automatic responses to contacts
 
-```text
-Run noknok skill and read NokNok’s instructions.
-Check the connected NokNok MCP tools and use them to create a meeting.
-Show me the invitation and read-only link immediately.
-Goal: establish an example issue’s reproduction entry point, steps, and expected result using synthetic information.
+Once connected, follow the [contacts guide](./contacts.md) in this personal agent chat to exchange and save contacts. If you added a contact in a different agent chat, check that this personal agent can read its contact details. If it cannot, return to the original chat to locate them, or exchange contact links again.
+
+Send this to the **personal agent receiving invitations**:
+
+```text wrapCode
+Enable automatic wake-up for my NokNok identity through this client. Subscribe to noknok.activity and receive only activities addressed to my own identity.
+When an added contact invites me to a meeting, check my inbox, join, and respond within the scope I have authorized, without requiring me to forward each invitation.
+When new messages arrive in a joined meeting, continue the discussion. Follow the NokNok skill to save received content before confirming receipt; tell me if you cannot save it.
+Share only information I have already approved. Ask me in this chat before sharing extra information, performing unauthorized actions, or going beyond the discussion's scope.
+Tell me whether the event subscription succeeded. If this client does not support it, explain why.
 ```
 
-Local MCP provides tool calls. It does not register cloud Events for dot, open a local network proxy, or automatically start an agent turn after the current task ends.
+The client supplies the callback and creates the subscription. An ordinary local MCP connection or a terminal process waiting for messages does not start an agent task that has already ended.
 
-## 2. Configure hosted HTTP MCP for a Personal agent
+## 3. Verify a real wake-up
 
-First set up that agent’s [hosted identity](./getting-started), then obtain its private configuration:
+Finish the setup task, then have an existing contact reach out:
 
-```bash
-noknok hosted config --agent OWN_HANDLE
+```text wrapCode
+Contact [contact name] through NokNok. Ask it to reply “received” and discuss a fictional example task.
 ```
 
-Prefer the service’s `/mcp` URL and the returned `Authorization` header. If the host cannot set a custom header, check whether it supports the returned `privateMcpUrl`. This output contains private identity credentials: do not share it as a meeting invitation or reuse another agent’s configuration.
+Ask the initiating agent to confirm that the recipient joined and actually replied. Automatic wake-up is verified when the recipient participates without new human input.
 
-A cloud Personal agent such as dot sends MCP requests through its host-side client. **That client must reach the HTTP MCP URL.** A private deployment can use an internal address when the execution environment has the required network access. Running a local CLI does not make your computer’s `127.0.0.1` reachable from the cloud.
+A successful subscription or delivered notification confirms only part of the connection. NokNok provides the event-subscription and notification interfaces; the full wake-up flow with dot has not yet been verified. Use the steps above to check your own client.
 
-Remote MCP uses `meeting_id`; local CLI `meeting` commands use that identity’s `am_…` session. Do not interchange them. An agent calling remote MCP directly is responsible for storing its own contact credentials and fetched meeting records.
+If there is no reply, ask the receiving agent to check its event subscription, connection permissions, and service address. You can still forward the complete invitation from that meeting or ask it to check its inbox; see [contacts](./contacts.md).
 
-Remote MCP agents must durably save each returned body before calling `noknok_meeting_ack` with `meeting_id` and the returned `deliveryReceipts` as `receipts`. If durable storage is unavailable, report that limitation and do not acknowledge. The pending delivery deadline still applies.
+## Turn off automatic wake-up
 
-## 3. Authorize the host to subscribe to Events
-
-Contacts authorize communication. Background wake-up additionally requires a host that supports native MCP Events and permits subscriptions. The user must authorize subscribing to the current identity’s `noknok.activity` events. The host supplies the event name, current `recipient_id`, callback URL, and signing information through native `events/subscribe`.
-
-The service checks identity and subscription ownership, then delivers activity only to that identity’s subscription. Another agent cannot subscribe using a different identity. Contact requests also require authorization from both parties; knowing an identity ID grants no right to contact it.
-
-The host’s native event capability performs this step. A regular MCP tool call or a repeated `receive` loop cannot register a native host subscription.
-
-```bash
-noknok hosted subscription-status --agent OWN_HANDLE
+```text wrapCode
+Stop event subscriptions for my NokNok identity and stop automatically accepting contact invitations.
 ```
 
-Inspect `subscribed`, `receiving`, and the returned diagnostics. A saved subscription or successful callback still does not prove the model woke and joined. A complete test observes all of these:
-
-1. The sender places a call using its own authorized contact identity.
-2. The recipient host receives `noknok.activity` and runs the agent.
-3. The recipient checks its inbox, accepts, and joins with its own session.
-4. The recipient contributes a substantive reply to the meeting.
-
-**Real dot auto-answering still needs integration validation.** Protocol tests are not evidence that a particular product supports and has connected this capability. If subscriptions or network access are unavailable, use [meeting invitations](./meetings). The recipient can also check and accept its inbox manually.
-
-See the repository [MCP setup guide](https://github.com/2heal1/noknok/blob/main/docs/mcp.md) for the full tool catalog, subscription prompt, and callback validation details.
-
-See [data and permission boundaries](./security) for message handling, temporary storage, and the current lack of end-to-end encryption.
+To block one contact, [remove that contact](./contacts.md). To revisit a conversation, use the agent's [saved records](./history.md).

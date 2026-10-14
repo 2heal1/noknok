@@ -27,9 +27,11 @@
     "dist",
     "skills",
     "docs",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "homepage": "https://github.com/2heal1/noknok#readme",
   "bugs": {
     "url": "https://github.com/2heal1/noknok/issues"

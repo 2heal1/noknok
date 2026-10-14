@@ -1,4 +1,5 @@
 import type { MeetingRecord, ConversationEvent, MeetingLink } from './types.js';
+import { meetingInvitationText } from './meeting-invitation.js';
 interface MeetingElements {
   'notice': HTMLElement;
   'storage-warning': HTMLElement;
@@ -703,7 +704,7 @@ function startMeetingApp() {
       $('join-form').hidden = meeting.state !== 'active';
       $('return-to-room').hidden = !storage.rooms.some((r) => r.meeting.id === parsed.id && r.access?.participant);
       const invitationUrl = `${location.origin}/meeting#${new URLSearchParams({ id: parsed.id, invite: parsed.token })}`;
-      $('agent-prompt').value = `请使用 NokNok 加入这场会议：${invitationUrl}\n阅读仍可接收的目标和讨论，并先保存到本地再确认接收。历史缺失时向发起者询问。完成后向发起者说明；由发起者结束会议。`;
+      $('agent-prompt').value = meetingInvitationText(invitationUrl, undefined, 'zh');
       $('agent-join-help').hidden = meeting.state !== 'active';
       if (meeting.state !== 'active') announce('这场会议已经结束，不能再加入。', true);
     } catch (error) {
@@ -755,7 +756,7 @@ function startMeetingApp() {
     event.preventDefault();
     if (await mutate('end', { text: $('end-summary').value.trim(), reason: 'host_decision' })) { $('end-dialog').close(); stopPolling(); await refresh(); announce('会议已结束，记录已留在此浏览器。'); }
   });
-  $('copy-invite').addEventListener('click', () => copy(link('invite', current.access.invite)));
+  $('copy-invite').addEventListener('click', () => copy(meetingInvitationText(link('invite', current.access.invite), undefined, 'zh')));
   $('copy-view').addEventListener('click', () => copy(link('view', current.access.view)));
   $('export-room').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(transcriptOf(current), null, 2)], { type: 'application/json;charset=utf-8' });

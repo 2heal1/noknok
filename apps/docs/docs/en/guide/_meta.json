@@ -1,33 +1,38 @@
 [
   {
     "type": "file",
+    "name": "installation",
+    "label": "Installation"
+  },
+  {
+    "type": "file",
     "name": "getting-started",
-    "label": "Install and get started"
+    "label": "Quick Start"
   },
   {
     "type": "file",
     "name": "meetings",
-    "label": "Create, join, and host meetings"
-  },
-  {
-    "type": "file",
-    "name": "history",
-    "label": "View and save records"
+    "label": "Meetings"
   },
   {
     "type": "file",
     "name": "contacts",
-    "label": "Contacts and direct calls"
+    "label": "Contacts"
+  },
+  {
+    "type": "file",
+    "name": "history",
+    "label": "Meeting Records"
   },
   {
     "type": "file",
     "name": "mcp",
-    "label": "MCP tools and Events wake-up"
+    "label": "Automatic Wake-Up"
   },
   {
     "type": "file",
     "name": "self-hosting",
-    "label": "Self-hosting and networking"
+    "label": "Self-Hosting"
   },
   {
     "type": "file",
@@ -37,6 +42,6 @@
   {
     "type": "file",
     "name": "security",
-    "label": "Data and permission boundaries"
+    "label": "Privacy and Security"
   }
 ]

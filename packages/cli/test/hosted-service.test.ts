@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { invitationJoinLink } from './meeting-invitation-helper.js';
 import { mkdtemp, rm, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -82,6 +83,10 @@ test('hosted service gates all creation and disables legacy registration/proxy r
   assert.ok(!tools.tools.some(tool => /shell|proxy|fetch_url/.test(tool.name)));
   const endpoint = await f.raw(`/mcp/${a.agentToken}`, { value: { jsonrpc: '2.0', id: 1, method: 'ping' } });
   assert.deepEqual(endpoint.body.result, {});
+  const asset = await fetch(f.service.origin + '/meeting-invitation.js');
+  assert.equal(asset.status, 200);
+  assert.match(asset.headers.get('content-type'), /javascript/);
+  assert.match(await asset.text(), /export function meetingInvitationText/);
 });
 
 test('friend meeting uses authenticated recipient, delivers minimal event and supports agents plus a human', async t => {
@@ -111,7 +116,7 @@ test('friend meeting uses authenticated recipient, delivers minimal event and su
   assert.ok(!JSON.stringify(inbox).includes('invite='));
   const joined = await f.tool(b, 'meeting_join', { invitation_id: call.invitationId, name: 'agent-doubaowork' });
   assert.equal(joined.meeting.id, call.meeting.id);
-  const inviteToken = new URLSearchParams(new URL(call.invitationUrl).hash.slice(1)).get('invite');
+  const inviteToken = new URLSearchParams(new URL(invitationJoinLink(call)).hash.slice(1)).get('invite');
   const human = await f.raw(`/v1/meetings/${call.meeting.id}/join`, { value: { token: inviteToken, name: 'Reporter', kind: 'human' } });
   assert.equal(human.status, 200);
   const sent = await f.tool(b, 'meeting_send', { meeting_id: call.meeting.id, text: 'Steps: open preview and select retry.', request_id: 'reply-1' });
@@ -175,7 +180,7 @@ test('owner and global budgets apply to MCP and direct REST; purge removes cache
   assert.equal(raw.status, 429);
   await f.tool(b, 'meeting_create', { purpose: 'Other account', request_id: 'two' });
   await assert.rejects(f.tool(b, 'meeting_create', { purpose: 'Full', request_id: 'three' }), error => error.code === 'relay_capacity_exceeded');
-  await f.tool(b, 'meeting_join', { link: room.invitationUrl });
+  await f.tool(b, 'meeting_join', { link: invitationJoinLink(room) });
   const token = new URLSearchParams(new URL(room.invitationUrl).hash.slice(1)).get('invite');
   assert.equal((await f.raw(`/v1/meetings/${room.meeting.id}/join`, { value: { name: 'Human', kind: 'human', token } })).status, 429);
   await f.tool(a, 'meeting_end', { meeting_id: room.meeting.id, request_id: 'end' });
@@ -339,6 +344,9 @@ test('native pending bodies expire without ACK, including cached creation metada
   await delay(60);
   const read = await f.tool(a, 'meeting_read', { meeting_id: created.meeting.id });
   const retry = await f.tool(a, 'meeting_create', args);
+  invitationJoinLink(retry);
+  assert.ok(!retry.invitationText.includes(args.purpose), 'Forwardable retry metadata must not retain an expired goal.');
+  assert.ok(!retry.invitationText.includes(args.context), 'Forwardable retry metadata must not retain expired background.');
   for (const snapshot of [read, retry, f.service.meetings.inspect(created.meeting.id)]) {
     assert.ok(!JSON.stringify(snapshot).includes(args.purpose));
     assert.ok(!JSON.stringify(snapshot).includes(args.context));

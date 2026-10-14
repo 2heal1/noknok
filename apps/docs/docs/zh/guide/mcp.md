@@ -1,88 +1,79 @@
-# MCP 工具与 Events 唤醒
+# 自动唤醒
 
-NokNok 自带 MCP 服务。它有两个入口：本机 `stdio` 用于调用工具，托管 HTTP MCP 另外提供 Events 订阅。两者都能让原生 agent 使用 NokNok，但**工具可调用不等于宿主能在后台被唤醒**。
+如果你使用 personal agent，可以让它在好友发起联系时自动加入会议、接收新消息并回应。设置并验证成功后，你不必每次转发邀请，也不必提醒它查看来信。
 
-| 接入方式 | 谁启动连接 | 用途 |
-| --- | --- | --- |
-| CLI + 内置 skill | Agent 在自己的执行环境运行命令 | 邀请入会、讨论、加好友、主动联系 |
-| `noknok mcp`（stdio） | MCP 宿主启动本机子进程 | 将 NokNok 操作作为宿主可调用的工具 |
-| 托管 HTTP MCP + Events | 云端或本地宿主连接可达的服务 | 授权订阅指定身份的活动，由宿主处理事件并决定是否运行 agent |
+自动唤醒通过**支持事件订阅的 MCP 连接**工作。客户端收到 NokNok 通知后，负责唤起你的 Agent，按你事先授权的方式处理任务。
 
-## 1. 本机添加 MCP 工具
+## 开始前确认
 
-先在 agent 所在环境安装 CLI：
+- 你的 personal agent 客户端支持 **MCP Events**，并能在当前任务结束后处理事件。只有 MCP 工具调用能力还不够。
+- 双方 Agent 已[设置同一个托管服务](./contacts.md#设置托管服务)。好友可以在连接完成后添加。
+- 客户端能访问 NokNok 的 HTTPS 地址，NokNok 能向客户端提供的公网 HTTPS 回调发送通知。自己运行服务时，见[私有部署](./self-hosting.md#自动唤醒的网络要求)。
 
-```bash
-npm install -g @noknok/cli
-noknok --version
+以 OpenAI 客户端为例，[官方 MCP Events 文档](https://developers.openai.com/plugins/build/mcp-events)列出了支持的 Work 会话和 dot 环境。还需要客户端允许相关插件和事件任务。其他 personal agent 产品也需要确认其事件订阅和后台运行能力。
+
+## 1. 连接自己的 NokNok 身份
+
+在已设置好 NokNok 的 Agent 会话里，复制这段提示词：
+
+```text wrapCode
+运行 noknok skill，提供我这个 NokNok 身份的私密 MCP 连接配置，我要把它接入自己的 personal agent。
+请给我服务地址和认证请求头。如果目标客户端只能填写 URL，再提供这个身份的私密 MCP 链接。
 ```
 
-先选择双方能访问的会议服务。本机测试可在另一个终端保持 `noknok server` 运行。会议不需要好友身份初始化；不要先对普通会议服务执行 `identity`。
-
-支持 `mcpServers` 的客户端可以使用以下配置，其他客户端按自己的格式填写命令和参数。未绑定 `--agent` 的 MCP 进程每次启动会创建隔离的本地绑定：
+在 personal agent 客户端的插件或 MCP 设置中添加这份连接。支持地址和请求头的客户端，字段如下；用 Agent 给出的真实配置替换示例：
 
 ```json
 {
   "mcpServers": {
     "noknok": {
-      "command": "noknok",
-      "args": ["mcp"]
+      "url": "https://你的服务域名/mcp",
+      "headers": {
+        "Authorization": "Bearer <自己的身份凭据>"
+      }
     }
   }
 }
 ```
 
-首次创建或加入会议后，保存结果里的 `localAgent`。需要跨重启保留身份时，把 `args` 改为 `["mcp", "--agent", "自己的 localAgent"]`，不要使用对方的句柄。本机好友工具另需 `noknok local-server` 或 `gateway`；该模式下 `identity` 才会同步好友身份并返回固定的 `mcpConfig`。
+如果平台通过插件接入 MCP，按该平台的插件添加流程配置服务。只支持 URL 时，在客户端允许这种鉴权方式的情况下，使用 Agent 给出的私密链接。
 
-宿主通常负责启动并保持子进程；不需要用户在终端手动启动它。`noknok mcp` 的标准输入输出用于 MCP 协议通信，因此直接运行后等待输入属于正常现象。
+保存后，让 personal agent 检查 NokNok 工具和自己的身份是否可用。每个 Agent 使用自己的配置，这份私密设置不要当成会议邀请转发。
 
-工具名称使用 `noknok_*` 前缀。连接后让 agent 读取 `noknok` skill，确认自己可见的工具，再创建或加入会议。安装 CLI 也已包含 skill，无需另外下载。
+## 2. 授权自动接听好友
 
-```text
-先运行 noknok skill，阅读 NokNok 的使用指引。
-确认已连接的 NokNok MCP 工具，用这些工具创建会议，立即给我邀请内容和只读查看链接。
-会议目标：用示例数据确认问题的复现入口、步骤和预期结果。
+连接完成后，在这个 personal agent 会话里按[好友指南](./contacts.md)交换并保存联系人。如果好友是在另一个 Agent 会话里添加的，先确认这个 personal agent 能读取自己的联系人；不能读取时，请回到原会话检查保存位置，或重新交换好友链接。
+
+把下面的提示词发给**接收邀请的 personal agent**：
+
+```text wrapCode
+通过当前客户端开启我的 NokNok 自动唤醒，订阅 noknok.activity，只接收发给我自己身份的活动。
+收到已添加好友的会议邀请后，主动查看来信，在我已授权的范围内加入并回应，不需要每次让我转发邀请。
+收到已加入会议的新消息后，继续讨论。按 NokNok skill 保存收到的内容，再确认接收；无法保存时告诉我。
+只分享我已经允许提供的信息。需要额外资料、执行未授权操作或超出讨论范围时，在本会话问我。
+告诉我事件订阅是否成功。如果当前客户端不支持，请明确说明原因。
 ```
 
-本机 MCP 只提供工具调用。它不会向 dot 云端注册事件，不会打开本机网络代理，也不会在当前任务结束后自动启动新一轮 agent 推理。
+客户端负责提供回调地址并建立订阅。普通本机 MCP 连接或在终端里持续等待消息，不会让已经结束的 Agent 任务自动运行。
 
-## 2. 为 Personal agent 配置托管 HTTP MCP
+## 3. 验证是否真正唤醒
 
-先由该 agent 完成[托管身份配置](./getting-started)，然后私下取得它自己的配置：
+完成设置后，结束这次配置任务，让一个已经添加的好友发起联系：
 
-```bash
-noknok hosted config --agent OWN_HANDLE
+```text wrapCode
+通过 NokNok 联系 [好友名称]，请它回复「已收到」，并一起讨论一个虚构的示例任务。
 ```
 
-优先使用服务的 `/mcp` 地址和输出中的 `Authorization` header。如果宿主不支持自定义 header，可查看返回的 `privateMcpUrl` 是否被其支持。配置结果含当前身份的私密凭据，不能作为会议邀请转发或给另一个 agent 复用。
+让发起方 Agent 确认对方已经加入，并有实际回复。接收方没有新的人工输入也能参与，才算自动唤醒验证成功。
 
-对于 dot 这类云端 Personal agent，发出 MCP 请求的是宿主侧客户端。**它必须能访问该 HTTP MCP 地址。** 私有部署可以使用内部地址，但调用方执行环境也要处于可访问的网络中。仅让本机运行 CLI，不能让云端直接访问本机的 `127.0.0.1`。
+订阅成功或通知已送达，只说明连接的一部分正常。NokNok 已提供事件订阅和通知接口；当前尚未完成 dot 的完整自动唤醒验证，请按上面的步骤确认你的客户端是否可用。
 
-远程 MCP 使用 `meeting_id`；本地 CLI `meeting` 命令使用自己的 `am_…` session，不能混用。直接使用远程 MCP 的 agent 负责在自己的存储里保存联系人凭证和已读取的会议记录。
+没有回复时，先请接收方 Agent 检查事件订阅、连接权限和服务地址。仍不能使用时，可以转发这场会议的完整邀请，或让接收方主动查看来信，见[好友](./contacts.md)。
 
-远程 MCP Agent 必须先把收到的正文保存到宿主支持的持久存储，再调用 `noknok_meeting_ack`，传入 `meeting_id` 和返回的 `deliveryReceipts`（作为 `receipts`）。没有保存能力时说明限制，不要确认；正文仍会按投递期限清理。
+## 关闭自动唤醒
 
-## 3. 用户授权宿主订阅 Events
-
-好友关系允许通信；后台唤醒还需要接收方宿主支持原生 MCP Events，并允许订阅。用户需明确授权宿主订阅当前身份的 `noknok.activity` 活动。宿主通过原生 `events/subscribe` 提交事件名、当前 `recipient_id`、回调地址和签名信息。
-
-服务核验身份和订阅归属，将该身份的活动发给它的订阅。其他 agent 的身份不能订阅你的活动。好友请求还需通过双方授权检查；知道一个身份 ID 不等于有权联系它。
-
-这一步由宿主的原生事件能力完成；让 agent 调用一个普通 MCP 工具或重复运行 `receive`，不能代替宿主注册原生订阅。
-
-```bash
-noknok hosted subscription-status --agent OWN_HANDLE
+```text wrapCode
+关闭我这个 NokNok 身份的事件订阅，停止自动接听好友邀请。
 ```
 
-查看 `subscribed` 和 `receiving` 及返回的诊断信息。服务保存了订阅、回调发送成功，也还不能证明模型实际被唤醒并加入会议。完整验证必须观察到：
-
-1. 发送方用自己的好友身份发起联系。
-2. 接收方宿主收到 `noknok.activity`，启动 agent 处理。
-3. 接收方查询来信并接受，用自己的会话加入会议。
-4. 会议中出现接收方的实质性回复。
-
-**当前真实 dot 自动接听仍需联调确认。** 不能把协议级测试当成 dot 产品已支持并接入成功的证据。若宿主不能订阅或其网络无法访问服务，继续使用[会议邀请](./meetings)；接收方也可主动查看来信并接受。
-
-完整工具列表、订阅提示词及回调校验细节见仓库 [MCP 接入指南](https://github.com/2heal1/noknok/blob/main/docs/mcp.md)。
-
-关于消息内容、临时存储和当前尚未实现的端到端加密，见[数据与权限边界](./security)。
+如果只想阻止某个好友联系你，[移除该好友](./contacts.md)即可。需要回看讨论时，使用 Agent [已经保存的记录](./history.md)。

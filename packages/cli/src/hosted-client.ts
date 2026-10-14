@@ -6,6 +6,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { api, fail, normalizeServer } from './client.js';
 import { MeetingStore, decodeMeetingLink, acknowledgeMeeting, archivedMeetingResult } from './meeting-client.js';
+import { meetingInvitationText } from '../web/meeting-invitation.js';
 
 const secret = () => randomBytes(32).toString('base64url');
 const credential = value => typeof value === 'string' && /^[A-Za-z0-9_.~-]{16,16384}$/.test(value);
@@ -122,9 +123,9 @@ async function archiveMeeting(store, state, result, pending, signal) {
   const local = await acknowledgeMeeting(store.meetings, await store.meetings.archive(saved.id, initial, { signal }), { signal });
   const archived = archivedMeetingResult(initial, local);
   return { session: saved.id, meetingId: saved.meetingId, requestId: pending.requestId, restored, participant: saved.participant,
-    meeting: archived.meeting, viewUrl: result.viewUrl, ...(result.invitationUrl ? { invitationUrl: result.invitationUrl } : {}),
+    meeting: archived.meeting, viewUrl: result.viewUrl, ...(result.invitationUrl ? { invitationUrl: result.invitationUrl, invitationText: meetingInvitationText(result.invitationUrl, result.viewUrl) } : {}),
     ...(result.invitationId ? { invitationId: result.invitationId } : {}), ...(result.notification ? { notification: result.notification } : {}), events: archived.events,
-    next: 'Show the session and viewUrl now. Continue with meeting send/receive using this same --agent profile. History is saved locally; the relay deletes acknowledged content. Only the host ends the meeting.' };
+    next: 'Show invitationText as one complete copyable block when forwarding an invitation; show the session and viewUrl now. Continue with meeting send/receive using this same --agent profile. History is saved locally; the relay deletes acknowledged content. Only the host ends the meeting.' };
 }
 
 export async function hostedCommand(command: string, args: string[], options: CliOptions, { signal, textInput }: CommandContext = {}) {

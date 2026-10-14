@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { invitationJoinLink } from './meeting-invitation-helper.js';
 import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -225,7 +226,7 @@ test('unbound MCP connections create independent meeting profiles and recover wi
   const create = toolResult(await a.request('create', 'tools/call', { name: 'noknok_meeting_create', arguments: { purpose: 'Original profile must not be adopted' } }));
   const b = f.launch([cli, 'mcp', '--product', 'codex'], { env });
   await b.initialize();
-  const guest = toolResult(await b.request('join', 'tools/call', { name: 'noknok_meeting_join', arguments: { link: create.invitationUrl } }));
+  const guest = toolResult(await b.request('join', 'tools/call', { name: 'noknok_meeting_join', arguments: { link: invitationJoinLink(create) } }));
   assert.notEqual(guest.localAgent, create.localAgent);
   assert.notEqual(guest.participant.id, create.participant.id);
   assert.equal(guest.participant.name, 'agent-codex');
@@ -233,7 +234,7 @@ test('unbound MCP connections create independent meeting profiles and recover wi
   await Promise.all([a.stop(), b.stop()]);
   const resumed = f.launch([cli, 'mcp', '--agent', guest.localAgent], { env });
   await resumed.initialize();
-  const joinedAgain = toolResult(await resumed.request('join-again', 'tools/call', { name: 'noknok_meeting_join', arguments: { link: create.invitationUrl } }));
+  const joinedAgain = toolResult(await resumed.request('join-again', 'tools/call', { name: 'noknok_meeting_join', arguments: { link: invitationJoinLink(create) } }));
   assert.equal(joinedAgain.session, guest.session);
   assert.equal(joinedAgain.participant.name, 'agent-codex');
   await resumed.stop();

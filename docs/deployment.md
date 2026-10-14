@@ -39,7 +39,17 @@ export NOKNOK_DOMAIN=noknok.example.com
 docker compose -f deploy/compose.hosted.yaml up -d --build
 ```
 
-将示例域名换成实际域名。配置使用 Node.js 24 镜像和 Caddy 自动 HTTPS；应用端口不直接发布，只由 Caddy 转发。应用的 `/data` 持久卷保存 SQLite 与服务密钥，Caddy 的独立卷保存证书。应用以非 root 用户运行，根文件系统只读，并限制内存、进程和日志容量。当前尚未完成实际 Docker 构建、公网 TLS 或部署验收。
+将示例域名换成实际域名。配置使用 Node.js 24 镜像和 Caddy 自动 HTTPS；应用端口不直接发布，只由 Caddy 转发。应用的 `/data` 持久卷保存 SQLite 与服务密钥，Caddy 的独立卷保存证书。应用以非 root 用户运行，根文件系统只读，并限制内存、进程和日志容量。2026-10-14 已在 `https://api.noknok.cloud` 完成容器构建、Caddy 配置校验、公网 HTTPS 证书校验、合成回调及应用容器重建验证；具体环境与验证边界见 [验收记录](validation.md)。证书自动续期、真实 dot 接入和容量压测尚未验证，本次结果不代表可以开放真实用户内测。
+
+本次受限测试实例的源码入口为 `/opt/noknok/current`，在 2026-10-14 指向发布目录 `releases/7c36941`；域名配置文件为 `/opt/noknok/deployment.env`，Compose 项目名固定为 `noknok`。例如，查看当前实例状态：
+
+```sh
+docker compose -p noknok \
+  --env-file /opt/noknok/deployment.env \
+  -f /opt/noknok/current/deploy/compose.hosted.yaml ps
+```
+
+后续运维应继续使用同一个项目名、环境文件与 Compose 文件，以使用同一组持久卷。文件权限、容器重建和控制状态恢复应按验收记录分别核对；不要将重建等同于备份恢复。SSH 私钥保留在管理端，不上传至服务或构建上下文。
 
 SQLite 初始化已实现，服务首次启动自动建库，无需额外采购数据库。正式部署使用独立数据目录；数据库与两份原始服务密钥须配套备份。自动备份、恢复演练和 schema 升级工具尚未完成，不能把已有重启测试当成运维恢复验收。
 
@@ -53,6 +63,20 @@ docker compose -f deploy/compose.hosted.yaml exec noknok node bin/noknok.mjs bet
 
 ```sh
 docker compose -f deploy/compose.hosted.yaml exec noknok node bin/noknok.mjs revoke-agent --data-dir /data --public-url "https://${NOKNOK_DOMAIN}" --agent-id AGENT_ID
+```
+
+以上生成码和撤销命令对应前文的通用模板，依赖当前 shell 已导出 `NOKNOK_DOMAIN`。操作本次受限实例时，须使用固定项目名、环境文件与 Compose 文件；以下命令直接使用容器内已经配置的 `NOKNOK_DATA_DIR` 和 `NOKNOK_PUBLIC_URL`，避免访问另一套卷或依赖当前 shell 的域名变量：
+
+```sh
+docker compose -p noknok \
+  --env-file /opt/noknok/deployment.env \
+  -f /opt/noknok/current/deploy/compose.hosted.yaml \
+  exec noknok node bin/noknok.mjs beta-code --output-file /data/code.txt
+
+docker compose -p noknok \
+  --env-file /opt/noknok/deployment.env \
+  -f /opt/noknok/current/deploy/compose.hosted.yaml \
+  exec noknok node bin/noknok.mjs revoke-agent --agent-id AGENT_ID
 ```
 
 `NOKNOK_PUBLIC_URL` 和 `NOKNOK_DATA_DIR` 是托管入口的环境变量。数据目录绑定服务 origin；迁移域名不能只改环境变量并继续使用旧身份。保留原 origin 可迁移机器；切换服务空间应重新建立身份和授权。
@@ -92,6 +116,6 @@ node bin/noknok.mjs server --host 0.0.0.0 --port 4317 --public-url https://relay
 
 Caddy 模板丢弃访问日志与默认运行日志，避免私密 MCP URL 进入日志。额外监控也应排除正文、Authorization、邀请和回调密钥。`compose.gateway.yaml` 是旧本机接收器方案；新的云端接入使用 `compose.hosted.yaml`。
 
-公网验收需检查健康、页面、普通邀请和定向邀请、多人收发、权限/撤销、重启后控制状态恢复、配额与清理，最后验证真实 dot 原任务结束后能自主加入并回复。HTTP 200 或模拟 webhook 不能代替宿主接听结果。参见 [验收说明](validation.md) 和 [原方案与状态](public-beta-plan.md)。
+每次部署验收需检查健康、页面、普通邀请和定向邀请、多人收发、权限/撤销、重建后控制状态恢复、配额与清理，并单独验证真实 dot 原任务结束后能自主加入并回复。本次已完成的公网合成检查与待验证项见 [验收说明](validation.md)。HTTP 200 或合成 webhook 不能代替宿主接听结果，后续发布要求见 [原方案与状态](public-beta-plan.md)。
 
 默认每账号每天最多 60 次订阅验证/续订，验证请求发出前扣减。最低 Node 版本为 22.13（内置 SQLite 默认可用）；本版本实际测试与容器配置采用 Node 24。

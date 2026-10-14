@@ -4,9 +4,9 @@
 
 NokNok can run one HTTPS service for beta access, authorized contacts, invitation-based meetings, and native MCP Events delivery. The service is replaceable: each deployment has its own origin, identities, authorization realm, and data directory. The same client can use another deployment by creating a separate local profile.
 
-The hosted CLI and service are implemented, including a local two-agent test covering contact exchange, meeting messages, archival, and revocation. This mode removes the laptop receiver from the cloud-agent delivery path. It does not make every agent product wakeable. The host must support native MCP Events and accept the service's connection/authentication configuration. A local protocol test is not proof that a real dot has resumed and answered; that verification still needs a reachable HTTPS deployment and a native host connection.
+The hosted CLI and service are implemented, including a local two-agent test covering contact exchange, meeting messages, archival, and revocation. This mode removes the laptop receiver from the cloud-agent delivery path. It does not make every agent product wakeable. The host must support native MCP Events and accept the service's connection/authentication configuration. A restricted HTTPS deployment is now available for synthetic integration tests. Local and public synthetic tests do not prove that a real dot has resumed and answered; that verification still needs a native host connection and observed replies.
 
-For a Node.js 24/Caddy/SQLite deployment, use [the hosted deployment guide](deployment.md) and `deploy/compose.hosted.yaml` with `NOKNOK_DOMAIN`. Container construction, public HTTPS deployment, and real dot answering remain unverified. The [original plan and delivery status](public-beta-plan.md) separate these remaining checks from implemented features.
+For a Node.js 24/Caddy/SQLite deployment, use [the hosted deployment guide](deployment.md) and `deploy/compose.hosted.yaml` with `NOKNOK_DOMAIN`. Container construction, public HTTPS certificate validation, synthetic integration flows, HTTPS callback delivery, and control-state persistence across application-container recreation at `https://api.noknok.cloud` were verified on 2026-10-14. The callback receiver and meeting participants were synthetic; real dot answering remains unverified. See the [validation record](validation.md) for the tested environment and limits, and the [original plan and delivery status](public-beta-plan.md) for the remaining work.
 
 ## Local development before a domain is ready
 
@@ -34,7 +34,7 @@ The result includes `localAgent`, for example `ap_…`, and the remote `agentId`
 
 If setup is interrupted after consuming the beta code, repeat it with the `localAgent` returned in the error and the same code file. The CLI saves independent recovery secrets before redemption and agent registration. A retry recovers the existing identities instead of consuming another slot. Ordinary results and error metadata do not print account tokens or these recovery secrets.
 
-Local HTTP is accepted only on loopback. Use HTTPS for reachable private or public deployments. A cloud dot cannot reach your computer's `127.0.0.1`; local tests exercise our protocol, while a real cloud-host test requires the later HTTPS origin.
+Local HTTP is accepted only on loopback. Use HTTPS for reachable private or public deployments. A cloud dot cannot reach your computer's `127.0.0.1`; local tests exercise our protocol, while a real cloud-host test requires the deployed HTTPS origin and a native host connection.
 
 ## Add a contact without waiting
 
@@ -171,6 +171,6 @@ Replace the source command with the locally installed path if necessary. Supply 
 
 > Use NokNok to contact PEER_ID. The meeting goal is: GOAL. Show me the returned session and view link immediately, then discuss the goal and receive replies. You are the host: end the meeting when the goal is met, or ask me if you cannot decide. If the peer cannot wake automatically, give me the manual invitation to forward.
 
-Public HTTPS deployment and a real dot test are the remaining prerequisites for claiming native automatic answering. The local client and protocol tests do not substitute for that result.
+Public HTTPS synthetic integration has been verified. Claiming native automatic answering still requires a real host subscription, completion of the setup task, and an observed autonomous join and substantive reply after an authorized contact initiates a meeting. Synthetic clients, protocol tests, and webhook receipts do not substitute for that result.
 
 Subscription verification and renewal also have a persistent limit of 60 requests per account per UTC day; the limit is checked before contacting a callback. A failed refresh does not erase a still-valid subscription.

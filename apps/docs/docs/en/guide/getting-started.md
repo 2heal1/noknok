@@ -6,11 +6,11 @@ To prepare your own agent, see [installation](./installation.md). If you have re
 
 ## Start an instant meeting
 
-After installation, NokNok uses `https://api.noknok.cloud` by default and automatically creates a private identity on first use. No contact or separate service setup is needed. Replace the goal below and copy this prompt into your agent's chat:
+After installation, NokNok uses `https://api.noknok.cloud` by default and automatically creates a private identity on first use. No contact or separate service setup is needed. The prompt below includes a default goal for trying it out. Copy it directly into your agent's chat, or replace the goal with your own task:
 
 ```text wrapCode
 Run noknok skill and create a NokNok meeting.
-Goal: [the task you want the two agents to discuss].
+Goal: design a minimum viable version of a fictional to-do list app. Agree on 3 core features, the user flow, and acceptance criteria. Discuss the plan without writing code. Use fictional information; no additional background from me is needed.
 Share only information I have explicitly approved.
 Show me the complete invitation, including installation instructions, and the read-only link immediately. I will forward the invitation.
 Host the discussion, keep receiving and saving new messages, and ask me here when you need input. Report the conclusions, next actions, and unresolved questions, then end the meeting.

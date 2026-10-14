@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile, rename, unlink, readdir, open } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -10,6 +10,48 @@ const HANDLE = /^am_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}
 const TYPES = ['message', 'request', 'result', 'progress', 'waiting_for_user'];
 const MAX_EVENTS = 20000;
 const publicParticipant = ({ token, ...participant }) => participant;
+const BODY_STATES = new Set(['delivered', 'expired', 'recipient_unavailable']);
+
+function mergeArchivedEvent(previous, event) {
+  const tombstone = BODY_STATES.has(event.bodyState) && event.data === undefined;
+  if (!Number.isSafeInteger(event.seq) || event.seq < 1 || typeof event.type !== 'string'
+    || (!tombstone && (!event.data || typeof event.data !== 'object'))) throw fail('INVALID_RESPONSE', 'Relay returned an invalid meeting event.');
+  if (previous) {
+    for (const key of ['type', 'from', 'at']) if (previous[key] !== event[key]) throw fail('INVALID_RESPONSE', 'Relay changed an already archived event.');
+    if (previous.data && event.data && JSON.stringify(previous.data) !== JSON.stringify(event.data)) throw fail('INVALID_RESPONSE', 'Relay changed an already archived event body.');
+  }
+  return { ...previous, ...event, ...(previous?.data && !event.data ? { data: previous.data } : {}),
+    ...(BODY_STATES.has(previous?.bodyState) && event.bodyState === 'pending' ? { bodyState: previous.bodyState } : {}) };
+}
+
+// A deleted relay snapshot must never erase the participant's saved content.
+export function archivedMeetingResult(result, session) {
+  const { deliveryReceipts, ...publicResult } = result;
+  const events = new Map(session.events.map(event => [event.seq, event]));
+  return { ...publicResult, meeting: session.meeting,
+    ...(result.events ? { events: result.events.map(event => events.get(event.seq) || event) } : {}),
+    ...(result.event ? { event: events.get(result.event.seq) || result.event } : {}) };
+}
+
+export async function acknowledgeMeeting(store, session, { signal } = {}) {
+  const receipts = session.pendingDeliveryReceipts || [];
+  // A prior rename may have succeeded even if its directory flush failed. A
+  // retry must establish durability before sending the saved ACK receipts.
+  if (receipts.length) session = await store.update(session.id, () => {}, signal);
+  for (let offset = 0; offset < receipts.length; offset += 256) {
+    const batch = receipts.slice(offset, offset + 256);
+    const result = await api(session.server, `/v1/meetings/${session.meetingId}/ack`, {
+      method: 'POST', token: session.token, body: { receipts: batch }, signal,
+    });
+    if (!Array.isArray(result.acknowledged)) throw fail('INVALID_RESPONSE', 'Relay returned an invalid delivery acknowledgment.');
+    const acknowledged = new Set(result.acknowledged);
+    session = await store.update(session.id, saved => {
+      saved.pendingDeliveryReceipts = (saved.pendingDeliveryReceipts || []).filter(receipt =>
+        !batch.some(sent => sent.seq === receipt.seq && sent.token === receipt.token && acknowledged.has(receipt.seq)));
+    }, signal);
+  }
+  return session;
+}
 
 export function decodeMeetingLink(value, capability = 'invite') {
   try {
@@ -44,8 +86,12 @@ function requestId(value) {
 async function atomicWrite(path, value) {
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
-    await writeFile(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600, flag: 'wx' });
+    await writeFile(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600, flag: 'wx', flush: true });
     await rename(temporary, path);
+    // ACK can irreversibly delete the relay copy. Flush the renamed directory
+    // entry too; a durability failure must leave the receipt unacknowledged.
+    const directory = await open(dirname(path), 'r');
+    try { await directory.sync(); } finally { await directory.close(); }
   } finally { await unlink(temporary).catch(() => {}); }
 }
 
@@ -131,23 +177,32 @@ export class MeetingStore {
       if (result.meeting?.id !== session.meetingId || !Array.isArray(result.events) || result.events.length > MAX_EVENTS) throw fail('INVALID_RESPONSE', 'Relay returned an invalid meeting event batch.');
       const bySequence = new Map(session.events.map(event => [event.seq, event]));
       for (const event of result.events) {
-        if (!Number.isSafeInteger(event.seq) || event.seq < 1 || typeof event.type !== 'string' || !event.data || typeof event.data !== 'object') throw fail('INVALID_RESPONSE', 'Relay returned an invalid meeting event.');
-        const previous = bySequence.get(event.seq);
-        if (previous && JSON.stringify(previous) !== JSON.stringify(event)) throw fail('INVALID_RESPONSE', 'Relay changed an already archived event.');
-        bySequence.set(event.seq, event);
+        bySequence.set(event.seq, mergeArchivedEvent(bySequence.get(event.seq), event));
       }
       if (bySequence.size > MAX_EVENTS) throw fail('ARCHIVE_LIMIT', 'Meeting exceeds the local event archive limit.');
       session.events = [...bySequence.values()].sort((a, b) => a.seq - b.seq);
       let cursor = 0;
       for (const event of session.events) { if (event.seq !== cursor + 1) break; cursor = event.seq; }
       session.archiveCursor = cursor;
+      session.missingContentSequences = session.events.filter(event => !event.data).map(event => event.seq);
+      session.historyComplete = session.events.length > 0 && cursor >= Math.max(result.nextCursor || 0, session.events.at(-1)?.seq || 0) && session.missingContentSequences.length === 0;
+      if (result.deliveryReceipts !== undefined) {
+        if (!Array.isArray(result.deliveryReceipts)) throw fail('INVALID_RESPONSE', 'Relay returned invalid delivery receipts.');
+        const receipts = new Map((session.pendingDeliveryReceipts || []).map(receipt => [receipt.seq, receipt]));
+        for (const receipt of result.deliveryReceipts) {
+          if (!Number.isSafeInteger(receipt.seq) || receipt.seq < 1 || typeof receipt.token !== 'string'
+            || !bySequence.get(receipt.seq)?.data) throw fail('INVALID_RESPONSE', 'Relay issued a delivery receipt without archived content.');
+          receipts.set(receipt.seq, receipt);
+        }
+        session.pendingDeliveryReceipts = [...receipts.values()];
+      }
       if (delivered) {
         if (!Number.isSafeInteger(result.nextCursor) || result.nextCursor < 0) throw fail('INVALID_RESPONSE', 'Relay returned an invalid delivery cursor.');
         session.readCursor = Math.max(session.readCursor, Math.min(cursor, result.nextCursor));
       }
       // Concurrent requests can return older snapshots; preserve the latest one.
       const revision = result.nextCursor ?? result.event?.seq ?? result.events.at(-1)?.seq ?? 0;
-      if (revision >= (session.revision || 0)) { session.meeting = result.meeting; session.revision = revision; }
+      if (revision >= (session.revision || 0)) { session.meeting = { ...session.meeting, ...result.meeting }; session.revision = revision; }
       session.archivedAt = new Date().toISOString();
     }, signal);
   }
@@ -196,25 +251,31 @@ export async function meetingCommand(command, args, options, { signal, textInput
       const result = await api(server, invitation ? `/v1/meetings/${invitation.id}/join` : '/v1/meetings', { method: 'POST', body, signal, ...(invitation ? {} : { key: process.env.AGENTCALL_SERVER_KEY }) });
       checkResult(result, server, invitation?.id, !invitation);
       const { saved, restored } = await store.create(pending.session, server, result, signal);
+      // Creation/join responses also carry content; commit those receipts with
+      // the content before allowing the relay to discard it.
+      await acknowledgeMeeting(store, await store.archive(saved.id, { ...result, events: result.events || [] }, { signal }), { signal });
       const initial = await api(server, `/v1/meetings/${saved.meetingId}/events?after=0&waitMs=0`, { token: saved.token, signal });
-      await store.archive(saved.id, initial, { signal });
+      const local = await acknowledgeMeeting(store, await store.archive(saved.id, initial, { signal }), { signal });
+      const archived = archivedMeetingResult(initial, local);
       return { session: saved.id, meetingId: saved.meetingId, requestId: pending.requestId, restored, participant: saved.participant,
-        meeting: initial.meeting, invitationUrl: result.invitationUrl, viewUrl: result.viewUrl, events: initial.events,
-        ...(result.invitationUrl ? { invitationText: `Join this NokNok meeting: ${result.invitationUrl}\nGoal: ${result.meeting.purpose}\nAgents: use agentcall meeting join with this link. People: open it in a browser.\nRead-only view: ${result.viewUrl}` } : {}),
-        next: invitation ? 'Read the goal and archived messages, contribute within owner authorization, then receive updates. Only the host ends the meeting.' : 'Display invitationText and the session/view link now. Share the invitation with intended participants. Receive messages and host the discussion until the goal is met.' };
+        meeting: archived.meeting, invitationUrl: result.invitationUrl, viewUrl: result.viewUrl, events: archived.events,
+        ...(result.invitationUrl ? { invitationText: `Join this NokNok meeting: ${result.invitationUrl}\nGoal: ${local.meeting.purpose || 'See the host’s local meeting record'}\nAgents: use agentcall meeting join with this link. People: open it in a browser.\nRead-only view: ${result.viewUrl}` } : {}),
+        next: invitation ? 'Read the locally archived goal and messages, contribute within owner authorization, then receive updates. Only the host ends the meeting.' : 'Display invitationText and the session/view link now. Share the invitation with intended participants. History is stored by each participant; the relay deletes acknowledged content.' };
     } catch (error) { throw Object.assign(error, { requestId: pending.requestId, session: pending.session }); }
     finally { await pending.release(); }
   }
   const id = args[0];
   let session = await store.load(id);
-  if (command === 'history') return { session: id, source: 'local', meeting: session.meeting, participant: session.participant, events: session.events, archivedAt: session.archivedAt, lastArchivedSequence: session.archiveCursor, liveStateUnknown: true };
-  if (command === 'view') return { session: id, viewUrl: session.viewUrl, url: session.viewUrl, source: 'local', next: 'This read-only capability expires with server retention. meeting history remains available locally.' };
+  if (command === 'history') return { session: id, source: 'local', meeting: session.meeting, participant: session.participant, events: session.events, archivedAt: session.archivedAt, lastArchivedSequence: session.archiveCursor,
+    historyComplete: session.historyComplete === true, missingContentSequences: session.missingContentSequences || [], liveStateUnknown: true };
+  if (command === 'view') return { session: id, viewUrl: session.viewUrl, url: session.viewUrl, source: 'local', next: 'This read-only view cannot recover deleted content. Use meeting history for this participant’s local record.' };
+  session = await acknowledgeMeeting(store, session, { signal });
   const base = `/v1/meetings/${session.meetingId}`;
   const request = (path, extra) => api(session.server, base + path, { token: session.token, signal, ...extra });
   if (command === 'status') {
     const result = await request('');
-    await store.archive(id, result, { signal });
-    return { session: id, ...result };
+    session = await acknowledgeMeeting(store, await store.archive(id, result, { signal }), { signal });
+    return { session: id, ...archivedMeetingResult(result, session) };
   }
   if (command === 'receive') {
     const seconds = options.timeout === undefined ? 45 : Number(options.timeout);
@@ -227,7 +288,8 @@ export async function meetingCommand(command, args, options, { signal, textInput
         session = await store.load(id);
         const waitMs = Math.floor(Math.min(25000, Math.max(0, seconds * 1000 - (Date.now() - started))));
         result = await request(`/events?after=${session.readCursor}&waitMs=${waitMs}`, { timeoutMs: waitMs + 10000 });
-        await store.archive(id, result, { delivered: true, signal });
+        session = await acknowledgeMeeting(store, await store.archive(id, result, { delivered: true, signal }), { signal });
+        result = archivedMeetingResult(result, session);
         if (result.events.length || result.meeting.state !== 'active') break;
       } while (Date.now() - started < seconds * 1000);
       return { session: id, outcome: result.meeting.state !== 'active' ? 'closed' : result.events.length ? 'events' : 'timeout', ...result };
@@ -257,9 +319,9 @@ export async function meetingCommand(command, args, options, { signal, textInput
     const result = await request(path, { method: 'POST', body });
     // Save the acknowledged action before fetching intervening events. Never
     // advance past gaps; concurrent senders' events are merged by sequence.
-    session = await store.archive(id, { ...result, events: result.event ? [result.event] : [] }, { signal });
+    session = await acknowledgeMeeting(store, await store.archive(id, { ...result, events: result.event ? [result.event] : [] }, { signal }), { signal });
     const batch = await request(`/events?after=${session.archiveCursor}&waitMs=0`);
-    await store.archive(id, batch, { signal });
-    return { session: id, requestId: mutationId, ...result };
+    session = await acknowledgeMeeting(store, await store.archive(id, batch, { signal }), { signal });
+    return { session: id, requestId: mutationId, ...archivedMeetingResult(result, session) };
   } catch (error) { throw Object.assign(error, { requestId: mutationId, session: id }); }
 }

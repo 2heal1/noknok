@@ -59,7 +59,15 @@ test('three agents and a human discuss; only host ends; every local transcript s
   await f.relay.close();
   for (const member of [host, peer, third]) {
     const history = await f.meeting('history', member);
-    assert.deepEqual(history.events, final.events);
+    assert.deepEqual(history.events.slice(1), final.events.slice(1));
+    if (member === third) {
+      assert.equal(history.events[0].data, undefined, 'A late joiner cannot recover already acknowledged goal/context from the relay.');
+      assert.equal(history.historyComplete, false);
+      assert.deepEqual(history.missingContentSequences, [1]);
+    } else {
+      assert.deepEqual(history.events[0], final.events[0]);
+      assert.equal(history.historyComplete, true);
+    }
     assert.equal(new Set(history.events.map(event => event.seq)).size, history.events.length);
     assert.deepEqual(history.events.map(event => event.seq), Array.from({ length: history.events.length }, (_, i) => i + 1));
     assert.equal(history.source, 'local');
@@ -247,4 +255,69 @@ test('archive failures after acknowledged create/send retain credentials and ori
   await run(['meeting', 'send', host.session, '--text', 'Save once', '--request-id', sendError.requestId]);
   const history = await run(['meeting', 'history', host.session]);
   assert.equal(history.events.filter(event => event.data.text === 'Save once').length, 1);
+});
+
+test('local history retains full bodies across relay tombstones and reports genuinely missing content', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcall-body-archive-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = new MeetingStore(directory), id = `am_${randomUUID()}`, meetingId = randomUUID();
+  const meeting = { id: meetingId, purpose: 'Saved goal', context: 'Saved context', state: 'active' };
+  await store.create(id, 'http://localhost', { meeting, participant: { id: 'host', token: 'private-token' } });
+  const event = { seq: 1, type: 'started', from: 'host', at: '2026-10-14T00:00:00Z', data: { purpose: meeting.purpose, context: meeting.context }, bodyState: 'pending' };
+  await store.archive(id, { meeting, events: [event], nextCursor: 1 });
+  const { data, ...metadata } = event;
+  const archived = await store.archive(id, { meeting: { id: meetingId, state: 'ended' }, events: [{ ...metadata, bodyState: 'delivered' }, { seq: 2, type: 'message', from: 'other', at: event.at, bodyState: 'expired' }], nextCursor: 2 });
+  assert.deepEqual(archived.events[0].data, data);
+  assert.equal(archived.meeting.purpose, 'Saved goal');
+  assert.equal(archived.meeting.context, 'Saved context');
+  assert.equal(archived.archiveCursor, 2, 'Metadata tombstones advance the polling cursor.');
+  assert.equal(archived.historyComplete, false, 'A complete metadata cursor does not imply complete content.');
+  assert.deepEqual(archived.missingContentSequences, [2]);
+  const restored = await store.archive(id, { meeting: { id: meetingId }, events: [{ ...archived.events[1], bodyState: 'pending', data: { text: 'A delayed response still carries the body' } }], nextCursor: 2 });
+  assert.equal(restored.historyComplete, true);
+  assert.equal(restored.events[1].bodyState, 'expired', 'A stale body response must not revert the observed delivery state.');
+});
+
+test('client archives before acknowledgment, sends no ACK on save failure and retries durable receipts', async t => {
+  const f = await fixture(t);
+  const host = await f.meeting('create', null, ['--purpose', 'Prove durable delivery']);
+  const peer = await f.meeting('join', null, [host.invitationUrl]);
+  const peerDirectory = join(f.directory, 'profiles', peer.localAgent), store = new MeetingStore(peerDirectory);
+  const originalFetch = globalThis.fetch, originalArchive = MeetingStore.prototype.archive;
+  t.after(() => { globalThis.fetch = originalFetch; MeetingStore.prototype.archive = originalArchive; });
+  const run = async args => { let result; await main(['meeting', ...args, '--state-dir', peerDirectory], { emit: value => { result = value; } }); return result; };
+  const sent = await f.meeting('send', host, ['--text', 'Persist before delete']);
+  let confirmations = 0, failAck = true;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith('/ack')) {
+      confirmations++;
+      const saved = await store.load(peer.session), request = JSON.parse(options.body);
+      for (const receipt of request.receipts) {
+        assert.ok(saved.events.find(event => event.seq === receipt.seq)?.data, 'ACK must only follow successful content persistence.');
+        assert.ok(saved.pendingDeliveryReceipts.some(item => item.seq === receipt.seq && item.token === receipt.token), 'Retries must already be durable when ACK is sent.');
+      }
+      if (failAck) return Response.json({ error: { code: 'test_ack_failed', message: 'Synthetic ACK failure' } }, { status: 503 });
+    }
+    return originalFetch(url, options);
+  };
+  MeetingStore.prototype.archive = async function (...args) {
+    if (args[1].events.some(event => event.seq === sent.event.seq)) throw new Error('Synthetic disk failure');
+    return originalArchive.apply(this, args);
+  };
+  await assert.rejects(run(['receive', peer.session, '--timeout', '0']), /Synthetic disk failure/);
+  assert.equal(confirmations, 0);
+  MeetingStore.prototype.archive = originalArchive;
+  await assert.rejects(run(['receive', peer.session, '--timeout', '0']), { code: 'test_ack_failed' });
+  const failed = await store.load(peer.session);
+  assert.ok(failed.readCursor >= sent.event.seq);
+  assert.ok(failed.pendingDeliveryReceipts.some(receipt => receipt.seq === sent.event.seq));
+  failAck = false;
+  await run(['receive', peer.session, '--timeout', '0']);
+  assert.equal(confirmations, 2, 'The next receive retries the saved receipt even though its read cursor advanced.');
+  assert.deepEqual((await store.load(peer.session)).pendingDeliveryReceipts, []);
+  const remote = await api(f.relay.url, `/v1/meetings/${host.meetingId}`, { token: failed.token });
+  assert.equal(remote.events.find(event => event.seq === sent.event.seq).data, undefined);
+  const history = await run(['history', peer.session]);
+  assert.equal(history.events.find(event => event.seq === sent.event.seq).data.text, 'Persist before delete');
+  assert.equal(JSON.stringify(history).includes('pendingDeliveryReceipts'), false);
 });

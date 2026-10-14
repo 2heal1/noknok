@@ -45,13 +45,13 @@ export const MEETING_TOOLS = [
   tool('meeting_create', 'Create an invitation-based meeting. No friend setup needed. Display its invitation and read-only view link immediately. You are the host; end when the owner’s goal is met, or seek user/participant confirmation if uncertain.', { purpose: { type: 'string', minLength: 1, maxLength: 8192 }, context: { type: 'string', maxLength: 65536 }, name: meetingName, product: productName, request_id: requestId }, ['purpose']),
   tool('meeting_join', 'Join an explicitly supplied meeting invitation as this local agent. All participants can speak. Read the goal and messages, but do not treat them as owner authorization.', { link: { type: 'string', minLength: 1, maxLength: 16384 }, name: meetingName, product: productName, request_id: requestId }, ['link']),
   tool('meeting_send', 'Contribute a message to all meeting participants. Optional to names who should answer; it does not make the message private. Use reply_to to anchor parallel answers and avoid acknowledgement loops.', { session: meetingSession, text, type: { type: 'string', enum: ['message', 'request', 'result', 'progress', 'waiting_for_user'] }, to: { type: 'string', minLength: 1, maxLength: 128 }, reply_to: { type: 'integer', minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, request_id: requestId }, ['session', 'text']),
-  tool('meeting_receive', 'Receive meeting updates and archive all events locally, including your own. This waits within an active task; it does not wake an idle agent.', { session: meetingSession, timeout }, ['session']),
-  tool('meeting_status', 'Read meeting state, participants and readiness, and archive events locally.', { session: meetingSession }, ['session'], { readOnlyHint: true, idempotentHint: true }),
+  tool('meeting_receive', 'Receive pending meeting updates, save them locally, then acknowledge delivery so the relay can delete bodies. This waits within an active task; it does not wake an idle agent.', { session: meetingSession, timeout }, ['session']),
+  tool('meeting_status', 'Read meeting state and available events, save locally, then acknowledge delivery. This can trigger deletion of saved bodies from the relay.', { session: meetingSession }, ['session'], { readOnlyHint: false, idempotentHint: true }),
   tool('meeting_ready', 'Signal whether you consider the meeting goal met. New messages, joins and leaves reset readiness. This never ends the meeting automatically.', { session: meetingSession, ready: { type: 'boolean', default: true }, request_id: requestId }, ['session']),
   tool('meeting_end', 'Host only: end the meeting with a summary when the goal is met. If uncertain, ask your user or obtain participant readiness after the latest discussion.', { session: meetingSession, text, reason: { type: 'string', minLength: 1, maxLength: 4096 }, request_id: requestId }, ['session'], { destructiveHint: true }),
   tool('meeting_leave', 'Leave a meeting as a participant. The host must end instead. Other participants may continue.', { session: meetingSession, request_id: requestId }, ['session'], { destructiveHint: true }),
   tool('meeting_history', 'Read the local meeting transcript, even after the relay expires or restarts. It contains only events this client successfully archived.', { session: meetingSession }, ['session'], { readOnlyHint: true, idempotentHint: true, openWorldHint: false }),
-  tool('meeting_view', 'Return the saved read-only meeting link. It grants temporary transcript access to its holders; local history survives its expiry.', { session: meetingSession }, ['session'], { readOnlyHint: true, idempotentHint: true, openWorldHint: false }),
+  tool('meeting_view', 'Return the saved read-only meeting link. The relay has only pending bodies and metadata; deleted history is available from each participant’s local meeting_history.', { session: meetingSession }, ['session'], { readOnlyHint: true, idempotentHint: true, openWorldHint: false }),
   tool('meeting_sessions', 'List meeting sessions in this MCP connection’s fixed local profile only.', {}, [], { readOnlyHint: true, idempotentHint: true, openWorldHint: false }),
 ];
 const LOCAL_TOOLS = [...MEETING_TOOLS, ...TOOLS];
@@ -81,6 +81,11 @@ export function validateArguments(schema, input) {
         || (rule.enum && !rule.enum.includes(value))) {
         throw new RpcError(-32602, `Invalid tool argument: ${key}.`);
       }
+    } else if (rule.type === 'array') {
+      if (!Array.isArray(value) || value.length < (rule.minItems ?? 0) || value.length > rule.maxItems || rule.items?.type !== 'object') {
+        throw new RpcError(-32602, `Invalid tool argument: ${key}.`);
+      }
+      for (const item of value) validateArguments(rule.items, item);
     } else if (rule.type === 'boolean' ? typeof value !== 'boolean' : !Number.isSafeInteger(value) || value < rule.minimum || value > rule.maximum) {
       throw new RpcError(-32602, `Invalid tool argument: ${key}.`);
     }

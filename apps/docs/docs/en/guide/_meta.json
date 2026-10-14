@@ -33,10 +33,5 @@
     "type": "file",
     "name": "troubleshooting",
     "label": "Troubleshooting"
-  },
-  {
-    "type": "file",
-    "name": "security",
-    "label": "Privacy and Security"
   }
 ]

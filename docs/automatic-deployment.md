@@ -2,11 +2,32 @@
 
 本流程面向托管服务维护者。它只自动更新程序，不能替代加密版本的目标部署验证或真实原生宿主验收。网站由独立的 [Docs Deploy](docs-deployment.md) 工作流发布。
 
+## 一个发布版本，两种版本状态
+
+客户端和服务器来自同一个 **`@noknok/cli`** npm 包：`noknok meeting`、本地 MCP、`noknok server` 和 `noknok hosted-server` 共用包版本。每个稳定版使用一个 **`vX.Y.Z`** Git tag 和一份 GitHub Release，没有独立的服务端 semver 或另一个服务器发布包。
+
+需要区分两个状态：
+
+| 状态 | 含义 | 查询依据 |
+| --- | --- | --- |
+| 已发布包版本 | npm 上可安装的精确 `@noknok/cli@X.Y.Z`，tag 和 Release 对应其源码提交 | npm 精确版本、`vX.Y.Z` 和 GitHub Release |
+| 服务端实际运行版本 | 当前容器实际安装并运行的同一包版本 | deploy job 的 `runningVersion` / 运行结果，以及受限的 `state.json.current.version` |
+
+`noknok --version` 显示执行该命令的本地安装版本，不证明远程服务器已升级；健康接口中的协议字段也不是包的语义化版本。发布包、推送 tag 和创建 Release 都不等于部署完成。
+
 ## 触发与失败处理
 
-`release.yml` 的 stable job 发布精确版本并验证 npm `latest` 后，才输出 `published-version`。依赖它的 deploy job 使用 `noknok-production` 环境，执行 `scripts/deploy-hosted.ts`。有待发布 Changesets 的普通合入只更新版本 PR，不部署；`workflow_dispatch` 仍只发布 preview，也不部署。npm 发布失败或校验失败时不会获得部署版本。
+`release.yml` 的 stable job 发布精确版本并验证 npm `latest`，输出 `published-version`。独立的 archive job 校验该版本的 registry `gitHead`、main 历史及对应源码包版本，幂等创建 `vX.Y.Z` tag 和 GitHub Release。tag 指向实际已发布包的源码提交，而非重跑工作流时的任意新提交。详细规则见[发布流程](releasing.md)。
 
-发布和部署共用不取消进行中任务的并发组，服务器还会加独占锁。部署失败会使 Release 显示失败，但**不能撤回已经成功的 npm 发布**。修复部署问题后可重跑失败的 deploy job；它使用原稳定版本，不重新发布。若重跑完整工作流，已存在的不可变 npm 版本会跳过上传，再做版本验证。
+deploy job 同样依赖 stable job，使用其验证后的 `published-version`，在 `noknok-production` 环境执行 `scripts/deploy-hosted.ts`。archive 与 deploy 并行且独立：GitHub 归档失败不阻止部署，部署失败也不阻止创建 Release。有待发布 Changesets 的普通合入只更新版本 PR，不部署；`workflow_dispatch` 只发布 preview，不创建正式 tag / GitHub Release，也不部署。npm 发布失败或校验失败时不部署。
+
+发布和部署共用不取消进行中任务的并发组，服务器还会加独占锁。部署失败会使 **Release 工作流**显示失败，但**不能撤回已成功的 npm 发布、Git tag 或 GitHub Release**。GitHub Release 页面记录软件发布，不将部署失败改写为包发布失败。修复部署问题后可重跑失败的 deploy job；它使用原稳定版本，不重新发布。若重跑完整工作流，已存在的不可变 npm 版本会跳过上传，再做来源验证并复用匹配的 tag 和 Release。
+
+发布说明保留对应版本 CHANGELOG 原文。建议 changeset 用「客户端」「服务端」「兼容性与升级」小节说明实际变化，没有变化的部分可省略；脚本不会从自由文本猜测分类，也不会据部署结果改写软件变化。格式建议见[发布流程](releasing.md)。
+
+历史补档或延迟归档时，原源码提交的 workflow 文件可能与当前默认分支不同。GitHub 创建 Release 此时可能要求 Actions `GITHUB_TOKEN` 无法取得的 workflow 写权限，返回 `403` 或 `404`。应使用已获明确授权的 GitHub 浏览器会话或具备相应仓库权限的 token 补齐记录；不要移动正确的 tag 或换成其他提交绕过权限检查。该失败不等于 npm 或独立部署失败。
+
+补档前可运行 `node scripts/github-release.ts --version X.Y.Z --dry-run`。完整检查 GitHub 记录需要授权的 `GITHUB_TOKEN`；无 token 时不请求 GitHub API，输出 `releaseExists: null`，表示未知。未认证的 `404` 可能隐藏私有仓库，不能据此判定记录不存在；Git 推送凭据不等于 GitHub API 已认证。
 
 ## 按运行文件差异决定是否升级
 
@@ -14,7 +35,7 @@
 
 服务器构建并验证已发布包后，将运行摘要与固定 Dockerfile、Compose、下载策略的摘要组合，与当前实际部署状态比较。相同则返回 `unchanged-runtime`，保留当前容器、版本和会议；不同才切换容器。比较对象是当前线上版本，因此失败或跳过的中间发布不会造成漏判。没有摘要的早期版本无法证明相同，会正常部署。
 
-因此 npm `latest` 可以高于线上程序的版本：例如 `0.1.1` 只更新 Skill 时，服务可继续运行内容相同的 `0.1.0`。`state.json.current.version` 是实际运行版本，`lastCheckedVersion` 是最近因运行内容相同而跳过的版本。部署程序或策略更新仍由管理员安装，不由普通发布替换。
+因此 npm `latest` 可以高于线上程序的版本：例如 `0.2.1` 只更新 Skill 时，服务可继续运行内容相同的 `0.2.0`；部署失败并成功回滚时，也会继续运行之前的版本。这是同一版本序列中的不同运行状态，不是客户端和服务器各自独立发版。`state.json.current.version` 是实际运行版本，`lastCheckedVersion` 是最近因运行内容相同而跳过的版本。部署程序或策略更新仍由管理员安装，不由普通发布替换。
 
 ## GitHub 环境
 

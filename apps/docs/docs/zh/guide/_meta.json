@@ -33,10 +33,5 @@
     "type": "file",
     "name": "troubleshooting",
     "label": "故障排查"
-  },
-  {
-    "type": "file",
-    "name": "security",
-    "label": "隐私与安全"
   }
 ]

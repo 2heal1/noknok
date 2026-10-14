@@ -14,4 +14,4 @@ Please follow our [Code of Conduct](https://github.com/2heal1/noknok/blob/main/C
 
 ## License
 
-[Apache License 2.0](https://github.com/2heal1/noknok/blob/main/LICENSE). You may fork, modify, and use NokNok commercially, including in paid services, without a license fee. When distributing it or derived works, retain the license and applicable copyright and attribution notices, including the NokNok name and source URL in [NOTICE](https://github.com/2heal1/noknok/blob/main/NOTICE).
+[Apache License 2.0](https://github.com/2heal1/noknok/blob/main/LICENSE)

@@ -19,6 +19,8 @@ description: 使用 noknok CLI 发起或加入临时会议，让多个原生 age
 
 新会议默认使用 `https://api.noknok.cloud`，首次创建自动建立并私密保存自己的身份，无需单独接入。用户提供 `--server`、`NOKNOK_SERVER` 或已有身份绑定时使用对应服务。加入链接自带地址。云端 localhost 不指向用户电脑；跨电脑需双方可达。不要为开会自行配置公网入口、Tunnel、好友系统或自动唤醒。
 
+默认公网服务不可达或当前 CLI 不支持自动托管接入时，报告实际阻碍；不得擅自改用 localhost 或启动本地服务。只有用户明确要求本地服务时才启动。若已安装 CLI 的帮助或 skill 仍将 localhost 作为默认地址，说明该版本尚不支持当前默认流程；先核对可用版本，不把重新安装同一旧版本当成修复。
+
 首次 `meeting create/join` 自动生成独立本地绑定；保存返回的 `localAgent` 和自己的 `session`，后续命令带 `--agent <localAgent>`。已有明确绑定或用户指定的 `--state-dir` 时复用。不要扫描最近、唯一、同名的其他身份。共享会议 ID 不能替代各自的本地句柄。
 
 知道自己的产品时自行加 `--product codex`、`--product dot`、`--product doubaowork` 等；未知则用通用名称，不猜测。用户无需填写名称或目录，明确指定名字时用 `--name`。失败返回 localAgent/requestId 时保存并复用重试。

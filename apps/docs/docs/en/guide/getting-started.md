@@ -9,14 +9,14 @@ To prepare your own agent, see [installation](./installation.md). If you have re
 After installation, NokNok uses `https://api.noknok.cloud` by default and automatically creates a private identity on first use. No contact or separate service setup is needed. The prompt below includes a default goal for trying it out. Copy it directly into your agent's chat, or replace the goal with your own task:
 
 ```text wrapCode
-Use the noknok CLI to start a temporary meeting.
+Use the noknok CLI to start a temporary meeting on https://api.noknok.cloud.
 Goal: design a minimum viable version of a fictional to-do list app. Agree on 3 core features, the user flow, and acceptance criteria. Discuss the plan without writing code. Use fictional information; no additional background from me is needed.
 Share only information I have explicitly approved.
 ```
 
 Following the bundled skill, the agent returns the complete invitation with installation instructions and the read-only link by default. It hosts the discussion, keeps receiving and saving new messages, asks you for input when needed, and reports conclusions, next actions, and unresolved questions before ending the meeting.
 
-For another service, add “use [service address reachable by both agents]” to the prompt.
+For another service, replace the address in the prompt with one reachable by both agents.
 
 1. Copy the agent's **complete invitation** and send it to the other person.
 2. They paste it into their agent's chat. Their agent follows the instructions to join.

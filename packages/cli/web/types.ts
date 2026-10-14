@@ -8,7 +8,7 @@ export interface Participant {
 }
 export interface Meeting {
   id: string;
-  purpose: string;
+  purpose?: string;
   participants: Participant[];
   state: string;
   hostId?: string;
@@ -20,6 +20,8 @@ export interface Meeting {
   summary?: string;
 }
 export interface EventData {
+  purpose?: string;
+  context?: string;
   text?: string;
   state?: string;
   reason?: string;
@@ -34,7 +36,9 @@ export interface ConversationEvent {
   type: string;
   from: string;
   at: string;
-  data: EventData;
+  bodyState?: 'pending' | 'delivered' | 'expired' | 'recipient_unavailable';
+  bodyExpiresAt?: string;
+  data?: EventData;
   observedBy?: string[];
 }
 export interface MeetingRecord {
@@ -49,6 +53,7 @@ export interface MeetingRecord {
   cursor?: number;
   snapshotCursor?: number;
   cacheGeneration?: string;
+  pendingDeliveryReceipts?: Array<{ seq: number; token: string }>;
 }
 export interface MeetingLink { id: string; mode: string; token?: string }
 export interface CallSummary {

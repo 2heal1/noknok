@@ -189,6 +189,10 @@ test('low-resource deployment defaults are bounded and reject unsafe environment
   const config = hostedDeploymentConfig({});
   assert.equal(config.maxMeetings, 5); assert.equal(config.maxParticipants, 8);
   assert.equal(config.maxTotalBytes, 8 * 1024 * 1024);
+  assert.equal(config.deliveryTtlMs, 300_000);
+  assert.equal(hostedDeploymentConfig({ NOKNOK_DELIVERY_TTL_SECONDS: '60' }).deliveryTtlMs, 60_000);
+  assert.throws(() => hostedDeploymentConfig({ NOKNOK_DELIVERY_TTL_SECONDS: '0' }));
+  assert.throws(() => hostedDeploymentConfig({ NOKNOK_DELIVERY_TTL_SECONDS: '3601' }));
   assert.throws(() => hostedDeploymentConfig({ NOKNOK_MAX_MEETINGS: '999999' }));
   assert.throws(() => hostedDeploymentConfig({ NOKNOK_MAX_TOTAL_BYTES: '-1' }));
 });
@@ -277,4 +281,113 @@ test('response byte budgets apply to guest reads and survive service restarts', 
   // Repeated responses exhaust the same persisted global bucket after restart.
   for (let i = 0; i < 200; i++) { result = await f.raw('/health', { method: 'GET' }); if (result.status !== 200) break; }
   assert.equal(result.status, 429); assert.equal(result.body.error.code, 'service_egress_limit');
+});
+
+test('native agents explicitly acknowledge saved bodies; hosted retry caches cannot resurrect them', async t => {
+  const f = await fixture(t);
+  const a = await f.register(), b = await f.register();
+  const friend = await f.pair(a, b);
+  const args = { peer_id: b.agentId, capability: friend.contact.capability,
+    purpose: 'private-purpose-to-delete', context: 'private-context-to-delete', request_id: 'pending-call' };
+  const call = await f.tool(a, 'call', args);
+  const meeting_id = call.meeting.id;
+  const sendArgs = { meeting_id, text: 'private-message-to-delete', request_id: 'pending-message' };
+  await f.tool(a, 'meeting_send', sendArgs);
+  const aRead = await f.tool(a, 'meeting_read', { meeting_id });
+  assert.ok(aRead.deliveryReceipts.length >= 2);
+  await f.tool(a, 'meeting_ack', { meeting_id, receipts: aRead.deliveryReceipts });
+  // Sending and the sender's save do not count as the absent peer receiving it.
+  assert.ok(JSON.stringify(await f.tool(a, 'meeting_read', { meeting_id })).includes(sendArgs.text));
+  const joinArgs = { invitation_id: call.invitationId };
+  await f.tool(b, 'meeting_join', joinArgs);
+  const bRead = await f.tool(b, 'meeting_read', { meeting_id });
+  assert.ok(JSON.stringify(bRead).includes(sendArgs.text));
+  assert.ok(bRead.deliveryReceipts.length >= 2);
+  // A read/notification alone does not delete content; only receipt ACK does.
+  assert.ok(JSON.stringify(await f.tool(a, 'meeting_read', { meeting_id })).includes(sendArgs.text));
+  await assert.rejects(f.tool(a, 'meeting_ack', { meeting_id, receipts: bRead.deliveryReceipts }));
+  await f.tool(b, 'meeting_ack', { meeting_id, receipts: bRead.deliveryReceipts });
+  await f.tool(b, 'meeting_ack', { meeting_id, receipts: bRead.deliveryReceipts });
+  const snapshots = [
+    await f.tool(a, 'meeting_read', { meeting_id }),
+    await f.tool(b, 'meeting_read', { meeting_id }),
+    await f.tool(a, 'call', args),
+    await f.tool(b, 'meeting_join', joinArgs),
+    await f.tool(a, 'meeting_send', sendArgs),
+    f.service.meetings.inspect(meeting_id),
+  ];
+  for (const snapshot of snapshots) {
+    for (const marker of [args.purpose, args.context, sendArgs.text]) assert.ok(!JSON.stringify(snapshot).includes(marker), marker);
+  }
+  assert.ok(snapshots[0].events.some(event => event.bodyState === 'delivered'));
+  const endArgs = { meeting_id, text: 'private-summary-to-delete', request_id: 'close-pending' };
+  const ended = await f.tool(a, 'meeting_end', endArgs);
+  await f.tool(a, 'meeting_ack', { meeting_id, receipts: ended.deliveryReceipts });
+  const finalRead = await f.tool(b, 'meeting_read', { meeting_id });
+  assert.equal(finalRead.meeting.summary, endArgs.text);
+  await f.tool(b, 'meeting_ack', { meeting_id, receipts: finalRead.deliveryReceipts });
+  assert.ok(!JSON.stringify(await f.tool(a, 'meeting_end', endArgs)).includes(endArgs.text));
+  assert.ok(!JSON.stringify(f.service.meetings.inspect(meeting_id)).includes(endArgs.text));
+});
+
+test('native pending bodies expire without ACK, including cached creation metadata', async t => {
+  const f = await fixture(t, { deliveryTtlMs: 30 });
+  const a = await f.register();
+  const args = { purpose: 'expiring-native-purpose', context: 'expiring-native-context', request_id: 'expiry' };
+  const created = await f.tool(a, 'meeting_create', args);
+  assert.equal(created.meeting.context, args.context);
+  await delay(60);
+  const read = await f.tool(a, 'meeting_read', { meeting_id: created.meeting.id });
+  const retry = await f.tool(a, 'meeting_create', args);
+  for (const snapshot of [read, retry, f.service.meetings.inspect(created.meeting.id)]) {
+    assert.ok(!JSON.stringify(snapshot).includes(args.purpose));
+    assert.ok(!JSON.stringify(snapshot).includes(args.context));
+  }
+  assert.equal(read.events.find(event => event.type === 'started').bodyState, 'expired');
+  assert.equal((await f.tool(a, 'identity')).transcriptStorage, 'participant');
+});
+
+test('native acknowledgment validates receipt shape before dispatch', async t => {
+  const f = await fixture(t);
+  const a = await f.register();
+  const created = await f.tool(a, 'meeting_create', { purpose: 'Validate ACK', request_id: 'ack-schema' });
+  for (const receipts of [null, [], 'invalid', [{ seq: 1 }], [{ seq: 1, token: 'x', extra: true }], [{ seq: 0, token: 'x' }]]) {
+    await assert.rejects(f.tool(a, 'meeting_ack', { meeting_id: created.meeting.id, receipts }), error => error.code === -32602);
+  }
+});
+
+test('revocation during native MCP uploads prevents joining and exposing pending bodies', async t => {
+  const f = await fixture(t);
+  const host = await f.register();
+  const room = await f.tool(host, 'meeting_create', { purpose: 'never-disclose-to-revoked-agent', request_id: 'slow-join' });
+  for (const privateUrl of [false, true]) {
+    const peer = await f.register();
+    const path = privateUrl ? `/mcp/${peer.agentToken}` : '/mcp';
+    let arrive;
+    const arriving = new Promise(resolve => { arrive = resolve; });
+    const listen = req => { if (req.url === path) arrive(); };
+    f.service.server.on('request', listen);
+    const payload = JSON.stringify({ jsonrpc: '2.0', id: 'slow-join', method: 'tools/call',
+      params: { name: 'noknok_meeting_join', arguments: { link: room.invitationUrl } } });
+    let writer;
+    const response = new Promise((resolve, reject) => {
+      writer = http.request(f.service.origin + path, { method: 'POST', headers: {
+        'Content-Type': 'application/json', ...(privateUrl ? {} : { Authorization: `Bearer ${peer.agentToken}` }),
+      } }, res => {
+        const chunks = [];
+        res.on('data', chunk => chunks.push(chunk));
+        res.on('end', () => resolve({ status: res.statusCode, body: JSON.parse(Buffer.concat(chunks)) }));
+      });
+      writer.on('error', reject);
+      writer.write(payload.slice(0, -1));
+    });
+    await arriving;
+    f.service.store.revokeAgent(peer.agentId);
+    writer.end('}');
+    const rejected = await response;
+    f.service.server.off('request', listen);
+    assert.equal(rejected.status, 401);
+    assert.ok(!JSON.stringify(rejected.body).includes('never-disclose-to-revoked-agent'));
+    assert.equal(f.service.meetings.inspect(room.meeting.id).participants.length, 1);
+  }
 });

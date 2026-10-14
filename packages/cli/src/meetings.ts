@@ -1,5 +1,5 @@
 import type { MeetingOptions, MeetingRoom, MeetingRequest, MeetingParticipant, MeetingEvent } from './runtime-types.js';
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { redactInvitations } from './invitation.js';
 
 const MAX_BODY_BYTES = 128 * 1024;
@@ -116,6 +116,7 @@ export function createMeetings(options: MeetingOptions) {
   if (typeof options.getUrl !== 'function') throw new TypeError('getUrl is required.');
   const meetingTtlMs = positive(options.meetingTtlMs, 7_200_000, 'meetingTtlMs');
   const retentionMs = positive(options.retentionMs, 600_000, 'retentionMs');
+  const deliveryTtlMs = positive(options.deliveryTtlMs, 300_000, 'deliveryTtlMs');
   const maxMeetings = positive(options.maxMeetings, 1000, 'maxMeetings');
   if (options.serverKey !== undefined && (typeof options.serverKey !== 'string' || !options.serverKey)) throw new TypeError('serverKey must be a nonempty string.');
   const maxParticipants = positive(options.maxParticipants, MAX_PARTICIPANTS, 'maxParticipants');
@@ -134,14 +135,16 @@ export function createMeetings(options: MeetingOptions) {
   }
 
   function summary(room) {
+    const started = room.events[0]?.data;
+    const closed = room.state === 'active' ? undefined : [...room.events].reverse().find(event => event.type === 'closed')?.data;
     return {
-      id: room.id, purpose: room.purpose, context: room.context, state: room.state, hostId: room.hostId,
+      id: room.id, ...(started ? { purpose: started.purpose, context: started.context } : {}), state: room.state, hostId: room.hostId,
       participants: [...room.participants.values()].map(publicParticipant), readyBy: [...room.readyBy],
       createdAt: iso(room.createdAt), expiresAt: iso(room.expiresAt),
       ...(room.closedAt === undefined ? {} : { closedAt: iso(room.closedAt) }),
-      purgeAt: iso((room.closedAt ?? room.expiresAt) + retentionMs), retentionMs,
-      ...(room.reason === undefined ? {} : { reason: room.reason }),
-      ...(room.summary === undefined ? {} : { summary: room.summary }),
+      purgeAt: iso((room.closedAt ?? room.expiresAt) + retentionMs), retentionMs, deliveryTtlMs,
+      ...(closed?.reason === undefined ? {} : { reason: closed.reason }),
+      ...(closed?.text === undefined ? {} : { summary: closed.text }),
     };
   }
   function result(room, after = 0) {
@@ -149,7 +152,7 @@ export function createMeetings(options: MeetingOptions) {
   }
   function readableResult(room, after, participant) {
     const value = result(room, after);
-    if (participant.id !== 'viewer') return value;
+    if (participant.id !== 'viewer') return withReceipts(room, value, participant);
     const credentials = [room.inviteToken, ...[...room.participants.values()].map(item => item.token)];
     function redact(item) {
       if (typeof item === 'string') return credentials.reduce((text, credential) => text.replaceAll(credential, '[redacted credential]'), item);
@@ -159,10 +162,50 @@ export function createMeetings(options: MeetingOptions) {
     }
     return redact(redactInvitations(value));
   }
-  function append(room: MeetingRoom, type: string, from: string, data: MeetingEvent['data'], at = Date.now()) {
-    const event: MeetingEvent = { seq: ++room.seq, type, from, at: iso(at), data };
+  function receiptToken(room, seq, participantId) {
+    return createHmac('sha256', room.receiptKey).update(`${seq}:${participantId}`).digest('base64url');
+  }
+  function withReceipts(room, value, participant) {
+    const events = [...(value.events || []), ...(value.event ? [value.event] : [])];
+    const deliveryReceipts = events.filter(event => event.data !== undefined && room.deliveries.get(event.seq)?.claims.get(participant.id) === 'pending')
+      .map(event => ({ seq: event.seq, token: receiptToken(room, event.seq, participant.id) }));
+    return { ...value, deliveryReceipts };
+  }
+  function eraseBody(room, event, state) {
+    if (event.data === undefined) return;
+    const before = Buffer.byteLength(JSON.stringify(event));
+    delete event.data;
+    event.bodyState = state;
+    room.bytes += Buffer.byteLength(JSON.stringify(event)) - before;
+    room.deliveries.get(event.seq).awaitFirstPeer = false;
+  }
+  function settleDelivery(room, event) {
+    const delivery = room.deliveries.get(event.seq)!;
+    if (event.data === undefined || delivery.awaitFirstPeer || [...delivery.claims.values()].includes('pending')) return;
+    eraseBody(room, event, delivery.unavailable || [...delivery.claims.values()].includes('unavailable') ? 'recipient_unavailable' : 'delivered');
+  }
+  function releaseParticipant(room, participantId) {
+    for (const event of room.events) {
+      const delivery = room.deliveries.get(event.seq)!;
+      if (delivery.claims.get(participantId) === 'pending') delivery.claims.set(participantId, 'unavailable');
+      if (participantId === room.hostId && delivery.awaitFirstPeer) { delivery.awaitFirstPeer = false; delivery.unavailable = true; }
+      settleDelivery(room, event);
+    }
+  }
+  function cleanDeliveries(room, now) {
+    for (const participant of room.participants.values()) {
+      if (participant.leftAt !== undefined || options.isParticipantAvailable?.(room, participant) === false) releaseParticipant(room, participant.id);
+    }
+    for (const event of room.events) {
+      if (event.data !== undefined && now >= room.deliveries.get(event.seq).expiresAt) eraseBody(room, event, 'expired');
+    }
+  }
+  function append(room: MeetingRoom, type: string, from: string, data: NonNullable<MeetingEvent['data']>, at = Date.now()) {
+    const event: MeetingEvent = { seq: ++room.seq, type, from, at: iso(at), data, bodyState: 'pending', bodyExpiresAt: iso(at + deliveryTtlMs) };
+    const recipients = [...room.participants.values()].filter(participant => participant.leftAt === undefined && options.isParticipantAvailable?.(room, participant) !== false);
+    room.deliveries.set(event.seq, { expiresAt: at + deliveryTtlMs, claims: new Map(recipients.map(participant => [participant.id, 'pending'])), awaitFirstPeer: !room.hadPeer && room.state === 'active' });
     room.events.push(event);
-    room.bytes += Buffer.byteLength(JSON.stringify(event));
+    room.bytes += Buffer.byteLength(JSON.stringify(event)) + 96 + recipients.length * 96;
     options.onEvent?.(room, event);
     return event;
   }
@@ -171,8 +214,10 @@ export function createMeetings(options: MeetingOptions) {
     if (room.state !== 'active') return;
     room.state = state;
     room.closedAt = at;
-    room.reason = reason;
-    if (text !== undefined) room.summary = text;
+    for (const event of room.events) {
+      const delivery = room.deliveries.get(event.seq)!;
+      if (delivery.awaitFirstPeer) { delivery.awaitFirstPeer = false; delivery.unavailable = true; settleDelivery(room, event); }
+    }
     return append(room, 'closed', from, { state, reason, ...(text === undefined ? {} : { text }) }, at);
   }
   function expire(room, now = Date.now()) {
@@ -186,6 +231,7 @@ export function createMeetings(options: MeetingOptions) {
     const now = Date.now();
     for (const [id, room] of rooms) {
       expire(room, now);
+      cleanDeliveries(room, now);
       if (room.closedAt !== undefined && now >= room.closedAt + retentionMs) {
         wake(room);
         rooms.delete(id);
@@ -213,9 +259,9 @@ export function createMeetings(options: MeetingOptions) {
     expire(room);
     if (room.state !== 'active') fail(409, 'meeting_closed', `Meeting is ${room.state}.`);
   }
-  function capacity(room, payload, key: string | undefined = undefined) {
+  function capacity(room, payload, key: string | undefined = undefined, extraMetadataBytes = 0) {
     // Reserve one event and enough bytes for a final summary, even when full.
-    const extra = Buffer.byteLength(JSON.stringify(payload)) + MAX_TEXT_BYTES + 8192;
+    const extra = Buffer.byteLength(JSON.stringify(payload)) + MAX_TEXT_BYTES + 8192 + extraMetadataBytes;
     const total = [...rooms.values()].reduce((sum, item) => sum + item.bytes + MAX_TEXT_BYTES + 8192, 0);
     if (room.events.length >= maxEvents - 1 || room.bytes + extra > maxRoomBytes || total + extra > maxTotalBytes) {
       fail(429, 'meeting_capacity_exceeded', 'Meeting message limit reached; the host can end it and start a new meeting.');
@@ -229,12 +275,12 @@ export function createMeetings(options: MeetingOptions) {
     // holds the private recovery capability may recover participant credentials.
     if (saved.retryTokenHash !== undefined && !equal(saved.retryTokenHash, recoveryHash)) fail(401, 'invalid_retry_token', 'A valid private retryToken is required to recover this operation.');
     if (saved.fingerprint !== fingerprint(payload)) fail(409, 'idempotency_conflict', 'requestId was already used with different input.');
-    return { ...saved.response, meeting: summary(room), nextCursor: room.seq };
+    return { ...saved.response, meeting: summary(room), ...(saved.response.participant ? { events: room.events } : {}), nextCursor: room.seq };
   }
   function save(room, key, payload, response, recoveryHash: string | undefined = undefined) {
     // Event objects are shared with the bounded transcript. Do not cache a full
     // growing participant list for every message or readiness update.
-    const { meeting: unused, ...compact } = response;
+    const { meeting: unused, events: unusedEvents, deliveryReceipts: unusedReceipts, ...compact } = response;
     if (key !== undefined) room.mutations.set(key, { fingerprint: fingerprint(payload), response: compact, ...(recoveryHash === undefined ? {} : { retryTokenHash: recoveryHash }) });
     return response;
   }
@@ -256,7 +302,8 @@ export function createMeetings(options: MeetingOptions) {
       cleanup();
       if (id !== undefined && creations.has(id)) {
         const room = getRoom(creations.get(id));
-        return reply(res, 200, replay(room, 'create', payload, recoveryHash));
+        const response = replay(room, 'create', payload, recoveryHash);
+        return reply(res, 200, withReceipts(room, response, response.participant));
       }
       if (rooms.size >= maxMeetings) fail(503, 'relay_capacity_exceeded', 'Relay meeting limit reached; retry after meetings expire.');
       if (actor && [...rooms.values()].filter(room => room.ownerId === actor.accountId && room.state === 'active').length >= maxOwnerMeetings) fail(429, 'owner_meeting_limit', 'Account has too many open meetings.');
@@ -267,21 +314,22 @@ export function createMeetings(options: MeetingOptions) {
       const now = Date.now();
       const participant: MeetingParticipant = { id: randomUUID(), name: payload.name, kind: payload.kind, role: 'host', joinedAt: iso(now), token: secret(), ...(actor ? { authId: actor.agentId } : {}) };
       const room: MeetingRoom = {
-        id: randomUUID(), state: 'active', purpose: payload.purpose!, context: payload.context!, hostId: participant.id, ...(actor ? { ownerId: actor.accountId, ownerAgentId: actor.agentId } : {}),
+        id: randomUUID(), state: 'active', hostId: participant.id, ...(actor ? { ownerId: actor.accountId, ownerAgentId: actor.agentId } : {}),
         participants: new Map([[participant.id, participant]]), inviteToken: secret(), viewToken: secret(),
         createdAt: now, expiresAt: now + meetingTtlMs, readyBy: new Set(),
-        events: [], seq: 0, bytes: Buffer.byteLength(JSON.stringify(payload)), polls: new Set(), mutations: new Map(), creationId: id,
+        events: [], seq: 0, bytes: Buffer.byteLength(JSON.stringify(publicParticipant(participant))), polls: new Set(), mutations: new Map(), creationId: id,
+        deliveries: new Map(), receiptKey: secret(), hadPeer: false,
       };
-      append(room, 'started', 'system', { participant: publicParticipant(participant) }, now);
+      append(room, 'started', 'system', { participant: publicParticipant(participant), purpose: payload.purpose, context: payload.context }, now);
       rooms.set(room.id, room);
       const response = {
-        meeting: summary(room), participant: { ...participant },
+        ...result(room), participant: { ...participant },
         invitationUrl: `${options.getUrl()}/meeting#id=${room.id}&invite=${room.inviteToken}`, viewUrl: viewUrl(room),
       };
       if (id !== undefined) { creations.set(id, room.id); save(room, 'create', payload, response, recoveryHash); }
-      return reply(res, 201, response);
+      return reply(res, 201, withReceipts(room, response, participant));
     }
-    const match = /^\/v1\/meetings\/([a-zA-Z0-9-]+)(?:\/(invitation|join|events|messages|ready|leave|end))?$/.exec(parsed.pathname);
+    const match = /^\/v1\/meetings\/([a-zA-Z0-9-]+)(?:\/(invitation|join|events|messages|ready|leave|end|ack))?$/.exec(parsed.pathname);
     if (!match) fail(404, 'not_found', 'Route not found.');
     const [, meetingId, operation] = match;
     const room = getRoom(meetingId);
@@ -300,17 +348,26 @@ export function createMeetings(options: MeetingOptions) {
       const recoveryHash = retryTokenHash(body, id);
       const key = id === undefined ? undefined : `join:${id}`;
       const repeated = replay(room, key, payload, recoveryHash);
-      if (repeated) return reply(res, 200, repeated);
+      if (repeated) return reply(res, 200, withReceipts(room, repeated, repeated.participant));
       active(room);
       if (room.participants.size >= maxParticipants) fail(429, 'meeting_full', `At most ${maxParticipants} participants can join a meeting.`);
-      capacity(room, payload, key);
+      const firstPeerClaimBytes = room.hadPeer ? 0 : [...room.deliveries.values()].filter(delivery => delivery.awaitFirstPeer).length * 96;
+      capacity(room, payload, key, firstPeerClaimBytes);
       const participant: MeetingParticipant = { id: randomUUID(), ...payload, role: 'participant', joinedAt: iso(Date.now()), token: secret(), ...(req.noknokActor ? { authId: req.noknokActor.agentId } : {}) };
+      options.authorizeParticipant?.(room, participant);
       room.participants.set(participant.id, participant);
+      if (!room.hadPeer) {
+        room.hadPeer = true;
+        for (const event of room.events) {
+          const delivery = room.deliveries.get(event.seq)!;
+          if (event.data !== undefined && delivery.awaitFirstPeer) { delivery.awaitFirstPeer = false; delivery.claims.set(participant.id, 'pending'); room.bytes += 96; }
+        }
+      }
       room.readyBy.clear();
       append(room, 'joined', 'system', { participant: publicParticipant(participant) });
-      const response = save(room, key, payload, { meeting: summary(room), participant: { ...participant }, viewUrl: viewUrl(room) }, recoveryHash);
+      const response = save(room, key, payload, { ...result(room), participant: { ...participant }, viewUrl: viewUrl(room) }, recoveryHash);
       wake(room);
-      return reply(res, 200, response);
+      return reply(res, 200, withReceipts(room, response, participant));
     }
 
     const readable = req.method === 'GET' && (operation === undefined || operation === 'events');
@@ -320,8 +377,9 @@ export function createMeetings(options: MeetingOptions) {
       const after = integerParam(parsed, 'after', 0, Number.MAX_SAFE_INTEGER);
       const waitMs = integerParam(parsed, 'waitMs', 25_000, 25_000);
       if (after > room.seq) fail(400, 'invalid_cursor', 'after is beyond the last event sequence.');
-      const body = readableResult(room, after, participant);
-      if (body.events.length || waitMs === 0 || room.state !== 'active') return reply(res, 200, body);
+      // A waiting poll must not keep a snapshot of purpose/context alive after
+      // the corresponding pending body has been acknowledged or expired.
+      if (room.events.some(event => event.seq > after) || waitMs === 0 || room.state !== 'active') return reply(res, 200, readableResult(room, after, participant));
       if (room.polls.size >= 64 || [...room.polls].filter(poll => poll.participantId === participant.id).length >= 4) fail(429, 'too_many_polls', 'At most four simultaneous waits per credential and 64 per meeting are allowed.');
       let timer;
       const poll = {
@@ -354,6 +412,27 @@ export function createMeetings(options: MeetingOptions) {
       return;
     }
 
+    if (operation === 'ack') {
+      if (req.method !== 'POST') fail(405, 'method_not_allowed', 'Use POST to acknowledge delivery.');
+      const body = await readBody(req);
+      getRoom(meetingId);
+      authenticate(req, room, false);
+      if (!Array.isArray(body.receipts) || body.receipts.length > maxEvents) fail(400, 'invalid_request', `receipts must be an array of at most ${maxEvents} delivery receipts.`);
+      // Validate the entire batch before changing claims. A receipt is scoped to
+      // an event and participant, and only returned together with that body.
+      for (const receipt of body.receipts) {
+        if (!receipt || !Number.isSafeInteger(receipt.seq) || receipt.seq < 1 || !room.deliveries.get(receipt.seq)?.claims.has(participant.id)
+          || !equal(receipt.token, receiptToken(room, receipt.seq, participant.id))) fail(400, 'invalid_receipt', 'A delivery receipt for this participant and event is required.');
+      }
+      const acknowledged = [...new Set<number>(body.receipts.map(receipt => receipt.seq))];
+      for (const seq of acknowledged) {
+        const delivery = room.deliveries.get(seq)!;
+        if (delivery.claims.get(participant.id) === 'pending') delivery.claims.set(participant.id, 'acknowledged');
+        settleDelivery(room, room.events[seq - 1]);
+      }
+      return reply(res, 200, { meeting: summary(room), acknowledged, nextCursor: room.seq });
+    }
+
     if (req.method !== 'POST' || !['messages', 'ready', 'leave', 'end'].includes(operation)) fail(405, 'method_not_allowed', 'Method is not supported for this route.');
     if (operation === 'end' && participant.role !== 'host') fail(403, 'host_required', 'Only the meeting host can end the meeting.');
     if (operation === 'leave' && participant.role === 'host') fail(409, 'host_must_end', 'The host must end the meeting instead of leaving.');
@@ -379,7 +458,7 @@ export function createMeetings(options: MeetingOptions) {
       payload = { text: string(body, 'text'), reason: string(body, 'reason', { max: 4096, fallback: 'host_ended' }) };
     } else payload = {};
     const repeated = replay(room, key, payload);
-    if (repeated) return reply(res, 200, repeated);
+    if (repeated) return reply(res, 200, withReceipts(room, repeated, participant));
     active(room);
     if (participant.leftAt !== undefined) fail(403, 'participant_left', 'A participant who has left can read but cannot change the meeting.');
     if (operation !== 'end') capacity(room, payload, key);
@@ -399,15 +478,16 @@ export function createMeetings(options: MeetingOptions) {
       event = append(room, 'ready', participant.id, payload);
     } else if (operation === 'leave') {
       participant.leftAt = iso(Date.now());
+      releaseParticipant(room, participant.id);
       room.readyBy.clear();
       event = append(room, 'left', 'system', { participant: publicParticipant(participant) });
     } else event = closeRoom(room, 'ended', payload.reason, payload.text, Date.now(), participant.id);
     const response = save(room, key, payload, mutationResult(room, event));
     wake(room);
-    return reply(res, 200, response);
+    return reply(res, 200, withReceipts(room, response, participant));
   }
 
-  const timer = setInterval(cleanup, Math.max(10, Math.min(1000, meetingTtlMs, retentionMs)));
+  const timer = setInterval(cleanup, Math.max(10, Math.min(1000, meetingTtlMs, retentionMs, deliveryTtlMs)));
   timer.unref();
   return {
     async handle(req, res, parsed) {

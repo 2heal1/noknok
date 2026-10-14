@@ -2,7 +2,7 @@
 
 **No end-to-end encryption yet.** The service can read plaintext while relaying it. HTTPS does not change this. E2EE is required before real-user beta use.
 
-**Temporary service state.** By default, rooms stay open for at most 2 hours, then remain for 10 minutes after ending or expiry so existing participants can fetch remaining messages. A service restart loses meetings. Chat content is not persisted as server-side history, but it does exist in memory while being relayed.
+**Temporary service state.** Bodies remain pending in service memory for at most five minutes by default, and are deleted earlier once all required participants save and acknowledge them. CLI and browser participants acknowledge only after local persistence succeeds. Read-only viewers do not delay cleanup; late joiners can encounter missing bodies. The two-hour meeting lifetime and ten-minute terminal retention preserve state and event metadata, not cleared bodies. Each participant keeps its own history. Restarting the service loses meetings.
 
 **Each participant keeps its own records.** The CLI saves messages it receives; browsers can download loaded records. Hosted services separately persist access control, authorization, and subscription state. No server-side chat archive does not mean the service stores no data at all.
 

@@ -93,10 +93,13 @@ Hosted MCP 有自己的工具目录，例如：
 | `noknok_call` | 使用好友授权创建会议并通知该好友；立即返回查看链接 |
 | `noknok_inbox` | 读取仅属于当前身份的会议邀请 |
 | `noknok_meeting_join` / `noknok_meeting_read` / `noknok_meeting_send` | 参加会议、读取增量记录、发言 |
+| `noknok_meeting_ack` | 正文保存到宿主持久存储后，确认返回的送达回执 |
 | `noknok_subscription_status` | 查看本身份的订阅和通知投递状态 |
 | `noknok_meeting_end` | 仅主持方可以结束会议 |
 
 Hosted MCP 使用 `meeting_id`；本地 CLI 的 `meeting` 命令使用本地 `am_…` session。这两种标识不要混用。`hosted call/create/accept` 会为本地 CLI 归档并返回相应 session；直接使用远程 MCP 的 agent 则负责在自己的存储中保存联系人凭证、会议 ID 和已读取的记录。
+
+远程 MCP 的创建、加入、发送、读取和结束响应可能带 `deliveryReceipts`。先持久保存正文，再调用 `noknok_meeting_ack({meeting_id, receipts: deliveryReceipts})`；没有保存能力时说明限制，不确认已保存。正文默认最多等待 5 分钟，全部必要参与者确认后提前删除，重试和只读查看都不会延后清理。
 
 ## 3. 用户授权接收，然后由宿主建立 Events 订阅
 

@@ -5,7 +5,7 @@ import { lstat, mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs
 import { randomBytes, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { api, fail, normalizeServer } from './client.js';
-import { MeetingStore, decodeMeetingLink } from './meeting-client.js';
+import { MeetingStore, decodeMeetingLink, acknowledgeMeeting, archivedMeetingResult } from './meeting-client.js';
 
 const secret = () => randomBytes(32).toString('base64url');
 const credential = value => typeof value === 'string' && /^[A-Za-z0-9_.~-]{16,16384}$/.test(value);
@@ -117,12 +117,14 @@ async function archiveMeeting(store, state, result, pending, signal) {
     if (invitation.id !== result.meeting.id || invitation.server !== state.server) throw fail('INVALID_RESPONSE', 'Hosted service returned an inconsistent meeting invitation.');
   }
   const { saved, restored } = await store.meetings.create(pending.session, state.server, result, signal);
+  await acknowledgeMeeting(store.meetings, await store.meetings.archive(saved.id, { ...result, events: result.events || [] }, { signal }), { signal });
   const initial = await api(state.server, `/v1/meetings/${saved.meetingId}/events?after=0&waitMs=0`, { token: saved.token, signal });
-  await store.meetings.archive(saved.id, initial, { signal });
+  const local = await acknowledgeMeeting(store.meetings, await store.meetings.archive(saved.id, initial, { signal }), { signal });
+  const archived = archivedMeetingResult(initial, local);
   return { session: saved.id, meetingId: saved.meetingId, requestId: pending.requestId, restored, participant: saved.participant,
-    meeting: initial.meeting, viewUrl: result.viewUrl, ...(result.invitationUrl ? { invitationUrl: result.invitationUrl } : {}),
-    ...(result.invitationId ? { invitationId: result.invitationId } : {}), ...(result.notification ? { notification: result.notification } : {}), events: initial.events,
-    next: 'Show the session and viewUrl now. Continue with meeting send/receive using this same --agent profile. Only the host ends the meeting.' };
+    meeting: archived.meeting, viewUrl: result.viewUrl, ...(result.invitationUrl ? { invitationUrl: result.invitationUrl } : {}),
+    ...(result.invitationId ? { invitationId: result.invitationId } : {}), ...(result.notification ? { notification: result.notification } : {}), events: archived.events,
+    next: 'Show the session and viewUrl now. Continue with meeting send/receive using this same --agent profile. History is saved locally; the relay deletes acknowledged content. Only the host ends the meeting.' };
 }
 
 export async function hostedCommand(command: string, args: string[], options: CliOptions, { signal, textInput }: CommandContext = {}) {

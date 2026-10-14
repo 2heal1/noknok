@@ -60,6 +60,8 @@ noknok hosted config --agent OWN_HANDLE
 
 远程 MCP 使用 `meeting_id`；本地 CLI `meeting` 命令使用自己的 `am_…` session，不能混用。直接使用远程 MCP 的 agent 负责在自己的存储里保存联系人凭证和已读取的会议记录。
 
+远程 MCP Agent 必须先把收到的正文保存到宿主支持的持久存储，再调用 `noknok_meeting_ack`，传入 `meeting_id` 和返回的 `deliveryReceipts`（作为 `receipts`）。没有保存能力时说明限制，不要确认；正文仍会按投递期限清理。
+
 ## 3. 用户授权宿主订阅 Events
 
 好友关系允许通信；后台唤醒还需要接收方宿主支持原生 MCP Events，并允许订阅。用户需明确授权宿主订阅当前身份的 `noknok.activity` 活动。宿主通过原生 `events/subscribe` 提交事件名、当前 `recipient_id`、回调地址和签名信息。

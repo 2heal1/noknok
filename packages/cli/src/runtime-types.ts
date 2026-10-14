@@ -52,13 +52,13 @@ export interface MeetingEvent {
   type: string;
   from: string;
   at: string;
-  data: { text?: string; reason?: string; state?: string; ready?: boolean; to?: string; replyTo?: number; participant?: Omit<MeetingParticipant, 'token' | 'authId'> };
+  bodyState?: 'pending' | 'delivered' | 'expired' | 'recipient_unavailable';
+  bodyExpiresAt?: string;
+  data?: { purpose?: string; context?: string; text?: string; reason?: string; state?: string; ready?: boolean; to?: string; replyTo?: number; participant?: Omit<MeetingParticipant, 'token' | 'authId'> };
 }
 export interface MeetingRoom {
   id: string;
   state: string;
-  purpose: string;
-  context: string;
   hostId: string;
   ownerId?: string;
   ownerAgentId?: string;
@@ -71,6 +71,9 @@ export interface MeetingRoom {
   reason?: string;
   summary?: string;
   readyBy: Set<string>;
+  deliveries: Map<number, { expiresAt: number; claims: Map<string, 'pending' | 'acknowledged' | 'unavailable'>; awaitFirstPeer: boolean; unavailable?: boolean }>;
+  receiptKey: string;
+  hadPeer: boolean;
   events: MeetingEvent[];
   seq: number;
   bytes: number;
@@ -82,6 +85,7 @@ export interface MeetingActor { accountId: string; agentId: string }
 export type MeetingRequest = IncomingMessage & { noknokActor?: MeetingActor };
 export interface MeetingOptions {
   getUrl: () => string;
+  deliveryTtlMs?: number;
   meetingTtlMs?: number;
   retentionMs?: number;
   maxMeetings?: number;
@@ -92,6 +96,7 @@ export interface MeetingOptions {
   maxEvents?: number;
   maxOwnerMeetings?: number;
   beforeWrite?: (value: unknown, bytes: number) => void;
+  isParticipantAvailable?: (room: MeetingRoom, participant: MeetingParticipant) => boolean;
   authorizeRoom?: (room: MeetingRoom) => void;
   authorizeParticipant?: (room: MeetingRoom, participant: MeetingParticipant) => void;
   authorizeCreate?: (req: MeetingRequest, body: Record<string, unknown>) => MeetingActor | undefined;
@@ -184,10 +189,14 @@ export interface ContactActivity {
   call?: unknown;
   instanceId?: string;
 }
+export interface DeliveryReceipt { seq: number; token: string }
 export interface MeetingSnapshot {
   id: string;
-  purpose: string;
-  context: string;
+  purpose?: string;
+  context?: string;
+  summary?: string;
+  reason?: string;
+  deliveryTtlMs: number;
   state: string;
   hostId: string;
   participants: Array<Omit<MeetingParticipant, 'token' | 'authId'>>;
@@ -207,6 +216,9 @@ export interface LocalMeetingSession {
   meeting: MeetingSnapshot;
   viewUrl: string;
   invitationUrl?: string;
+  pendingDeliveryReceipts?: DeliveryReceipt[];
+  missingContentSequences?: number[];
+  historyComplete?: boolean;
   archiveCursor: number;
   readCursor: number;
   events: MeetingEvent[];

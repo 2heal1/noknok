@@ -20,7 +20,7 @@ function packageFiles(overrides = {}) {
     ['dist/poc/mcp-events/server.js', 'export {};\n'],
     ['skills/noknok/SKILL.md', '# Skill\n'], ['skills/noknok/references/hosted.md', '# Hosted\n'],
     ['skills/noknok/references/two-party-calls.md', '# Legacy\n'],
-    ['dist/web/meeting.html', '<!doctype html>\n'], ['dist/web/meeting.js', 'export {};\n'],
+    ['dist/web/meeting.html', '<!doctype html>\n'], ['dist/web/meeting.js', 'export {};\n'], ['dist/web/meeting-invitation.js', 'export {};\n'],
   ]);
   return new Map([...files].map(([path, text]) => [path, Buffer.from(text)]));
 }

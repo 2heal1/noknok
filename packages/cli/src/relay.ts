@@ -23,6 +23,7 @@ const WEB_ASSETS = new Map([
   ['/meeting', ['meeting.html', 'text/html; charset=utf-8']],
   ['/meeting/', ['meeting.html', 'text/html; charset=utf-8']],
   ['/meeting.js', ['meeting.js', 'text/javascript; charset=utf-8']],
+  ['/meeting-invitation.js', ['meeting-invitation.js', 'text/javascript; charset=utf-8']],
   ['/meeting.css', ['meeting.css', 'text/css; charset=utf-8']],
 ]);
 const WEB_HEADERS = {

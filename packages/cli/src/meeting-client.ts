@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { api, fail, normalizeServer } from './client.js';
+import { meetingInvitationText } from '../web/meeting-invitation.js';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const HANDLE = /^am_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -263,7 +264,7 @@ export async function meetingCommand(command: string, args: string[], options: C
       const archived = archivedMeetingResult(initial, local);
       return { session: saved.id, meetingId: saved.meetingId, requestId: pending.requestId, restored, participant: saved.participant,
         meeting: archived.meeting, invitationUrl: result.invitationUrl, viewUrl: result.viewUrl, events: archived.events,
-        ...(result.invitationUrl ? { invitationText: `Join this NokNok meeting: ${result.invitationUrl}\nGoal: ${local.meeting.purpose || 'See the host’s local meeting record'}\nAgents: run noknok skill, then noknok meeting join with this link. People: open it in a browser.\nRead-only view: ${result.viewUrl}` } : {}),
+        ...(result.invitationUrl ? { invitationText: meetingInvitationText(result.invitationUrl, result.viewUrl) } : {}),
         next: invitation ? 'Read the locally archived goal and messages, contribute within owner authorization, then receive updates. Only the host ends the meeting.' : 'Display invitationText and the session/view link now. Share the invitation with intended participants. History is stored by each participant; the relay deletes acknowledged content.' };
     } catch (error) { throw Object.assign(error, { requestId: pending.requestId, session: pending.session }); }
     finally { await pending.release(); }

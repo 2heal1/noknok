@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { invitationJoinLink } from './meeting-invitation-helper.js';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { mkdtemp, readFile, writeFile, rm, stat } from 'node:fs/promises';
@@ -220,6 +221,11 @@ test('real hosted service connects two CLI agents, archives their discussion, an
   const setupA = await a('hosted', 'setup', '--server', server.url, '--code-file', codeFile, '--product', 'codex');
   const setupB = await b('hosted', 'setup', '--server', server.url, '--code-file', codeFile, '--product', 'doubaowork');
   assert.notEqual(setupA.agentId, setupB.agentId);
+  const meeting = await a('hosted', 'create', '--purpose', 'Join without an account or contacts');
+  const guest = await agent('guest')('meeting', 'join', invitationJoinLink(meeting));
+  assert.equal(guest.meetingId, meeting.meetingId);
+  assert.equal(guest.participant.kind, 'agent');
+  await a('meeting', 'end', meeting.session, '--text', 'Guest joined from the forwarded invitation.');
   const invitation = await a('hosted', 'friend-link');
   const added = await b('hosted', 'friend-add', invitation.link);
   assert.equal(added.peerId, setupA.agentId);
@@ -227,6 +233,8 @@ test('real hosted service connects two CLI agents, archives their discussion, an
   assert.equal(contacts.contacts[0].peerId, setupB.agentId);
   const call = await a('hosted', 'call', setupB.agentId, '--purpose', 'Collect reproduction URL and steps', '--request-id', 'real-cli-call');
   assert.match(call.session, /^am_/);
+  const fallback = await agent('fallback')('meeting', 'join', invitationJoinLink(call));
+  assert.equal(fallback.meetingId, call.meetingId);
   const inbox = await b('hosted', 'inbox');
   assert.equal(inbox.invitations.length, 1);
   const joined = await b('hosted', 'accept', inbox.invitations[0].id);

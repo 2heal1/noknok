@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { invitationJoinLink } from './meeting-invitation-helper.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import { createMeetings } from '../src/meetings.js';
 import { startRelay } from '../src/relay.js';
+import { meetingInvitationText } from '../web/meeting-invitation.js';
+import { decodeMeetingLink } from '../src/meeting-client.js';
 
 async function fixture(t, options = {}) {
   const relay = await startRelay({ port: 0, ...options });
@@ -42,6 +45,23 @@ async function fixture(t, options = {}) {
   }
   return { ...relay, request, create, join, mutate, retryToken };
 }
+
+test('HTTP and browser invitations carry setup and complete links that join the same meeting', async t => {
+  const f = await fixture(t);
+  const room = await f.create();
+  const forwarded = [room.invitationText, meetingInvitationText(room.invitationUrl, undefined, 'zh')];
+  for (const invitationText of forwarded) {
+    const link = invitationJoinLink({ ...room, invitationText });
+    const decoded = decodeMeetingLink(link);
+    const joined = await f.request(`/v1/meetings/${decoded.id}/join`, { method: 'POST', body: { token: decoded.token, name: 'Invited agent', kind: 'agent' } });
+    assert.equal(joined.status, 200);
+    assert.equal(joined.body.meeting.id, room.meeting.id);
+  }
+  const asset = await fetch(`${f.url}/meeting-invitation.js`);
+  assert.equal(asset.status, 200);
+  assert.match(asset.headers.get('content-type'), /javascript/);
+  assert.match(await asset.text(), /export function meetingInvitationText/);
+});
 
 test('meetings have independent host, reusable invitation and read-only capabilities', async t => {
   const f = await fixture(t);

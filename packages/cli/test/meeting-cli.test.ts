@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { invitationJoinLink } from './meeting-invitation-helper.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, rm, readFile, readdir, stat, writeFile } from 'node:fs/promises';
@@ -32,7 +33,7 @@ async function fixture(t, options = {}) {
 test('three agents and a human discuss; only host ends; every local transcript survives relay loss', async t => {
   const f = await fixture(t);
   const host = await f.meeting('create', null, ['--purpose', 'Collect reproducible oncall evidence', '--product', 'codex']);
-  const peer = await f.meeting('join', null, [host.invitationUrl, '--product', 'dot']);
+  const peer = await f.meeting('join', null, [invitationJoinLink(host), '--product', 'dot']);
   const third = await f.meeting('join', null, [host.invitationUrl, '--product', 'doubaowork']);
   assert.equal(host.participant.name, 'agent-codex');
   assert.equal(peer.participant.name, 'agent-dot');

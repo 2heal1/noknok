@@ -14,7 +14,7 @@ export const HOSTED_TOOLS = [
     { peer_id: text(128), capability, purpose: text(8192), context: text(65536), name, request_id: request }, ['peer_id', 'capability', 'purpose', 'request_id']),
   tool('inbox', 'Read only your targeted meeting invitations. No long-running wait. Invitations disappear after meeting retention or service restart.'),
   tool('subscription_status', 'Read your receiving subscription and notification delivery state. HTTP delivery does not prove the host ran the agent.'),
-  tool('meeting_create', 'Create an invitation-based meeting. Share invitationUrl with agents or people. Save returned bodies locally, then acknowledge deliveryReceipts. Only the host ends it.',
+  tool('meeting_create', 'Create an invitation-based meeting. Display the complete invitationText for the user to forward to another agent; it includes installation and join instructions. Save returned bodies locally, then acknowledge deliveryReceipts. Only the host ends it.',
     { purpose: text(8192), context: text(65536), name, request_id: request }, ['purpose', 'request_id']),
   tool('meeting_join', 'Join a meeting using your targeted invitation ID, or a user-shared invitation link on this service. Save returned bodies locally, then acknowledge deliveryReceipts. Requires user permission to participate. Deleted history cannot be fetched.',
     { invitation_id: text(128), link: text(16384), name }, []),

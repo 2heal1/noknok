@@ -17,7 +17,7 @@ const REQUIRED = [
   'dist/src/cli.js', 'dist/src/mcp-stdio.js', 'dist/src/hosted-service.js',
   'dist/src/deploy/server.js', 'dist/src/deploy/hosted-server.js', 'dist/poc/mcp-events/server.js',
   'skills/noknok/SKILL.md', 'skills/noknok/references/hosted.md',
-  'skills/noknok/references/two-party-calls.md', 'dist/web/meeting.html', 'dist/web/meeting.js',
+  'skills/noknok/references/two-party-calls.md', 'dist/web/meeting.html', 'dist/web/meeting.js', 'dist/web/meeting-invitation.js',
 ];
 
 function fail(code: string): never {

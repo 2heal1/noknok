@@ -1,6 +1,7 @@
 import type { MeetingOptions, MeetingRoom, MeetingRequest, MeetingParticipant, MeetingEvent } from './runtime-types.js';
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { redactInvitations } from './invitation.js';
+import { meetingInvitationText } from '../web/meeting-invitation.js';
 
 const MAX_BODY_BYTES = 128 * 1024;
 const MAX_TEXT_BYTES = 32 * 1024;
@@ -322,9 +323,10 @@ export function createMeetings(options: MeetingOptions) {
       };
       append(room, 'started', 'system', { participant: publicParticipant(participant), purpose: payload.purpose, context: payload.context }, now);
       rooms.set(room.id, room);
+      const invitationUrl = `${options.getUrl()}/meeting#id=${room.id}&invite=${room.inviteToken}`;
       const response = {
         ...result(room), participant: { ...participant },
-        invitationUrl: `${options.getUrl()}/meeting#id=${room.id}&invite=${room.inviteToken}`, viewUrl: viewUrl(room),
+        invitationUrl, viewUrl: viewUrl(room), invitationText: meetingInvitationText(invitationUrl, viewUrl(room)),
       };
       if (id !== undefined) { creations.set(id, room.id); save(room, 'create', payload, response, recoveryHash); }
       return reply(res, 201, withReceipts(room, response, participant));

@@ -4,7 +4,7 @@ import { gzipSync } from 'node:zlib';
 import { readPackageArchive, validatePackageFiles } from '../../../scripts/check-package.js';
 
 const manifest = {
-  name: '@noknok/cli', version: '0.0.1', type: 'module',
+  name: '@noknok/cli', version: '0.0.1', type: 'module', license: 'Apache-2.0',
   bin: { noknok: 'dist/bin/noknok.js' },
   publishConfig: { registry: 'https://registry.npmjs.org', access: 'public' },
   repository: { type: 'git', url: 'git+https://github.com/2heal1/noknok.git' },
@@ -13,7 +13,7 @@ const manifest = {
 function packageFiles(overrides = {}) {
   const files = new Map([
     ['package.json', JSON.stringify({ ...manifest, ...overrides })],
-    ['README.md', '# NokNok\n'],
+    ['README.md', '# NokNok\n'], ['LICENSE', 'Apache License 2.0\n'], ['NOTICE', 'NokNok\nCopyright 2026 NokNok contributors\n'],
     ['dist/bin/noknok.js', '#!/usr/bin/env node\n'],
     ['dist/src/cli.js', 'export {};\n'], ['dist/src/hosted-service.js', 'export {};\n'], ['dist/src/mcp-stdio.js', 'export {};\n'],
     ['dist/src/deploy/server.js', 'export {};\n'], ['dist/src/deploy/hosted-server.js', 'export {};\n'],
@@ -104,6 +104,7 @@ test('scope, version, public registry and bins must match the reviewed release i
     [{ name: 'noknok' }, 'PACKAGE_IDENTITY_MISMATCH'],
     [{ name: '@noknok/noknok' }, 'PACKAGE_IDENTITY_MISMATCH'],
     [{ version: '9.9.9' }, 'PACKAGE_IDENTITY_MISMATCH'],
+    [{ license: 'UNLICENSED' }, 'INVALID_PACKAGE_LICENSE'],
     [{ private: true }, 'INVALID_PUBLISH_CONFIG'],
     [{ publishConfig: { registry: 'https://registry.npmjs.org', access: 'restricted' } }, 'INVALID_PUBLISH_CONFIG'],
     [{ publishConfig: { registry: 'https://example.invalid', access: 'public' } }, 'INVALID_PUBLISH_CONFIG'],
@@ -114,8 +115,8 @@ test('scope, version, public registry and bins must match the reviewed release i
   for (const [override, code] of cases) assert.throws(() => validatePackageFiles(packageFiles(override), manifest), { code });
 });
 
-test('missing executable or bundled skill fails before installation', () => {
-  for (const path of ['dist/bin/noknok.js', 'skills/noknok/SKILL.md', 'dist/src/deploy/hosted-server.js', 'dist/poc/mcp-events/server.js']) {
+test('missing license, attribution, executable or bundled skill fails before installation', () => {
+  for (const path of ['LICENSE', 'NOTICE', 'dist/bin/noknok.js', 'skills/noknok/SKILL.md', 'dist/src/deploy/hosted-server.js', 'dist/poc/mcp-events/server.js']) {
     const files = packageFiles();
     files.delete(path);
     assert.throws(() => validatePackageFiles(files, manifest), { code: 'MISSING_REQUIRED_PACKAGE_FILE' });

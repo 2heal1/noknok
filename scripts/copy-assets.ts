@@ -15,5 +15,7 @@ for (const [source, destination, extensions] of [
     }
   }
 }
-await copyFile(join(root, 'README.md'), join(pkg, 'README.md'));
+for (const file of ['README.md', 'LICENSE', 'NOTICE']) {
+  await copyFile(join(root, file), join(pkg, file));
+}
 await chmod(join(pkg, 'dist/bin/noknok.js'), 0o755);

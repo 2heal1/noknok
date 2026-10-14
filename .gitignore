@@ -21,3 +21,5 @@ apps/docs/doc_build/
 apps/docs/.rspress/
 packages/cli/docs/
 packages/cli/README.md
+packages/cli/LICENSE
+packages/cli/NOTICE

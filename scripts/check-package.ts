@@ -13,7 +13,7 @@ const MAX_ARCHIVE_BYTES = 32 * 1024 * 1024;
 const EXPECTED_NAME = '@noknok/cli';
 const REGISTRY = 'https://registry.npmjs.org';
 const REQUIRED = [
-  'package.json', 'README.md', 'dist/bin/noknok.js',
+  'package.json', 'README.md', 'LICENSE', 'NOTICE', 'dist/bin/noknok.js',
   'dist/src/cli.js', 'dist/src/mcp-stdio.js', 'dist/src/hosted-service.js',
   'dist/src/deploy/server.js', 'dist/src/deploy/hosted-server.js', 'dist/poc/mcp-events/server.js',
   'skills/noknok/SKILL.md', 'skills/noknok/references/hosted.md',
@@ -87,7 +87,7 @@ export function readPackageArchive(archive: Buffer) {
 }
 
 function allowedFile(path: string): boolean {
-  if (['package.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'LICENSE.md'].includes(path)) return true;
+  if (['package.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'LICENSE.md', 'NOTICE'].includes(path)) return true;
   if (path.split('/').some(part => part.startsWith('.'))) return false;
   if (/^dist\/(?:bin|src|poc)\/[a-zA-Z0-9_/-]+\.js$/.test(path)) return true;
   if (/^dist\/web\/[a-zA-Z0-9_/-]+\.(?:js|css|html|svg)$/.test(path)) return true;
@@ -117,6 +117,7 @@ export function validatePackageFiles(files: Map<string, Buffer>, expectedManifes
   catch { fail('INVALID_PACKAGE_MANIFEST'); }
   if (packed.name !== EXPECTED_NAME || packed.name !== expectedManifest.name || packed.version !== expectedManifest.version) fail('PACKAGE_IDENTITY_MISMATCH');
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(packed.version)) fail('INVALID_PACKAGE_VERSION');
+  if (packed.license !== 'Apache-2.0') fail('INVALID_PACKAGE_LICENSE');
   if (packed.private || packed.publishConfig?.access !== 'public' || packed.publishConfig?.registry?.replace(/\/$/, '') !== REGISTRY) fail('INVALID_PUBLISH_CONFIG');
   if (packed.repository?.url !== 'git+https://github.com/2heal1/noknok.git') fail('INVALID_REPOSITORY');
   if (packed.bin?.noknok !== 'dist/bin/noknok.js' || Object.keys(packed.bin).length !== 1) fail('INVALID_PACKAGE_BIN');

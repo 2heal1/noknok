@@ -42,7 +42,7 @@
     "deploy",
     "poc/mcp-events",
     "README.md",
-    "docs",
+    "docs/*.md",
     "Dockerfile"
   ],
   "license": "UNLICENSED",

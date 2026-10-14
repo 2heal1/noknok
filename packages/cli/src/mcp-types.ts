@@ -4,6 +4,9 @@ export type RpcId = string | number;
 export type JsonObject = Record<string, unknown>;
 export interface ArgumentRule {
   type: string;
+  minItems?: number;
+  maxItems?: number;
+  items?: ObjectSchema;
   minLength?: number;
   maxLength?: number;
   minimum?: number;

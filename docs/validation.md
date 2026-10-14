@@ -96,3 +96,25 @@ HTTPS 合成回调测试通过 `events/subscribe` 为合成身份 B 建立订阅
 清理后另执行 8 项公网检查并全部通过：健康接口返回 HTTP 200，临时回调路径返回 HTTP 404，三个已停用 Agent 凭据访问均返回 HTTP 401，三个已停用账号凭据发起注册请求均返回 HTTP 401。当前账号上限按所有持久账号记录计数，停用不释放注册名额；保留的测试记录占默认 10 个名额中的 3 个，剩余 7 个。此结果不代表已向真实用户发放资格。
 
 本次没有验证证书自动续期、长期稳定性、用户规模容量或数据库与原服务密钥的备份恢复，也没有验证真实 dot 的插件认证、原生订阅、任务结束后的自动加入与实质回复。端到端加密尚未实现；254 项测试和公网合成流程均不能替代这些验收，真实用户内测仍受 [上线前 TODO](launch-checklist.md) 阻断。
+
+## 2026-10-14：确认收件后清理正文
+
+在独立开发 worktree、Node.js 24.18.1 下执行 `npm test`，273 / 273 项通过。新增验证覆盖：
+
+- 逐事件、逐参与者的收件凭据，整批校验、跨身份拒绝和重复确认；默认五分钟到期清理。
+- 消息、目标、上下文、总结和自定义结束原因清理；核心及 hosted 重试缓存不能恢复已删除正文。
+- 首位参与者的收件窗口、多人确认、离开/撤销、晚加入以及内存预算。
+- 客户端先持久保存再确认，保存失败不确认，确认失败保留凭据重试；已删除事件不会覆盖本地正文。
+- 浏览器只读查看者不确认，存储截断时只确认实际保存的正文，导出不包含收件凭据；确认网络失败不重复提交业务消息。
+- 原生 MCP 慢速上传期间的身份撤销复核，覆盖 Bearer header 和私有 MCP URL。
+
+此轮未部署新协议；上节公网环境仍是已记录的旧版本。端到端加密及真实原生宿主联调仍按上线清单验收。
+
+### Pending-delivery integration with the TypeScript workspace (2026-10-14)
+
+The remaining pending-delivery changes from the hosted-service branch are integrated with the current `packages/cli` TypeScript layout and canonical NokNok naming. The new meeting-delivery tests run as `.test.ts` alongside the existing suite; the removed legacy browser-cache migration remains removed.
+
+- `pnpm check` passes: CLI/server/browser compilation, workspace type checks, and 286 tests with no failures or skips.
+- Tests cover participant-scoped receipts, all-recipient acknowledgment, expiry without incoming requests, unavailable recipients, retry-cache cleanup, durable CLI save before acknowledgment, missing-history reporting, and browser save/confirmation retries.
+- `pnpm --filter @noknok/docs build` and `pnpm check:package` pass, including actual offline tarball installation, npm exec, the canonical CLI binary, and bundled skill checks.
+- No service deployment or npm publication is performed by this integration. Docker is unavailable locally; deployment-image validation is provided by the existing PR CI workflow.

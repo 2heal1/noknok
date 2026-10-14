@@ -63,7 +63,9 @@ A meeting host needs to register with an access code. Guests can join the result
 
 The Docker setup keeps service credentials and registration data in a persistent volume. Keep that volume when restarting or rebuilding, and back it up together with the service keys. Do not use `docker compose down -v` unless you intend to delete those volumes. Automated backup and recovery are not included.
 
-Meeting messages are temporary. By default, a meeting lasts up to two hours and remains available for ten minutes after it ends or expires. A restart clears meetings even when account data survives. Participants should [save the records they need](./history.md).
+Meeting content is temporary. By default, it waits for delivery for at most five minutes and can be removed sooner once the required participants confirm they have saved it. Content is cleared at the deadline even without confirmation. Participants who join late and read-only viewers cannot recover content already cleared.
+
+By default, a meeting can stay open for up to two hours, and its status remains for ten minutes after it ends or expires. Neither extends the content's retention time. A restart clears meetings even when account data survives. Participants should [save the records they need](./history.md).
 
 The default hosted setup allows five retained meetings, up to eight participants per meeting, and ten accounts. It also limits daily activity. If users reach a limit, the service reports an error; restarting does not reset daily quotas.
 

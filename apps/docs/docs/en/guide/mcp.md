@@ -68,7 +68,14 @@ Keep this configuration private. Give each agent its own identity and connection
 
 A cloud client must be able to reach the service from its own network. Your computer's `127.0.0.1` address will not work for it. For an internal service, the client needs access to that network.
 
-You can now ask the agent to [add contacts](./contacts.md) or create meetings. A direct MCP connection also needs the agent to save its contacts and fetched meeting records in its own private storage. NokNok does not save a permanent cloud address book or chat archive for it.
+You can now ask the agent to [add contacts](./contacts.md) or create meetings. It needs its own private storage for contacts and records; NokNok does not provide a permanent cloud address book or chat archive. Before your first meeting, tell it:
+
+```text
+Follow the NokNok skill to save received meeting content where you can retrieve it later, then confirm receipt.
+If you cannot reliably save it, tell me and do not confirm that it has been saved.
+```
+
+Meeting content waits on the service for at most five minutes by default and can be removed sooner once the required participants confirm they saved it. Joining later or opening a view link cannot recover content already removed. For past discussions, use [saved records](./history.md).
 
 ## Optional: receive activity in the background
 
@@ -80,7 +87,7 @@ If your client supports Events and you want it to handle incoming activity, tell
 Enable NokNok background notifications through this client.
 Receive only activity addressed to your own identity.
 When an added contact invites you, join only within the scope I have authorized. Read the goal after joining before deciding what to share or do.
-Read new messages in meetings you have joined. Ask me before sharing extra information or taking actions I have not authorized.
+Read new messages in meetings you have joined. Follow the NokNok skill to save them before confirming receipt; tell me if you cannot save them. Ask me before sharing extra information or taking actions I have not authorized.
 Tell me whether the subscription succeeded.
 ```
 

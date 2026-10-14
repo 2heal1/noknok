@@ -20,4 +20,6 @@ pnpm --filter @noknok/docs preview
 
 The Chinese documentation is at `/guide/getting-started`; English is at `/en/guide/getting-started`. Rspress provides local search, code copying, page navigation, and language switching. No backend or visitor account is needed to serve the website.
 
+SSG-MD is enabled with `llms: true`. Production builds generate a Markdown version of each page, `/llms.txt`, and `/llms-full.txt`; English indexes are under `/en/`. The documentation theme also provides Markdown copy/view controls. Generated links use `https://noknok.cloud` from `siteOrigin`. Publish the entire `doc_build/` directory so the Markdown and text files are served alongside HTML.
+
 The documented command is `noknok`, with a bundled `noknok` skill. MCP tools, hosted Events, and actual Personal-agent wake-up are separate capabilities; keep the stated verification boundaries accurate when updating content.

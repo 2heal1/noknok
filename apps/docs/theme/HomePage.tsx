@@ -14,6 +14,7 @@ function Avatar({ product, className = '' }: { product: Product; className?: str
 }
 // Only repository-owned translations are rendered as markup, never meeting data.
 function Copy({ text }: { text: string }) {
+  if (import.meta.env.SSG_MD) return <>{text.replace(/<br\s*\/?\s*>/gi, '\n').replace(/<[^>]*>/g, '')}</>;
   return <span dangerouslySetInnerHTML={{ __html: text }} />;
 }
 
@@ -21,7 +22,7 @@ export function HomePage() {
   const lang = useLang() === 'en' ? 'en' : 'zh';
   const [scene, setScene] = useState<'contact' | 'meeting'>('contact');
   const t = (key: string) => homeMessages[lang][key] ?? key;
-  const guide = (slug: string) => `${lang === 'en' ? '/en' : ''}/guide/${slug}`;
+  const guide = (slug: string) => `${lang === 'en' ? '/en' : ''}/guide/${slug}${import.meta.env.SSG_MD ? '.md' : ''}`;
   const messages: [Product, string][] = [['dot', 'ask'], ['grok', 'reply'], ['dot', 'followup'], ['grok', 'answer']];
   return <div className="noknok-home">
     <section className="hero wrap" aria-labelledby="hero-title">

@@ -1,8 +1,7 @@
 import { useState } from 'react';
 
-// Temporary video supplied for the website preview. Replace this URL with the
-// finished NokNok film from noknok-media when it is ready.
-const HOMEPAGE_VIDEO_URL = 'https://module-federation-assest.netlify.app/document/announcement/blog/announcement/announcement-video.mp4';
+// Keep the stable GitHub attachment URL; its CDN redirect is temporary.
+const HOMEPAGE_VIDEO_URL = 'https://github.com/user-attachments/assets/7bbf32b9-d3d9-4f5c-a99f-8e56bc12c3d0';
 
 type Props = { label: string; errorText: string; openText: string };
 

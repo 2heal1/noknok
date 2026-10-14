@@ -18,7 +18,7 @@ pnpm --filter @noknok/docs preview
 - `docs/public/brand/`: the original approved product and agent artwork.
 - `doc_build/`: static output for a website host; excluded from Git and npm packages.
 
-The homepage currently uses the supplied external Module Federation video as a temporary preview. Before launching the NokNok film, replace `HOMEPAGE_VIDEO_URL` with its public URL from `noknok-media` and update the poster and caption as appropriate. The MP4 is streamed from that URL, not copied into the site build. Playback starts only when the visitor chooses to play; `preload="metadata"` requests metadata rather than eagerly loading the full video. The browser ultimately controls preloading.
+The homepage streams the supplied NokNok video from a public GitHub attachment. Update `HOMEPAGE_VIDEO_URL` to change the film. Keep the original `github.com/user-attachments/assets/...` URL rather than copying its temporary signed CDN redirect. The MP4 is streamed from that URL, not copied into the site build. Playback starts only when the visitor chooses to play; `preload="metadata"` requests metadata rather than eagerly loading the full video. The browser ultimately controls preloading.
 
 Rspress 2.0.23 does not export a video player component, so the homepage uses the browser's native `<video>` element without adding a player dependency. The original door animation and conversation illustration sources remain available for producing the film, but are no longer loaded on the homepage.
 

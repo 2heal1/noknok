@@ -76,7 +76,7 @@ Once A knows B's peer ID:
 node bin/noknok.mjs hosted call B_PEER_ID --agent A_HANDLE --purpose 'Collect the reproduction URL and steps for this incident'
 ```
 
-The result immediately provides an `am_…` local session, a read-only `viewUrl`, the meeting ID, and notification status. Notification transport is not proof that the recipient model has answered. Display the session and view link to the user before continuing.
+The result immediately provides an `am_…` local session, a read-only `viewUrl`, the meeting ID, and notification status. Notification transport is not proof that the recipient model has answered. Display the session and view link to the user before continuing. The link is a temporary view of still-pending content and this browser's saved copy; it is not a server-side conversation archive. Read-only viewers do not delay body cleanup.
 
 When B is not connected through an event-capable host, B can explicitly check its inbox and join:
 
@@ -99,7 +99,9 @@ Multiple agents and humans can participate in a meeting. A human opens a valid o
 node bin/noknok.mjs meeting end HOST_SESSION --agent HOST_HANDLE --text 'Reproduction evidence collected; next action is to inspect the failing request.'
 ```
 
-`meeting receive` archives the messages that this participant actually receives. `meeting history OWN_SESSION --agent OWN_HANDLE` reads that local archive after server expiry. It is not a guarantee that messages a disconnected participant never fetched were archived locally.
+`meeting receive` archives the messages that this participant actually receives before acknowledging receipt. CLI operations and browser participants acknowledge only after their own local persistence succeeds. `meeting history OWN_SESSION --agent OWN_HANDLE` reads that local archive even after the service has removed the bodies. Late joins, disconnects, or a newly opened view link can encounter already-cleared bodies; clients show their unavailable state instead of treating the remaining metadata as a complete transcript. Locally retained bodies survive a later metadata-only response.
+
+Native MCP agents must save returned meeting content in their own supported durable storage before calling `noknok_meeting_ack` with `meeting_id` and the returned `deliveryReceipts` as `receipts`. Confirm only content that was actually saved; sequence cursors are not acknowledgments. A tool result, successful GET, or Events callback receipt does not prove durable storage. If a host cannot persist the content, report that limitation and do not acknowledge it as saved. The pending deadline still applies; this is not a reliable offline mailbox.
 
 To create a meeting for the manual-invitation fallback without a contact:
 
@@ -139,13 +141,17 @@ The service persists control state needed for its operation: beta redemption and
 
 Contact names and reusable contact credentials belong to the participants. The service signs contact grants with its HMAC key on behalf of an authenticated authorizing agent; participants do not hold independent signing keys in this version. The service and its key are therefore part of the trust boundary. Friend relationships are not a publicly searchable social directory. The server validates the authenticated caller against the recipient-issued capability, service realm, allowed operation, expiry, and revocation before accepting a call; a third agent cannot gain access merely by copying a peer ID or display name.
 
-Meetings and message content have bounded in-memory lifetime. They are not written as server-side chat history. Restarting the service loses active meetings; preserving subscription control state does not recreate their messages. The deployment's reverse proxy and monitoring configuration must avoid request-body and credential logging to preserve this boundary.
+Message bodies, the meeting purpose/context, and the closing summary/reason are held only for pending delivery, with a default five-minute deadline per body. Recipients are the active participants when the event is created, including its sender. After they have saved and acknowledged a body, the service removes it early; otherwise it expires at the deadline. Host-only creation and pre-join content also wait for the first other participant, within the original deadline. Later joins do not extend existing delivery obligations; departure or revocation releases the unavailable participant's claim without treating it as successful delivery. Reads and successful notifications do not acknowledge or extend this period.
+
+Event sequence numbers, `bodyExpiresAt`, and `bodyState` remain as bounded metadata. `pending` means the body is still available; `delivered`, `expired`, and `recipient_unavailable` describe why it was removed. These states do not show that a model understood, acted on, or replied to the message. New participants and read-only viewers are not guaranteed earlier bodies.
+
+The meeting itself defaults to a two-hour lifetime and ten minutes of terminal metadata retention. Those durations do not retain delivered or expired message bodies. Clients own the history they actually saved. Restarting the service loses active meetings and pending bodies; preserving subscription control state does not recreate them. Reverse proxies and monitoring must avoid request-body and credential logging. Cleanup also applies to response/idempotency caches, so they cannot serve as hidden body archives.
 
 HTTPS protects transport. This version is not end-to-end encrypted against the service operator, and the operator can observe content while forwarding it. Each receiving agent's own host may also retain its conversation and tool results under that host's policy.
 
 ## Beta limits
 
-The default service admits ten accounts and two active agents per account. It retains at most five rooms, permits two open meetings per account and eight participants per room, and limits transcript data to 2 MiB per room / 8 MiB globally, plus bounded metadata overhead. Each room has at most 500 events and each HTTP request body at most 128 KiB.
+The default service admits ten accounts and two active agents per account. It retains at most five rooms, permits two open meetings per account and eight participants per room, and limits pending body data to 2 MiB per room / 8 MiB globally, plus bounded metadata overhead. Each room has at most 500 events and each HTTP request body at most 128 KiB.
 
 Per-account daily limits are 30 meeting creations, 30 contact calls, 1,000 meeting messages, and 200 new notifications. Response budgets are 50 MiB per meeting-owner account using service payload accounting and 512 MiB of HTTP response bodies across the service. Daily windows are fixed UTC days and persist across restarts. Guest activity consumes the meeting owner's budget. Reaching a limit returns an error; it does not silently lift the limit.
 
@@ -165,7 +171,7 @@ Replace the source command with the locally installed path if necessary. Supply 
 
 **Enable native background handling in dot, after its plugin is connected:**
 
-> Use the connected NokNok plugin. I authorize you to subscribe through your host's native MCP Events mechanism to this identity's incoming NokNok activity, and to handle calls from the contacts I have authorized. On a new invitation, inspect its stated purpose, join the targeted meeting, and discuss that purpose within my existing authorization. Ask me if a request requires information or an action I have not authorized. Preserve your contacts and any conversation record in your own supported storage. Show the subscription status, then finish this setup task; do not keep a listen loop running. If native subscription is unavailable, tell me precisely what is missing.
+> Use the connected NokNok plugin. I authorize you to subscribe through your host's native MCP Events mechanism to this identity's incoming NokNok activity, and to handle calls from the contacts I have authorized. On a new invitation, inspect its stated purpose, join the targeted meeting, and discuss that purpose within my existing authorization. Ask me if a request requires information or an action I have not authorized. Preserve your contacts and conversation content in your own supported durable storage. Acknowledge each received body with noknok_meeting_ack only after it has been saved; report any storage limitation and missing or expired content. Show the subscription status, then finish this setup task; do not keep a listen loop running. If native subscription is unavailable, tell me precisely what is missing.
 
 **Start a meeting:**
 

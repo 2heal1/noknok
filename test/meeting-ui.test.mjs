@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MeetingCache, mergeEvents, parseMeetingLink, randomId, randomRetryToken, transcriptOf } from '../web/meeting.js';
+import { MeetingCache, mergeEvents, parseMeetingLink, randomId, randomRetryToken, transcriptOf, saveAndAcknowledge, hasIncompleteHistory } from '../web/meeting.js';
 import { redactInvitations } from '../src/invitation.mjs';
 
 test('viewing and exporting redact hosted contact grants and credentials without mutating evidence', () => {
@@ -145,4 +145,48 @@ test('legacy aggregate browser cache migrates without losing saved identity and 
   assert.equal(cache.read().rooms.find((room) => room.meeting.id === 'B').archived, true);
   assert.equal(cache.read().rooms.find((room) => room.meeting.id === 'A').access.participant, 'A-participant-secret');
   assert.equal(JSON.parse(backing.getItem('agentcall.meetings.v1')).rooms, undefined);
+});
+
+test('deleted relay snapshots preserve local message bodies, goal, context and summary', () => {
+  const cache = new MeetingCache(new MemoryStorage());
+  const event = { seq: 1, type: 'started', bodyState: 'pending', data: { purpose: 'Local goal', context: 'Local context' } };
+  cache.save(localRoom('A', { meeting: { id: 'A', purpose: 'Local goal', context: 'Local context', summary: 'Local summary' }, events: [event] }), '');
+  cache.save({ meeting: { id: 'A', state: 'ended' }, events: [{ seq: 1, type: 'started', bodyState: 'delivered' }], snapshotCursor: 1 }, '');
+  const [saved] = cache.read().rooms;
+  assert.equal(saved.events[0].data.context, 'Local context');
+  assert.equal(saved.events[0].bodyState, 'delivered');
+  assert.equal(saved.meeting.purpose, 'Local goal');
+  assert.equal(saved.meeting.summary, 'Local summary');
+  assert.equal(hasIncompleteHistory(saved), false);
+  assert.equal(transcriptOf({ ...saved, events: [{ seq: 1, type: 'started', bodyState: 'delivered' }] }).partial, true);
+  assert.equal(hasIncompleteHistory({ events: [{ seq: 2, type: 'joined', data: {} }], snapshotCursor: 2 }), true);
+  for (const type of ['joined', 'left', 'ready']) {
+    assert.equal(hasIncompleteHistory({ events: [{ seq: 1, type, bodyState: 'delivered' }], snapshotCursor: 1 }), true, `${type} tombstones must also mark the archive incomplete.`);
+  }
+});
+
+test('browser confirms only participant content present in the successful durable save', async () => {
+  const record = localRoom('A', { mode: 'participant', events: [{ seq: 1, type: 'message', data: { text: 'Save me' } }], pendingDeliveryReceipts: [{ seq: 1, token: 'receipt' }, { seq: 2, token: 'trimmed-receipt' }] });
+  let saves = 0, acknowledgments = 0;
+  const save = async value => { saves++; return structuredClone(value); };
+  const acknowledge = async receipts => {
+    acknowledgments++;
+    assert.equal(saves, 1, 'Acknowledgment must follow the first durable save.');
+    assert.deepEqual(receipts, [{ seq: 1, token: 'receipt' }]);
+    return { acknowledged: [1] };
+  };
+  await saveAndAcknowledge(record, { save, acknowledge });
+  assert.equal(saves, 2);
+  assert.equal(acknowledgments, 1);
+  assert.deepEqual(record.pendingDeliveryReceipts, [{ seq: 2, token: 'trimmed-receipt' }]);
+  await saveAndAcknowledge({ ...record, mode: 'view' }, { save, acknowledge: () => assert.fail('Viewers must never ACK.') });
+  await saveAndAcknowledge(record, { save: async () => null, acknowledge: () => assert.fail('Failed persistence must never ACK.') });
+});
+
+test('browser retains durable receipts for retry when confirmation fails', async () => {
+  const record = localRoom('A', { mode: 'participant', events: [{ seq: 1, type: 'message', data: { text: 'Retain this' } }], pendingDeliveryReceipts: [{ seq: 1, token: 'receipt' }] });
+  let saved;
+  await assert.rejects(saveAndAcknowledge(record, { save: async value => (saved = structuredClone(value)), acknowledge: async () => { throw new Error('network lost'); } }), /network lost/);
+  assert.equal(saved.events[0].data.text, 'Retain this');
+  assert.deepEqual(saved.pendingDeliveryReceipts, record.pendingDeliveryReceipts);
 });

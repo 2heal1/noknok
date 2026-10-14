@@ -58,7 +58,7 @@ export class MeetingCache {
     const latest = JSON.parse(this.backing.getItem(key) || 'null');
     const copy = {
       ...latest, ...record,
-      meeting: (latest?.snapshotCursor || 0) > (record.snapshotCursor || 0) ? latest.meeting : record.meeting,
+      meeting: (latest?.snapshotCursor || 0) > (record.snapshotCursor || 0) ? { ...record.meeting, ...latest.meeting } : { ...latest?.meeting, ...record.meeting },
       access: { ...latest?.access, ...Object.fromEntries(Object.entries(record.access || {}).filter(([, value]) => value !== undefined)) },
       events: mergeEvents(latest?.events, record.events),
       cursor: Math.max(latest?.cursor || 0, record.cursor || 0),
@@ -126,7 +126,7 @@ export function transcriptOf(record) {
     format: 'agentcall-meeting-transcript-v1',
     exportedAt: new Date().toISOString(),
     source: record.archived ? 'local-copy' : 'client-copy',
-    partial: Boolean(record.partial),
+    partial: Boolean(record.partial) || hasIncompleteHistory(record),
     meeting: record.meeting,
     events: record.events || [],
   }, secrets);
@@ -134,8 +134,42 @@ export function transcriptOf(record) {
 
 export function mergeEvents(previous = [], incoming = []) {
   const events = new Map(previous.filter((e) => Number.isInteger(e.seq)).map((e) => [e.seq, e]));
-  for (const event of incoming) if (Number.isInteger(event.seq)) events.set(event.seq, event);
+  for (const event of incoming) if (Number.isInteger(event.seq)) {
+    const old = events.get(event.seq);
+    events.set(event.seq, { ...old, ...event, ...(old?.data && !event.data ? { data: old.data } : {}),
+      ...(old?.bodyState && old.bodyState !== 'pending' && event.bodyState === 'pending' ? { bodyState: old.bodyState } : {}) });
+  }
   return [...events.values()].sort((a, b) => a.seq - b.seq);
+}
+
+export function hasIncompleteHistory(record) {
+  if (!record.events?.length) return true;
+  let cursor = 0;
+  for (const event of record.events || []) {
+    if (event.seq !== cursor + 1 || !event.data) return true;
+    cursor = event.seq;
+  }
+  return cursor < (record.snapshotCursor || record.cursor || 0);
+}
+
+// The save callback returns the actual durable copy: browser quota handling may
+// trim it, so only receipts whose bodies survived that save can be acknowledged.
+export async function saveAndAcknowledge(record, { save, acknowledge }) {
+  const saved = await save(record);
+  if (!saved || record.mode !== 'participant') return false;
+  const events = new Map((saved.events || []).map(event => [event.seq, event]));
+  const receipts = (record.pendingDeliveryReceipts || []).filter(receipt => events.get(receipt.seq)?.data);
+  for (let offset = 0; offset < receipts.length; offset += 256) {
+    const batch = receipts.slice(offset, offset + 256);
+    let result;
+    try { result = await acknowledge(batch); }
+    catch (error) { error.deliveryAckFailed = true; throw error; }
+    const acknowledged = new Set(result.acknowledged || []);
+    record.pendingDeliveryReceipts = (record.pendingDeliveryReceipts || []).filter(receipt =>
+      !batch.some(sent => sent.seq === receipt.seq && sent.token === receipt.token && acknowledged.has(receipt.seq)));
+    await save(record);
+  }
+  return true;
 }
 
 export function parseMeetingLink(hash) {
@@ -335,9 +369,10 @@ function startMeetingApp() {
     await refresh();
   }
 
-  function absorb(payload) {
+  async function absorb(payload) {
+    const opened = current;
     if (payload.meeting && (payload.nextCursor || 0) >= (current.snapshotCursor || 0)) {
-      current.meeting = payload.meeting;
+      current.meeting = { ...current.meeting, ...payload.meeting };
       current.snapshotCursor = payload.nextCursor || 0;
     }
     if (payload.events) current.events = mergeEvents(current.events, payload.events);
@@ -345,10 +380,32 @@ function startMeetingApp() {
     // A mutation may return only its own event. Advancing the read cursor here would
     // skip messages that other participants sent immediately before that event.
     if (Array.isArray(payload.events)) current.cursor = Math.max(current.cursor || 0, payload.nextCursor || 0);
+    current.partial = hasIncompleteHistory(current);
+    if (current.mode === 'participant' && payload.deliveryReceipts) {
+      const receipts = new Map((current.pendingDeliveryReceipts || []).map(receipt => [receipt.seq, receipt]));
+      for (const receipt of payload.deliveryReceipts) receipts.set(receipt.seq, receipt);
+      current.pendingDeliveryReceipts = [...receipts.values()];
+    }
     current.archived = false;
     online = true;
-    persist();
     renderRoom();
+    try {
+      await saveAndAcknowledge(opened, {
+        save: () => current === opened && persist() ? storage.rooms.find(room => room.meeting.id === opened.meeting.id) : null,
+        acknowledge: receipts => api(`/v1/meetings/${encodeURIComponent(opened.meeting.id)}/ack`, { token: opened.access.participant, body: { receipts } }),
+      });
+    } catch (error) {
+      if (!error.deliveryAckFailed) throw error;
+      // The business mutation already succeeded and its content is saved.
+      // Retry only confirmation; never leave the composer inviting a duplicate.
+      if (current === opened) {
+        announce('记录已保存在此浏览器，接收确认暂未完成。页面会自动重试，无需重复发送。', true);
+        clearTimeout(pollTimer);
+        pollTimer = setTimeout(refresh, 5000);
+      }
+      return false;
+    }
+    return true;
   }
 
   function archive(message) {
@@ -365,8 +422,8 @@ function startMeetingApp() {
     try {
       const payload = await api(basePath(), { token: accessToken() });
       if (current !== opened) return;
-      absorb(payload);
-      if (current.meeting.state === 'active') pollTimer = setTimeout(poll, 100);
+      const confirmed = await absorb(payload);
+      if (confirmed && current.meeting.state === 'active') pollTimer = setTimeout(poll, 100);
     } catch (error) {
       if (current !== opened) return;
       handleReadFailure(error);
@@ -398,8 +455,8 @@ function startMeetingApp() {
       const payload = await api(`${basePath()}/events?after=${current.cursor || 0}&waitMs=25000`, { token: accessToken(), signal: controller.signal });
       clearTimeout(timeout);
       if (current !== opened || version !== pollVersion) return;
-      absorb(payload);
-      if (current.meeting.state === 'active') pollTimer = setTimeout(poll, 100);
+      const confirmed = await absorb(payload);
+      if (confirmed && current.meeting.state === 'active') pollTimer = setTimeout(poll, 100);
     } catch (error) {
       clearTimeout(timeout);
       if (current !== opened || version !== pollVersion) return;
@@ -454,6 +511,11 @@ function startMeetingApp() {
     timeline.replaceChildren();
     if (current.partial) timeline.append(make('div', 'local-history-note', '此本地副本只包含部分会议记录。'));
     for (const event of current.events) {
+      if (!event.data) {
+        const state = event.bodyState === 'expired' ? '未确认投递的内容已过期' : '服务端已删除正文';
+        timeline.append(make('div', 'local-history-note', `记录 #${event.seq}：${state}。此设备没有副本，请向参会 Agent 查看其本地记录。`));
+        continue;
+      }
       if (MESSAGE_TYPES.has(event.type)) {
         const author = person(event.from) || { name: '参会者', kind: 'agent' };
         const row = make('article', `message${author.kind === 'human' ? ' is-human' : ''}${event.from === current.participantId && current.mode === 'participant' ? ' is-self' : ''}`);
@@ -468,7 +530,7 @@ function startMeetingApp() {
         body.append(head);
         if (event.data.replyTo) {
           const original = current.events.find((e) => e.seq === event.data.replyTo);
-          const reference = make('button', 'reply-reference', original ? `回复 ${nameOf(original.from)} · ${original.data.text?.slice(0, 140) || ''}` : `回复消息 #${event.data.replyTo}`);
+          const reference = make('button', 'reply-reference', original ? `回复 ${nameOf(original.from)} · ${original.data?.text?.slice(0, 140) || ''}` : `回复消息 #${event.data.replyTo}`);
           reference.type = 'button';
           reference.addEventListener('click', () => {
             const target = document.getElementById(`message-${event.data.replyTo}`);
@@ -504,9 +566,9 @@ function startMeetingApp() {
   function renderRoom() {
     if (!current?.meeting) return;
     const meeting = current.meeting;
-    document.title = `${meeting.purpose.slice(0, 50)} · NokNok`;
+    document.title = `${(meeting.purpose || '会议').slice(0, 50)} · NokNok`;
     $('room-number').textContent = `会议 / ${meeting.id.slice(0, 8)}`;
-    $('room-purpose').textContent = meeting.purpose;
+    $('room-purpose').textContent = meeting.purpose || '会议目标已从服务端删除';
     const archived = current.archived;
     const terminal = meeting.state !== 'active';
     clearTimeout(expiryTimer);
@@ -515,10 +577,10 @@ function startMeetingApp() {
     }
     $('room-status').textContent = archived ? '本地副本' : !online ? '连接中断' : meeting.state === 'ended' ? '已结束' : meeting.state === 'expired' ? '已到期' : '讨论中';
     $('room-status').className = `status-pill${archived || !online ? ' offline' : terminal ? ' ended' : ''}`;
-    $('room-expiry').textContent = archived ? `创建于 ${time(meeting.createdAt, true)}` : terminal ? `服务临时记录保留至 ${time(meeting.purgeAt, true)}` : `会议有效至 ${time(meeting.expiresAt, true)}`;
+    $('room-expiry').textContent = archived ? `创建于 ${time(meeting.createdAt, true)}` : terminal ? `会议状态保留至 ${time(meeting.purgeAt, true)}` : `会议有效至 ${time(meeting.expiresAt, true)}`;
     $('connection-state').textContent = archived ? '服务状态不可用 · 仅显示本地保存内容' : !online ? '正在连接服务…' : current.mode === 'view' ? '只读查看' : self()?.leftAt ? '你已离开 · 可查看记录' : '已连接';
     $('connection-state').className = !online ? 'disconnected' : '';
-    $('room-context').textContent = meeting.context || '发起者暂未补充背景。';
+    $('room-context').textContent = meeting.context || '此设备没有保存背景内容；服务端不提供完整历史。';
     const messageCount = current.events.filter((e) => MESSAGE_TYPES.has(e.type)).length;
     $('event-count').textContent = `${messageCount} 条发言`;
     renderParticipants();
@@ -526,7 +588,7 @@ function startMeetingApp() {
     const speak = canSpeak();
     $('message-form').hidden = !speak;
     $('read-only-note').hidden = speak;
-    $('read-only-note').textContent = archived ? '这是本地会议副本，无法继续发言。你可以下载保存，或清除本地副本。' : !online ? '连接恢复后可以继续发言。已输入的内容会留在本页。' : terminal ? '会议已结束。你可以阅读或下载记录。' : current.mode === 'view' ? '你正在只读查看。发言需要打开会议邀请，并主动加入。' : '你已离开会议，可继续查看记录。';
+    $('read-only-note').textContent = archived ? '这是本地会议副本，无法继续发言。你可以下载保存，或清除本地副本。' : !online ? '连接恢复后可以继续发言。已输入的内容会留在本页。' : terminal ? '会议已结束。这里只显示此设备保存的记录。' : current.mode === 'view' ? '你正在只读查看。已删除的正文只能在各参会 Agent 的本地记录中查看；发言需要打开邀请并加入。' : '你已离开会议，可继续查看此设备保存的记录。';
     $('host-controls').hidden = !speak || !isHost();
     $('composer-name').textContent = self()?.name || '';
     $('copy-invite').hidden = !current.access.invite || current.mode === 'view' || archived || terminal;
@@ -545,7 +607,7 @@ function startMeetingApp() {
       const request = requestFor(`${basePath()}/${action}`, body);
       const payload = await api(`${basePath()}/${action}`, { token: accessToken(), body: request.body });
       requests.delete(request.fingerprint);
-      absorb(payload);
+      await absorb(payload);
       return payload;
     } catch (error) {
       announce(`${error.message} 操作未确认，请保留内容并检查会议状态后重试。`, true);
@@ -583,13 +645,13 @@ function startMeetingApp() {
     try {
       const payload = await api(`/v1/meetings/${encodeURIComponent(parsed.id)}/invitation`, { token: parsed.token });
       const meeting = payload.meeting;
-      $('invite-purpose').textContent = meeting.purpose;
-      $('invite-context').textContent = meeting.context || '加入后可以看到已发生的讨论。';
+      $('invite-purpose').textContent = meeting.purpose || '会议目标已从服务端删除';
+      $('invite-context').textContent = meeting.context || '加入后接收新消息。历史内容请向参会 Agent 查看其本地记录。';
       $('invite-facts').replaceChildren(make('span', '', `${meeting.participants?.filter((p) => !p.leftAt).length || 1} 位参与者`), make('span', '', `有效至 ${time(meeting.expiresAt, true)}`));
       $('join-form').hidden = meeting.state !== 'active';
       $('return-to-room').hidden = !storage.rooms.some((r) => r.meeting.id === parsed.id && r.access?.participant);
       const invitationUrl = `${location.origin}/meeting#${new URLSearchParams({ id: parsed.id, invite: parsed.token })}`;
-      $('agent-prompt').value = `请使用 NokNok 加入这场会议：${invitationUrl}\n先阅读目标和已有讨论，再围绕目标发言。完成后向发起者说明；由发起者结束会议。`;
+      $('agent-prompt').value = `请使用 NokNok 加入这场会议：${invitationUrl}\n阅读仍可接收的目标和讨论，并先保存到本地再确认接收。历史缺失时向发起者询问。完成后向发起者说明；由发起者结束会议。`;
       $('agent-join-help').hidden = meeting.state !== 'active';
       if (meeting.state !== 'active') announce('这场会议已经结束，不能再加入。', true);
     } catch (error) {
@@ -610,7 +672,7 @@ function startMeetingApp() {
       const payload = await api(joinPath, { body: request.body });
       requests.delete(request.fingerprint);
       const view = parseMeetingLink(new URL(payload.viewUrl, location.origin).hash)?.token;
-      await openRoom({ meeting: payload.meeting, participantId: payload.participant.id, mode: 'participant', access: { participant: payload.participant.token, invite: pendingInvitation.token, view }, events: [], cursor: 0 });
+      await openRoom({ meeting: payload.meeting, participantId: payload.participant.id, mode: 'participant', access: { participant: payload.participant.token, invite: pendingInvitation.token, view }, events: payload.events || [], pendingDeliveryReceipts: payload.deliveryReceipts || [], cursor: 0 });
       announce('已加入会议。你可以随时补充信息。');
     } catch (error) { announce(error.message, true); }
     finally { button.disabled = false; }
@@ -682,6 +744,6 @@ function startMeetingApp() {
   else if (parsed.mode === 'saved') openSaved(parsed.id);
   else {
     const existing = storage.rooms.find((r) => r.meeting.id === parsed.id);
-    openRoom({ ...(existing ? structuredClone(existing) : {}), meeting: existing?.meeting || { id: parsed.id, purpose: '正在读取会议…', participants: [], state: 'active' }, events: existing?.events || [], mode: 'view', access: { ...(existing?.access || {}), view: parsed.token }, cursor: 0 });
+    openRoom({ ...(existing ? structuredClone(existing) : {}), meeting: existing?.meeting || { id: parsed.id, participants: [], state: 'active' }, events: existing?.events || [], mode: 'view', access: { ...(existing?.access || {}), view: parsed.token }, cursor: 0 });
   }
 }

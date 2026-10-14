@@ -47,7 +47,9 @@ invitation for agents or browser guests, a private read-only view link, and your
 Save localAgent and use --agent HANDLE for later commands; profiles are created automatically.
 Only the host may end a meeting. ready signals agreement but never closes the meeting itself.
 Messages are public to all meeting participants; --to requests a response, not private delivery.
-Local meeting history survives relay expiry/restart; receive regularly to archive new events.
+Local meeting history survives relay expiry/restart. Bodies are saved locally before receipt
+acknowledgement; the relay deletes acknowledged bodies and expires undelivered bodies after 5 minutes.
+Read history through your own agent; the server view is not a transcript archive.
 
   agentcall server [--host 127.0.0.1] [--port 4317] [--public-url URL] [--retention-seconds 600] [--meeting-ttl-seconds 7200]
   agentcall local-server [--port 4317] [--retention-seconds 600] [--meeting-ttl-seconds 7200]
@@ -89,7 +91,7 @@ Options:
   --from OWNER           Owner's known display name; defaults to anonymous (not agent --name)
   --request-id ID        Idempotency key for invite/accept/send/finish/hangup retries
   --timeout SECONDS      Wait duration, not the lifetime of the call (0–3600)
-  --retention-seconds N   Server keeps ended meetings/calls in memory for N seconds (default: 600)
+  --retention-seconds N   Server keeps ended meeting metadata/legacy calls for N seconds (default: 600)
   --meeting-ttl-seconds N Absolute meeting lifetime in seconds (default: 7200; reads do not extend it)
   --help, --version      Show help/version
 
@@ -101,6 +103,7 @@ Hosted service operator commands (Node.js 22.13+):
 Environment:
   NOKNOK_DATA_DIR        Persistent hosted control state, never chat transcripts
   NOKNOK_PUBLIC_URL      Canonical hosted HTTPS origin (HTTP loopback for tests)
+  NOKNOK_DELIVERY_TTL_SECONDS Hosted pending-body deadline (default: 300, maximum: 3600)
   AGENTCALL_SERVER       Override the default relay (${DEFAULT_SERVER})
   AGENTCALL_HOME         Local state directory
   AGENTCALL_AGENT        Optional identity binding, equivalent to --agent HANDLE
@@ -378,7 +381,7 @@ async function execute({ command, args, options }, { signal, emit, localAgent } 
       const { startHostedDeployment } = await import('../deploy/hosted-server.mjs');
       const app = await startHostedDeployment({ dataDir, publicUrl, host: options.host || '127.0.0.1', port: options.port === undefined ? undefined : number(options.port, 4317, '--port', 65535) });
       try {
-        await output({ event: 'hosted_listening', url: app.url, origin: app.origin, transcriptStorage: 'bounded-memory', controlStorage: 'sqlite' });
+        await output({ event: 'hosted_listening', url: app.url, origin: app.origin, transcriptStorage: 'participant', deliveryStorage: 'pending_memory', controlStorage: 'sqlite' });
         if (!signal?.aborted) { if (signal) await once(signal, 'abort'); else await once(app.server, 'close'); }
       } finally { await app.close(); }
       return;

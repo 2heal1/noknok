@@ -21,6 +21,7 @@ export function hostedDeploymentConfig(env = process.env) {
     maxAccountDailyEgressBytes: integer(env, 'NOKNOK_MAX_ACCOUNT_DAILY_EGRESS_BYTES', 50 * 1024 * 1024, 1024 * 1024 * 1024),
     maxEvents: integer(env, 'NOKNOK_MAX_EVENTS', 500, 2000),
     meetingTtlMs: integer(env, 'NOKNOK_MEETING_TTL_SECONDS', 7200, 86400) * 1000,
+    deliveryTtlMs: integer(env, 'NOKNOK_DELIVERY_TTL_SECONDS', 300, 3600) * 1000,
     retentionMs: integer(env, 'NOKNOK_RETENTION_SECONDS', 600, 3600) * 1000,
   };
 }

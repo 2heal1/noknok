@@ -19,8 +19,8 @@ function packageFiles(overrides = {}) {
     ['deploy/server.mjs', 'export {};\n'], ['deploy/hosted-server.mjs', 'export {};\n'],
     ['deploy/compose.hosted.yaml', 'services: {}\n'], ['deploy/Caddyfile.hosted', ':80 {}\n'],
     ['poc/mcp-events/server.mjs', 'export {};\n'],
-    ['skills/agentcall/SKILL.md', '# Skill\n'], ['skills/agentcall/references/hosted.md', '# Hosted\n'],
-    ['skills/agentcall/references/legacy-calls.md', '# Legacy\n'],
+    ['skills/noknok/SKILL.md', '# Skill\n'], ['skills/noknok/references/hosted.md', '# Hosted\n'],
+    ['skills/noknok/references/legacy-calls.md', '# Legacy\n'],
     ['web/meeting.html', '<!doctype html>\n'], ['web/meeting.js', 'export {};\n'],
   ]);
   return new Map([...files].map(([path, text]) => [path, Buffer.from(text)]));
@@ -116,7 +116,7 @@ test('scope, version, public registry and bins must match the reviewed release i
 });
 
 test('missing executable or bundled skill fails before installation', () => {
-  for (const path of ['bin/agentcall.mjs', 'skills/agentcall/SKILL.md', 'deploy/hosted-server.mjs', 'poc/mcp-events/server.mjs']) {
+  for (const path of ['bin/agentcall.mjs', 'skills/noknok/SKILL.md', 'deploy/hosted-server.mjs', 'poc/mcp-events/server.mjs']) {
     const files = packageFiles();
     files.delete(path);
     assert.throws(() => validatePackageFiles(files, manifest), { code: 'MISSING_REQUIRED_PACKAGE_FILE' });

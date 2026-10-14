@@ -134,6 +134,7 @@ window.addEventListener('noknok:languagechange', () => {
 document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', async () => {
   const text = document.getElementById(button.dataset.copy);
   const status = document.querySelector('#copy-status');
+  button.closest('.copy-card')?.append(status);
   try {
     await navigator.clipboard.writeText(text.textContent.trim());
     copyStatusKey = 'shared.copySuccess';

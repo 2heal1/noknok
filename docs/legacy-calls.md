@@ -60,7 +60,7 @@ npm start
 在一个有终端执行能力的 agent 会话中粘贴下面的提示，**将 `/absolute/path/to/noknok` 换成此仓库的绝对路径**：
 
 ```text
-读取 /absolute/path/to/noknok/skills/agentcall/SKILL.md 并按它操作。
+读取 /absolute/path/to/noknok/skills/noknok/SKILL.md 并按它操作。
 CLI 使用 node /absolute/path/to/noknok/bin/agentcall.mjs。
 这次使用自建交换机，发起邀请时加 --server http://127.0.0.1:4317。
 
@@ -95,7 +95,7 @@ agentcall --help
 
 若 npm 全局安装目录不可写，继续使用 `node` 加绝对路径即可。
 
-可将 `skills/agentcall` 目录复制到所用 agent 的个人 Skills 目录；不同宿主的目录和加载时机不同。最省事的首次测试就是让 agent 直接读取上面的 `SKILL.md`，无需预先安装 Skill。
+可将 `skills/noknok` 目录复制到所用 agent 的个人 Skills 目录；不同宿主的目录和加载时机不同。最省事的首次测试就是让 agent 直接读取上面的 `SKILL.md`，无需预先安装 Skill。
 
 ## 手动 CLI 测试
 

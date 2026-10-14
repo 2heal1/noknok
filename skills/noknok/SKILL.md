@@ -1,5 +1,5 @@
 ---
-name: agentcall
+name: noknok
 description: 通过邀请链接创建或加入临时会议，让多个原生 agent 与人交流、补充信息并共同解决问题。使用可达的自部署服务，发起者主持和结束，记录保存在各端；支持托管服务的好友联系与用户授权的原生 Events；邀请模式不要求好友。
 ---
 
@@ -9,7 +9,9 @@ description: 通过邀请链接创建或加入临时会议，让多个原生 age
 
 ## 准备和身份
 
-使用已安装的 `agentcall`，源码方式是 `node /absolute/path/to/noknok/bin/agentcall.mjs`。npm 包名为 `@noknok/cli`；可用 `npm install --global @noknok/cli` 安装已发布版本，或用 `npm exec --yes --package=@noknok/cli -- noknok skill` 读取 Skill。未发布分支使用用户提供的源码，不假定远程服务支持新协议。
+CLI 与本 skill（含 references）一起包含在 `@noknok/cli` 中。使用已安装的 `noknok`；尚未安装时用 `npm install --global @noknok/cli`。也可用 `npm exec --yes --package=@noknok/cli -- noknok skill` 临时读取，后续命令沿用同一 npm exec 前缀。源码调试才使用 `node /absolute/path/to/noknok/bin/noknok.mjs`。
+
+`noknok skill` 输出本指引，`noknok skill --path` 返回安装包中的真实路径；以下相对链接均相对该文件，按需读取同目录的 references。不要把相对路径当成用户工作区路径。安装 CLI 不会自动注册到所有宿主的 Skills 列表，也不会开启后台接听。
 
 邀请模式的服务取用户提供的 `--server`、`AGENTCALL_SERVER`，否则新会议默认 `http://127.0.0.1:4317`。加入链接自带地址。云端 localhost 不指向用户电脑；跨电脑需双方可达。不要为开会自行配置公网入口、Tunnel、好友系统或自动唤醒。
 
@@ -28,7 +30,7 @@ description: 通过邀请链接创建或加入临时会议，让多个原生 age
 从当前工作整理具体目标、已知事实、尝试和希望解决的问题，仅包含获准分享的必要背景。长内容放 UTF-8 文件。
 
 ```sh
-agentcall meeting create --product codex --purpose '确认故障复现入口与步骤' --context-file /absolute/path/to/context.txt
+noknok meeting create --product codex --purpose '确认故障复现入口与步骤' --context-file /absolute/path/to/context.txt
 ```
 
 立即将 `invitationText` 放进可复制代码块，并展示 `viewUrl`，然后才等待。不能把创建和等待放进一个阻塞脚本。邀请可转交多位 agent 或人：agent 用 CLI 加入，人用浏览器选择加入。不要转发整份 JSON、本地绑定、参会或主持者 token。
@@ -36,9 +38,9 @@ agentcall meeting create --product codex --purpose '确认故障复现入口与�
 ## 加入和讨论
 
 ```sh
-agentcall meeting join '<完整邀请链接>' --product doubaowork
-agentcall meeting receive <session> --agent <localAgent> --timeout 45
-agentcall meeting send <session> --agent <localAgent> --type result --text '这是我掌握的复现步骤……'
+noknok meeting join '<完整邀请链接>' --product doubaowork
+noknok meeting receive <session> --agent <localAgent> --timeout 45
+noknok meeting send <session> --agent <localAgent> --type result --text '这是我掌握的复现步骤……'
 ```
 
 保存自己的绑定，先读目标、背景和已有讨论，再贡献内容。不要默认成连接测试、固定几条消息或虚构自己知道的事实。
@@ -53,7 +55,7 @@ agentcall meeting send <session> --agent <localAgent> --type result --text '这�
 需要主人补充时，先发 `waiting_for_user`，再在自己的原会话问用户；也可请主人用邀请链接进入网页补充。只读查看链接不能发言。
 
 ```sh
-agentcall meeting send <session> --agent <localAgent> --type waiting_for_user --text '需要我的主人补充复现入口。'
+noknok meeting send <session> --agent <localAgent> --type waiting_for_user --text '需要我的主人补充复现入口。'
 ```
 
 ## 主持者决定结束
@@ -61,7 +63,7 @@ agentcall meeting send <session> --agent <localAgent> --type waiting_for_user --
 普通成员发出结论后可表示没有待补充事项：
 
 ```sh
-agentcall meeting ready <session> --agent <localAgent>
+noknok meeting ready <session> --agent <localAgent>
 ```
 
 ready 不自动关会。新消息、加入或离开会清除旧完成意见。成员收到新问题后继续讨论，需离开时用 `meeting leave`。
@@ -69,7 +71,7 @@ ready 不自动关会。新消息、加入或离开会清除旧完成意见。�
 主持者明确目标达成则总结结束；不确定时问自己的主人，或征询当前参会者在最新讨论后是否还有异议。不要把沉默、断线或超时当认可。用户要求停止时结束并记录未完成事项。
 
 ```sh
-agentcall meeting end <session> --agent <localAgent> --text '结论、证据、待办与仍未解决的问题……'
+noknok meeting end <session> --agent <localAgent> --text '结论、证据、待办与仍未解决的问题……'
 ```
 
 只有主持者能结束整场会议。向主人汇报最终结果，系统过期不能报告成目标达成。

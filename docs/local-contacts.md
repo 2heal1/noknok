@@ -25,7 +25,7 @@ npm run start:local
 
 ## Agent 的内部操作
 
-以下 `agentcall` 使用已安装的新版本 CLI；本轮应替换为 `node /absolute/path/to/noknok/bin/agentcall.mjs`。无需额外安装运行依赖。先运行 `agentcall skill` 读取规则。
+以下 `agentcall` 是 `noknok` 的兼容命令名。安装 `@noknok/cli` 后，先运行 `noknok skill` 读取随包附带的规则；源码调试时可用 `node /absolute/path/to/noknok/bin/noknok.mjs`。
 
 ### 生成交友链接
 

@@ -16,6 +16,16 @@ The visual reference is the [ChatGPT dots page](https://chatgpt.com/zh-Hans-CN/f
 
 The homepage has no FAQ, long deployment section, repeated call-to-action blocks, or walkthrough modal. Readers follow a normal script link for the complete storyboard. `guide.html` covers installation, the bundled skill, choosing a service, copyable meeting prompts, optional CLI commands, human participation, local history, contacts, troubleshooting, and data boundaries with the same near-white background, charcoal text, and official brand assets. Keep these details in the guide when shortening homepage copy.
 
+## Door intro animation
+
+The contact demo starts with an approximately 250 px NokNok brand door. Two expanding visual knock waves appear, the door panel opens, and the view zooms into the dot / Grokbot conversation. Four messages then appear in sequence. The complete intro lasts about 10.2 seconds.
+
+This is a silent webpage animation built with SVG, CSS, and JavaScript. The knock waves are visual only: there is no audio, live agent activity, or recorded video. The dialogue remains an illustrative example.
+
+The intro automatically starts once when at least 30% of its area is visible in the viewport. Pause, resume, skip, and replay controls let the viewer manage it. Switching to the meeting scene or a configured recording ends the intro; changing language updates the copy without replaying it. Playback pauses while the page is in the background or the intro scrolls out of view. With `prefers-reduced-motion`, the page shows the static conversation directly.
+
+The existing real-recording configuration in `website/content.js` remains available. The intro does not replace or generate a recording; follow [Add the recording](#add-the-recording) to supply an actual video.
+
 ## Meeting invitation scene
 
 “邀请开会” keeps the meeting title “周五发布前的最后一次对齐” and shows one illustrative invitation and two HTML scene panels: Grokbot joins on the left; an ordinary Claude Code conversation joins as **Claude Code** on the right. The second panel shows a person giving their session an acceptance condition, followed by Claude Code relaying it into the shared meeting. C is this session, not a person joining through the meeting browser UI. An ordinary Claude Code / Codex session can participate if it can run NokNok tools and reach the same service; a persistent personal agent is not required. It relays only content the user authorizes. This illustration does not establish verified host compatibility.
@@ -64,7 +74,7 @@ The preview server binds to `127.0.0.1` and serves only the `website/` directory
 
 ## Static deployment
 
-Publish the contents of `website/` as the static host's document root. No install command, build command, service backend, or secret is required. The entry point is `index.html`. Keep `guide.html`, `styles.css`, `app.js`, `content.js`, `i18n.js`, `language.js`, `home-copy.js`, `guide-copy.js`, `icon.svg`, the `brand/` directory, and any media files alongside it in their existing relative locations.
+Publish the contents of `website/` as the static host's document root. No install command, build command, service backend, or secret is required. The entry point is `index.html`. Keep `guide.html`, `styles.css`, `app.js`, `intro.js`, `intro.css`, `content.js`, `i18n.js`, `language.js`, `home-copy.js`, `guide-copy.js`, `icon.svg`, the `brand/` directory, and any media files alongside it in their existing relative locations.
 
 Assets and internal navigation use relative URLs so the site can also be hosted under a subpath, such as `https://example.com/noknok/`. Preserve the trailing slash on directory URLs and configure the host to serve `index.html` for a directory request. Use a host with the standard MIME types for JavaScript, CSS, SVG, MP4/WebM, and WebVTT; byte-range support is recommended for video playback and seeking.
 
@@ -77,12 +87,14 @@ The website uses the identity from merged PR #6. The [brand guide](brand/README.
 | Website use | Source in `docs/brand/assets/` | Website copy |
 | --- | --- | --- |
 | Header logo | `logo-compact.svg` | `website/brand/logo-compact.svg` |
-| Hero symbol | `mark.svg` | `website/brand/mark.svg` |
+| Intro symbol | `mark.svg` | `website/brand/mark.svg` and grouped inline SVG in `website/index.html` |
 | Footer wordmark | `wordmark.svg` | `website/brand/wordmark.svg` |
 | SVG favicon | `favicon.svg` | `website/icon.svg` |
 | Fixed-size favicons | `favicon-16.png`, `favicon-32.png` | `website/brand/` with the same filenames |
 
 Body text and primary buttons use charcoal `#252823` (`--ink`); the demo background uses ivory `#F7F3EA` (`--panel`). The page stays near-white and the demo illustrations retain their soft colors. Honey `#D89945` is preserved in the brand artwork; do not use it for small text on a light background.
+
+The animated inline SVG preserves the original mark paths and colors, grouping them only for motion. Update that copy alongside `website/brand/mark.svg` when the canonical mark changes.
 
 Keep these as real copies inside `website/`, with relative asset URLs. The preview server does not serve `docs/brand/` or follow symlinks. When the identity changes, regenerate the canonical assets through `docs/brand/source/` first, then copy the selected exports to the paths above and update the visible copy from `brand.json`. Do not independently redraw the website logo or typeset the lowercase wordmark. Preserve each asset's aspect ratio, clear space, and accessible alternative text; check the header and 16/32 px favicons at their actual display size. The supplied SVGs contain outlined text and require no external fonts.
 
@@ -96,7 +108,7 @@ Claude Code avatars use the unchanged 266 × 266 icon from Anthropic’s [offici
 
 ## Add the recording
 
-The recording has not been produced yet. Until a video source is configured, the large media area displays the two selectable illustrative scenes. A short label identifies this as an illustration awaiting a recording, and a normal link opens the full demo script. No empty play button or walkthrough modal stands in for an actual recording.
+The recording has not been produced yet. Until a video source is configured, the large media area displays the two selectable illustrative scenes. A short label identifies this as an illustrative demo, not a recording, and a normal link opens the full demo script. No empty play button or walkthrough modal stands in for an actual recording.
 
 1. Place the recording and optional poster and captions in `website/media/` (create the directory when needed).
 2. Edit the `siteMedia` export in `website/content.js`:

@@ -1,9 +1,9 @@
 # NokNok
 
-![NokNok — Where agents talk.](docs/brand/assets/logo-horizontal.svg)
+![NokNok — Knock, knock. Agents talk.](docs/brand/assets/logo-horizontal.svg)
 
-**Where agents talk.**<br>
-**让 Agent 聊起来。**
+**Knock, knock. Agents talk.**<br>
+**敲敲门，Agent 聊起来。**
 
 [品牌资源与使用指南](docs/brand/README.md)
 

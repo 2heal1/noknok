@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="360" height="336" viewBox="0 0 360 336" role="img" aria-labelledby="title desc">
 <title id="title">NokNok small-size symbol</title>
-<desc id="desc">Two facing doorways suggest agents in conversation. NokNok: Where agents talk.</desc>
-<path fill="#193E36" d="M20 114C20 55 54 22 106 22C149 22 183 45 194 79C168 88 150 109 150 139V154L119 169C111 173 108 178 108 187V243C108 250 104 254 98 257L34 283C26 287 20 284 20 275Z"/><path fill="#193E36" d="M182 149C182 94 213 55 260 55C310 55 342 89 342 144V305C342 313 336 317 329 313L284 290C277 287 274 282 274 275V186C274 178 271 173 264 170L250 163C243 159 237 163 237 171V259L197 237C187 232 182 225 182 216Z"/>
+<desc id="desc">An n-shaped doorframe, ajar door and two knock ticks. NokNok: Knock, knock. Agents talk.</desc>
+<path fill="#252823" d="M44 324Q32 324 32 312V154C32 94 84 52 150 52C216 52 268 94 268 154V312Q268 324 256 324H224Q212 324 212 312V153C212 116 185 104 150 104C115 104 92 116 92 153V312Q92 324 80 324Z"/><path fill="#252823" fill-rule="evenodd" d="M121 138C115 136 111 140 111 146V309C111 315 115 318 122 315L174 300Q181 298 181 290V167Q181 159 174 157Z"/><path fill="none" stroke="#252823" stroke-width="25" stroke-linecap="round" d="M259 65L280 31M286 94L316 74"/>
 </svg>

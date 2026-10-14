@@ -1,25 +1,25 @@
-# Concept 03 generation record
+# The Knock generation record
 
-- Selected direction: **03 / In conversation**.
+- Selected direction: **The Knock / 敲门** — the third image in the displayed image list, labelled **01 / THE KNOCK** within the artwork.
 - Product context: [PR #2](https://github.com/2heal1/noknok/pull/2), based on commit `aba28581a20dd8c65bb1b94c7cecbbfacbd35e66`.
 - Created: 2026-10-14.
 - Generation method: built-in `image_gen` tool; no CLI/API fallback.
-- Original output: [concept-03.png](reference/concept-03.png), copied without modification.
-- Selected English slogan: **Where agents talk.**
-- Selected Chinese slogan: **让 Agent 聊起来。**
+- Original output: [concept-the-knock.png](reference/concept-the-knock.png), copied without modification.
+- Selected English slogan: **Knock, knock. Agents talk.**
+- Selected Chinese slogan: **敲敲门，Agent 聊起来。**
 
-The original raster board is design reference. The SVG assets are a manually constructed, flat vector interpretation with custom geometric wordmark lettering, outlined Manrope slogan text, and an optical variant for small icons. Their geometry is not a pixel-exact trace. The editable generator and font license are under [source/](source/README.md). The generated SVG/PNG assets, rather than the raster concept board, are the production handoff.
+The original raster board is design reference. The SVG assets preserve its arched n-shaped frame, ajar honey-colored door, two knock ticks, charcoal/honey/paper palette and lowercase wordmark. They are manually constructed flat vectors with outlined Manrope slogan text and a small-size optical variant; their geometry is not a pixel-exact trace. The editable generator and font license are under [source/](source/README.md). Use the SVG/PNG assets for product materials, and the raster concept board as the reference.
 
 ## Original prompt
 
 ```text
 Use case: logo-brand
-Asset type: NokNok identity concept board, one coherent logo shown in main lockup and small applications.
-Primary request: Design a sophisticated minimal brand for "noknok", a product for instant communication between existing AI agents. Concept C: two participants in reciprocal dialogue, hinted at as two neighboring doorways or repeated lowercase n forms.
-Canvas: landscape 1536x1024, pale warm-gray #F4F6F2. Refined, spacious editorial logo presentation, flat vector-like design.
-Logo symbol: two compact interlocking rounded speech shapes which simultaneously suggest two lowercase n-shaped open doorways. A tiny central negative-space gap expresses a channel between equals. Keep each of the two forms bold, solid and simple, no thin strokes, no arrows, no nodes network. One is dark evergreen, one is vivid mint. MUST still read as a unified recognisable symbol in monochrome with shapes separated by negative space; no dependence on transparency. Make the form ownable rather than generic overlapping chat bubbles. No decorative dots.
-Main composition: small label "03 / IN CONVERSATION" in top-left; large main horizontal lockup, symbol at left, lowercase "noknok" to right in a precise rounded geometric grotesk sans, bold but friendly. Below wordmark exact tagline "Where agents talk." in smaller restrained type.
-Bottom strip separated by hairline: SAME logo in dark-green monochrome on light ground, light reversed on dark-green square, and mint rounded-square app icon with dark logo. Tiny labels "MONO", "REVERSE", "APP".
-Palette: deep evergreen #193E36, mint #66D9AE, off-white #F4F6F2. Avoid blue-purple AI gradients, neural brains, robots, hexagons, infinity-loop clichés, gradients, shadows, 3D, mockup merchandise, watermark.
-Spell all text precisely; no extra copy. Design exploration intended for later vector refinement.
+Asset type: NokNok identity concept board, one cohesive logo design shown in a main lockup and small applications.
+Primary request: Design an exceptional minimal identity for "noknok", a product for instant communication between existing AI agents. Concept A: a knock at a door starts a conversation. Friendly but technically credible, very simple, memorable silhouette.
+Canvas: landscape 1536x1024, warm off-white #F7F3EA. Editorial Swiss identity presentation with substantial breathing room, sharp flat vector-like shapes, perfectly aligned.
+Logo symbol: a bold dark-ink rounded doorway, a slightly ajar flat ochre door leaf, one simple circular doorknob, and exactly two short radiating knock ticks just outside the upper-right edge. Abstract slightly into a lowercase n form without harming recognition as a door. Aim for only 4-6 geometric elements total. Door and knock action must read immediately. No hands.
+Main composition: small label "01 / THE KNOCK" in top-left; large horizontal central lockup with the symbol to the left of a beautifully drawn lowercase "noknok" wordmark. Rounded, confident, medium-heavy geometric sans, careful kerning, not playful bubble letters. Beneath the wordmark the exact slogan "Knock, knock. Agents talk." in smaller restrained type.
+Bottom strip separated by a very light hairline: show the SAME logo symbol as a dark-ink single-color silhouette on cream, cream reversed on a charcoal square, and an ochre rounded app tile with charcoal symbol. These are applications of one identical design. Tiny labels "MONO", "REVERSE", "APP".
+Palette: ink #252823, ochre #D89945, cream #F7F3EA. Black and white version should work without color separation. No gradients, no shadows, no 3D, no texture, no robots, no circuit boards, no lock, no roof, no house, no extra logos, no watermark, no busy ornaments.
+All text spelled exactly, no extra copy. This is a design exploration, not a production vector file.
 ```

@@ -1,112 +1,112 @@
-# 自部署
+# Self-hosting
 
-**正式上线前先检查 [上线前 TODO](launch-checklist.md)。仓库已实现[加密会议](e2ee.md)，必须同时升级服务和客户端；以下部署步骤不代表公共实例已升级或可以开放真实用户内测。**
+NokNok provides two modes: `server` hosts temporary invitation-based meetings; `hosted-server` adds independent identities, authorized contacts, and native MCP Events. Both serve meeting pages and APIs in one process without running a model. Both require the [encrypted meeting protocol](e2ee.md). Upgrade clients, servers, and browser assets together; review the [launch checklist](launch-checklist.md) for outstanding acceptance work.
 
-NokNok 提供两种模式：基础 `server` 用于用户转交邀请的临时会议；`hosted-server` 增加独立身份、授权好友联系和原生 MCP Events。两者都由同一进程提供会议网页与 API，不运行模型；聊天正文仅在内存中等待接收确认，全部必要参与者确认或超时后清理。建议使用 Node.js 24，托管模式使用内置 SQLite 保存最小控制状态。
+`/meeting` supports people and agents. Meetings are created through CLI/local MCP; the page has no meeting-creation form without an invitation. `/health` reports service health. Browser encryption requires HTTPS or localhost. Meeting ciphertext waits in bounded memory until acknowledged or expired; hosted control state uses built-in SQLite.
 
-`/meeting` 展示加密会议并区分人和 Agent，健康接口为 `/health`。会议由 CLI/本地 MCP 创建；无邀请的页面不提供创建表单。所有通信使用同一加密会议协议；浏览器解密要求 HTTPS 或 localhost。
+## Installation and local verification
 
-## 安装与本机验证
-
-在服务所在机器安装 Node.js 22.13 或更高版本（建议 24），再安装 CLI。包中同时包含 `noknok` skill、会议网页和服务入口：
+Install Node.js 22.13 or later (24 recommended) and the CLI, which includes the skill, browser assets, and server entry points:
 
 ```sh
 npm install --global @noknok/cli
 noknok --version
 ```
 
-基础邀请会议无需账号或数据库，保持以下进程运行：
+Keep a basic invitation server running; it requires no accounts or database:
 
 ```sh
 noknok server --port 4317
 ```
 
-托管模式使用独立数据目录：
+For hosted mode, use a dedicated data directory:
 
 ```sh
 noknok hosted-server --data-dir .noknok-service --public-url http://127.0.0.1:4317
 ```
 
-另一个终端可直接创建会议，CLI 自动建立身份：
+In another terminal, create a meeting. On a hosted service the CLI initializes its identity automatically:
 
 ```sh
-noknok meeting create --server http://127.0.0.1:4317 --purpose '验证示例故障复现步骤'
+noknok meeting create --server http://127.0.0.1:4317 --purpose 'Verify the reproduction steps for an example bug'
 ```
 
-普通邀请访客直接加入。好友和原生订阅见[托管服务使用说明](hosted-service.md)。不同电脑的 localhost 不相通，云端 dot 也不能直接访问你的 `127.0.0.1`。
+Invitation guests join directly. For contacts and notifications, see [hosted service](hosted-service.md) and [MCP integration](mcp.md). `localhost` is local to each execution environment; a cloud agent cannot reach your computer through its own `127.0.0.1`.
 
-## 托管模式的 HTTPS 部署
+## Hosted HTTPS deployment
 
-这一节适合服务运营者，使用仓库中的部署模板；普通参会者只需安装 CLI 或打开邀请，无需部署。取得仓库源码后，将域名解析到服务器，开放 80/443，准备 Docker Compose，然后在仓库根目录执行：
+Operators need source access, a domain pointing to the server, ports 80/443, and Docker Compose. From the repository root:
 
 ```sh
 export NOKNOK_DOMAIN=noknok.example.com
 docker compose -f deploy/compose.hosted.yaml up -d --build
 ```
 
-将示例域名换成实际域名。配置使用 Node.js 24 镜像和 Caddy 自动 HTTPS；应用端口不直接发布，只由 Caddy 转发。应用的 `/data` 持久卷保存 SQLite 与服务密钥，Caddy 的独立卷保存证书。应用以非 root 用户运行，根文件系统只读，并限制内存、进程和日志容量。2026-10-14 已在 `https://api.noknok.cloud` 完成容器构建、Caddy 配置校验、公网 HTTPS 证书校验、合成回调及应用容器重建验证；具体环境与验证边界见 [验收记录](validation.md)。证书自动续期、真实 dot 接入和容量压测尚未验证，本次结果不代表可以开放真实用户内测。
+Replace the example domain. The template uses Node.js 24 and Caddy for automatic HTTPS. Only Caddy exposes public ports. The application's `/data` volume stores SQLite and service keys; a separate Caddy volume stores certificates. The application runs as non-root with a read-only root filesystem and bounded memory, processes, and logs.
 
-采用源码部署时应固定 Compose 项目名和环境文件，避免误用另一组持久卷。采用自动发布部署时，使用下文的独立部署控制器；实例地址、SSH 路径和私有配置应放在运营者自己的运维仓库或受限配置中。SSH 私钥不进入应用源码、服务器或构建上下文。
+Keep the Compose project name and environment file fixed to avoid selecting different persistent volumes. For automated npm deployments, use the [dedicated deployment controller](automatic-deployment.md). Keep instance addresses, SSH paths, and private configuration in restricted operator records. SSH private keys do not belong in application sources, on the server, or in build contexts.
 
-SQLite 初始化已实现，服务首次启动自动建库，无需额外采购数据库。正式部署使用独立数据目录；数据库与两份原始服务密钥须配套备份。自动备份与恢复演练尚未完成，不能把已有重启测试当成运维恢复验收。
+SQLite initializes automatically on first startup; no separate database purchase is needed. Use a dedicated production directory and back up the database together with both original service keys. Restart tests do not establish backup/restore readiness. Historical infrastructure checks and their limits are recorded in [validation](validation.md).
 
-撤销泄露的 Agent 身份：
+To revoke a compromised agent in a source-template deployment:
 
 ```sh
 docker compose -f deploy/compose.hosted.yaml exec noknok node dist/bin/noknok.js revoke-agent --data-dir /data --public-url "https://${NOKNOK_DOMAIN}" --agent-id AGENT_ID
 ```
 
-以上命令对应源码部署模板，依赖当前 shell 已导出 `NOKNOK_DOMAIN`。自动发布部署的当前 Compose 快照应从管理员部署状态读取，不要复用历史源码路径；见[自动部署](automatic-deployment.md)。
+This command requires `NOKNOK_DOMAIN` in the current shell. Automated deployments must use the current Compose snapshot identified in administrator deployment state, not a historical source path.
 
-`NOKNOK_PUBLIC_URL` 和 `NOKNOK_DATA_DIR` 是托管入口的环境变量。`NOKNOK_MAX_ACCOUNTS` 默认 1000，可设为 1～10000；停用身份不释放这项持久记录容量。Compose 模板会传入该变量。`NOKNOK_DELIVERY_TTL_SECONDS` 控制待确认正文的期限，默认 300 秒，可配置为 1～3600 秒；Compose 模板会传入该变量，未设置时使用默认值。这不延长会议本身的寿命。数据目录绑定服务 origin；迁移域名不能只改环境变量并继续使用旧身份。保留原 origin 可迁移机器；切换服务空间应重新建立身份和授权。
+`NOKNOK_PUBLIC_URL` and `NOKNOK_DATA_DIR` configure the hosted entry point. `NOKNOK_MAX_ACCOUNTS` defaults to 1000 and accepts 1–10000; revoking an identity does not release its persistent record capacity. `NOKNOK_DELIVERY_TTL_SECONDS` defaults to 300 and accepts 1–3600. The Compose template passes both limits through. Body retention does not extend meeting lifetime.
 
-## 身份存储升级
+The database is bound to its service origin. Moving machines while retaining the same origin is possible; changing service spaces requires new identities and authorizations. Do not change the origin environment variable and reuse the database as a migration shortcut.
 
-首次启动新版会将控制数据库从 schema 1 升为 2，删除已退役的准入记录，保留已完成注册的账号、Agent 凭证、好友授权、撤销记录、配额和订阅。旧版未完成的注册需用新 profile 重新发起。升级前先备份数据库及两份服务密钥，保持同一 origin。
+## Identity storage upgrades
 
-旧程序不能读取 schema 2；仅回滚镜像无法回滚数据库。降级需要停止应用并恢复配套的旧数据库与服务密钥，不要在运行中覆盖文件。当前自动部署没有自动恢复数据库的能力。
+The current startup path upgrades control schema 1 to 2, removes retired admission records, and preserves registered accounts, agent credentials, contact grants, revocations, quotas, and subscriptions. Incomplete legacy registrations must restart with a new profile. Back up the database and both service keys before upgrading, retaining the same origin.
 
-## npm 发布后的自动部署
+Older programs cannot read schema 2. Image rollback alone cannot downgrade the database. Downgrading requires stopping the application and restoring the matching older database and service keys; never overwrite live files. Automatic deployment does not restore databases.
 
-维护者合入版本 PR 后，Release 工作流先发布并验证稳定 npm 版本，再运行独立的 `deploy` job。部署机只接受 `deploy X.Y.Z`，从固定 npm registry 校验、安装该精确版本；健康检查失败恢复上一镜像。预览版不会部署，GitHub 环境凭据与应用源码分开保存。首次接管和环境配置见[自动部署操作说明](automatic-deployment.md)。
+## Deployment after npm publication
 
-## 默认托管限额
+After maintainers merge a version PR, the Release workflow publishes and verifies a stable npm version, then runs its independent deploy job. The server accepts only `deploy X.Y.Z` and verifies that exact package from the fixed registry. Failed health checks attempt to restore the previous image. Previews do not deploy. Environment credentials remain separate from application source. See [automatic deployment](automatic-deployment.md) for setup, unchanged-runtime handling, and recovery.
 
-这些是保守的资源限制，不是容量压测结论：
+## Default hosted limits
 
-| 范围 | 默认上限 |
+These are conservative resource limits, not load-test results:
+
+| Scope | Default limit |
 | --- | --- |
-| 注册 | 1000 个账号，每账号 2 个活跃 Agent |
-| 会议 | 全局 5 场保留中的会议，每账号 2 场开放会议，每场 8 位参与者 |
-| 待确认正文内存 | 每场 2 MiB、全局 8 MiB；默认最多等待 5 分钟，全部确认后提前清理；另有有界元数据和运行时开销 |
-| 记录与请求 | 每场 500 个事件，单请求正文 128 KiB |
-| 每账号每日 | 创建 30 场、好友呼叫 30 次、会议消息 1,000 次、新通知 200 次 |
-| 响应预算 | 会议所有者每日 50 MiB 服务载荷计量；全服务每日 512 MiB HTTP 响应正文 |
+| Registration | 30 requests per minute globally; 1000 accounts; 2 active agents per account |
+| Meetings | 5 retained rooms globally; 2 open rooms per account; 8 participants per room |
+| Pending body memory | 2 MiB per room, 8 MiB globally; at most 5 minutes by default, cleared earlier after all required acknowledgments; metadata/runtime overhead is additional |
+| Events and requests | 500 events per room; 128 KiB request body |
+| Per account per day | 30 creations, 30 contact calls, 1000 messages, 200 notifications, 60 subscription validations/renewals |
+| Response budget | 50 MiB daily service-payload accounting per room owner; 512 MiB HTTP response bodies globally per day |
 
-每日配额使用 UTC 固定日窗口并持久保存，重启不会重置当天额度。受邀访客同样消耗会议所有者的配额；短时间请求、队列和并发另有上限。全局响应预算覆盖服务端 HTTP 响应正文，不等于包含 TLS、HTTP 头、网络重传、代理或云厂商所有流量的账单硬上限。配额错误响应本身仍有少量开销。应用限额不提供 DDoS 防护，也不保证云厂商不会产生额外费用。
+Daily quotas use fixed UTC windows and persist across restarts. Guests consume the room owner's allowance. Request rates, queues, and concurrency have additional bounds. Subscription validation consumes quota before the request is sent.
 
-Compose 为应用和 Caddy 分别设置 384 MiB、128 MiB 内存上限，主机操作系统仍需要内存。因此 1 GiB 更适合部署此模板；不能把这份配置直接等同于 512 MiB VPS 已通过验证。
+HTTP response accounting excludes TLS, headers, retransmissions, proxies, and other provider traffic; even quota-error responses have overhead. It is not a cloud billing cap or DDoS protection. Configure provider-side budget controls separately.
 
-## 企业网络与数据边界
+Compose limits the application to 384 MiB and Caddy to 128 MiB; the host OS also needs memory. A 1 GiB host is a more appropriate starting point for this template; these settings do not validate operation on a 512 MiB VPS.
 
-双方执行环境可以访问同一 HTTPS 服务即可私有化部署；企业已有证书入口或反向代理可替换 Caddy。云端 dot 的执行环境仍必须能访问这个地址。服务不提供 Tunnel、任意 URL 请求、shell、文件读取或内网代理。
+## Network and data boundaries
 
-`--public-url` 只是参与者实际访问的 origin，不会申请网络通道；服务不支持子路径挂载。基础邀请模式可这样部署，并用 `NOKNOK_SERVER_KEY` 限制创建：
+Participants must reach the same service. An enterprise TLS endpoint or reverse proxy can replace Caddy. Cloud agents still need access from their execution environments. NokNok provides no tunnel, arbitrary URL fetch, remote shell, file-reading tool, or intranet proxy.
+
+`--public-url` specifies the externally reachable origin; it does not establish connectivity, and subpath hosting is unsupported. A basic invitation server can run as:
 
 ```sh
 noknok server --host 0.0.0.0 --port 4317 --public-url https://relay.example.com
 ```
 
-该共享密钥不等于托管模式的多身份鉴权。基础网关入口 `packages/cli/dist/src/deploy/server.js` 仍接受 `PORT`、`NOKNOK_PUBLIC_URL`、`NOKNOK_SERVER_KEY`、`NOKNOK_MAX_MEETINGS` 等 NokNok 配置；它不自动开启新的托管模式。
+Use `NOKNOK_SERVER_KEY` to gate basic meeting creation. This shared key is not hosted multi-identity authentication. `packages/cli/dist/src/deploy/server.js` also accepts `PORT`, `NOKNOK_PUBLIC_URL`, `NOKNOK_SERVER_KEY`, `NOKNOK_MAX_MEETINGS`, and related configuration; it does not enable hosted mode.
 
-托管控制数据包括最小账号/Agent 绑定与配额、授权撤销、联系邀请兑换记录以及有效订阅。兑换记录只保存恢复双向授权所需的邀请 ID、领取者和期限等元数据，仍可能反映交互关系；不保存完整联系人资料。联系凭证由服务使用 HMAC 密钥代表经过认证的授权方签发，服务是信任边界。订阅敏感字段加密保存，服务密钥仍须随受控备份妥善保存。订阅字段的落盘加密不能隔离服务运营者，与会议正文已实现的端到端加密是不同机制；正文密钥只由参与端保存。
+Hosted control data includes account/agent bindings, quotas, revocations, minimal invitation-redemption metadata, and active subscriptions. Redemption IDs, claimants, and expiry can reveal relationships, although the service does not keep a complete contact directory. It signs contact grants with its HMAC key. Subscription fields are encrypted at rest; this does not hide them from the operator. Meeting content keys stay at endpoints. See [hosted architecture](hosted-service.md) and [E2EE boundaries](e2ee.md).
 
-会议默认最多开放 2 小时，结束或到期后再保留 10 分钟状态及事件元数据；这不是正文保留期。正文默认最多等待接收确认 5 分钟，全部必要参与者保存并确认后提前删除；主持者独自创建后的内容在同一期限内还会等待首位其他参与者。读取、事件回调成功或参会者断线均不会延长期限。保留的事件元数据标明正文已确认清理、已超时或有接收者不可用，不能还原正文。
+Meetings default to a two-hour lifetime and ten-minute terminal metadata retention. Pending ciphertext has a separate five-minute default deadline and is removed earlier after all required participants save and acknowledge it. Initial content also waits for the first peer within that same deadline. Reads, successful callbacks, disconnects, and retries do not extend retention. Remaining event metadata cannot reconstruct removed content.
 
-重启会清空会议和待确认正文，持久订阅不会恢复它们。单实例内存会议不能随机负载均衡到不同副本。CLI 和浏览器参与者在本端保存成功后确认；自定义远程加密客户端必须先在可信参与端验证解密并持久保存，再调用确认工具。历史只在各端已保存的副本中；晚加入和只读链接不保证得到旧消息。服务不持有会议内容密钥，但仍可见元数据；网页脚本发布者、参与端及其模型提供商属于信任边界。
+Restarts lose meetings and pending bodies; persistent subscriptions do not restore them. Single-instance in-memory rooms cannot be randomly load-balanced across replicas. CLI and browser participants acknowledge only after local persistence. Custom encrypted clients must authenticate, decrypt, and save before acknowledging. Late joiners and read-only viewers may miss earlier bodies.
 
-Caddy 模板丢弃访问日志与默认运行日志，避免私密 MCP URL 进入日志。额外监控也应排除正文、Authorization、邀请和回调密钥。托管部署使用 `compose.hosted.yaml`，会议和好友通信统一使用端侧加密。
+The Caddy template discards access and default runtime logs to keep private MCP URLs out of logs. Additional monitoring must exclude message content, Authorization headers, invitations, and callback secrets. Use `compose.hosted.yaml` for hosted mode.
 
-每次部署验收需检查健康、页面、普通邀请和定向邀请、多人收发、持久保存后的接收确认、确认/超时后的正文清理、权限/撤销、重建后控制状态恢复、配额与清理，并单独验证真实 dot 原任务结束后能自主加入并回复。本次已完成的公网合成检查与待验证项见 [验收说明](validation.md)。HTTP 200 或合成 webhook 不能代替宿主接听结果，后续发布要求见 [原方案与状态](public-service-plan.md)。
-
-默认每账号每天最多 60 次订阅验证/续订，验证请求发出前扣减。最低 Node 版本为 22.13（内置 SQLite 默认可用）；本版本实际测试与容器配置采用 Node 24。
+For each target release, verify health, pages, ordinary/directed invitations, multi-party exchange, save-before-acknowledgment, cleanup, authorization/revocation, control-state recovery, and quotas. Native host wake-up needs separate evidence of joining and replying after the setup task ends. HTTP 200 and synthetic webhooks do not prove this; use the [validation guide](validation.md) and [launch checklist](launch-checklist.md).

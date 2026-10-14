@@ -1,102 +1,87 @@
-# 上线前 TODO
+# Launch checklist
 
-更新日期：2026-10-14。**仓库已实现端侧 AES-GCM 加密会议及托管好友密钥封装，所有通信已统一为加密会议，旧通信实现不保留。独立安全审查、真实原生宿主和目标部署验收仍未完成；自动成员换钥当前不提供，不能据此开放真实用户公共内测。** 已有公共实例的历史检查见 [验收记录](validation.md)，不代表该实例已部署本次协议。
+This checklist separates implemented behavior from acceptance work still requiring evidence. Encrypted meetings and contact-key wrapping are implemented, and legacy plaintext communication has been removed. Independent security review, real native-host validation, and target-release acceptance remain open. Historical evidence is recorded in [validation](validation.md); a source merge, package publication, healthy HTTPS endpoint, or passing automated suite does not complete those checks.
 
-本清单是发布前的检查入口。代码合入、HTTPS 正常、数据库订阅字段加密、全部现有测试通过，均不能替代下列端到端加密验收。
+## Version and upgrade policy
 
-## 正式发布前的版本与升级策略
+During development, breaking changes are allowed without compatibility aliases for retired commands, protocols, configuration, or test data. Current interfaces use `noknok`, `noknok_` tools, `noknok.activity`, `NOKNOK_*`, and `~/.noknok`. Clients, servers, and browser assets must implement the same encryption protocol. Explicit implemented storage upgrades, such as schema 1 to 2, are documented in [deployment](deployment.md#identity-storage-upgrades).
 
-当前仍处于产品开发与受限验证阶段，**允许破坏性变更，不要求兼容旧命令、协议、配置或测试数据**。此次统一为 `noknok`：工具名前缀 `noknok_`、事件 `noknok.activity`、环境变量 `NOKNOK_*`、默认本地目录 `~/.noknok`；旧入口和历史数据迁移逻辑不保留。客户端、服务端与浏览器资源必须支持同一加密协议；不要混用不同版本。
+- [ ] Define the formal support lifetime, protocol/schema version policy, and upgrade/rollback procedure; decide which future changes need compatibility or explicit migration. Package versioning is already documented in [releasing](releasing.md).
+- [ ] Publish stable CLI/MCP/Events contracts and verify that incompatible versions fail clearly instead of silently losing messages.
+- [ ] Validate breaking upgrades with an independent test data directory before changing an existing deployment. Do not overwrite identities, credentials, or databases automatically; operators decide when old test data can be removed.
 
-- [ ] 正式发布前确定语义化版本、支持期限、协议/schema 版本策略和升级/回滚流程，再决定哪些未来变更需要兼容或显式迁移。
-- [ ] 正式发布前公布稳定 CLI/MCP 工具与事件契约，并验证版本不匹配时明确失败，而不是静默丢消息。
-- [ ] 部署本次破坏性升级前，以新的独立测试数据目录验证；不得自动覆盖原身份、凭据或数据库。原测试数据由运营者确认后清理。
+## End-to-end encryption
 
-## 端到端加密：已实现与待验收
+See [E2EE](e2ee.md) for the protocol and shared-key limitations. Independent participant signatures, forward secrecy, and automatic membership rekeying are not implemented.
 
-协议及信任边界见[端到端加密](e2ee.md)。采用平台 Web Crypto 的 AES-256-GCM，每场会议独立随机密钥，经可信邀请渠道分享；好友使用参与端联系密钥封装会议密钥。此方案没有独立参与者签名、前向保密和成员变更自动换钥，不能把这些能力标为已完成。
+Implemented and covered during development:
 
-### 已完成的实现与开发验证
+- [x] CLI, local stdio MCP, and browser encrypt/decrypt purpose, context, messages, end reason, and summary at endpoints; the service receives no content key.
+- [x] Two-person and multi-party conversations share one encrypted meeting protocol. Complete invitations carry endpoint-added fragment keys; contact calls carry wrapped meeting keys; remote MCP accepts only ciphertext.
+- [x] Cryptographic random keys/IVs, authenticated context, local key persistence, and exact-ciphertext retries.
+- [x] Known AES-GCM vectors, interoperability, wrong keys, tag/AAD tampering, context/sender/route substitution, replay, encoding/size bounds, and rejection without ACK or plaintext downgrade.
+- [x] HTTP/hosted checks for test plaintext and keys in requests/responses; synthetic browser checks for wrong keys, encrypted exchange, and refresh/retry after response loss.
+- [x] Documented metadata exposure, shared-key identity limits, browser-script trust, local plaintext histories, host/model access, and trusted key distribution.
 
-- [x] CLI、本地 stdio MCP 和浏览器在端侧加解密目标、背景、消息、结束原因及总结，服务只转发密文，不接收内容密钥。
-- [x] 统一多人和两人通信为同一会议协议；完整邀请包含端侧追加的 fragment 密钥，好友呼叫附加加密密钥封装，远程 MCP 仅接受密文。
-- [x] 使用密码学随机 32 字节内容密钥、随机 12 字节 IV 和认证上下文；密钥及确切重试密文在本地持久保存，重试不重新加密同一请求。
-- [x] 已知 AES-GCM 向量、互通、错误密钥、标签/AAD 篡改、跨会议/发送者/路由替换、重放、编码和大小边界有自动化测试；认证失败不保存或确认，不降级明文。
-- [x] HTTP 往返和托管测试检查请求/响应不含测试正文及内容密钥；浏览器合成验证覆盖错误密钥、密文收发和丢响应后刷新重试。
-- [x] 文档明确元数据可见、共享密钥的身份限制、网页脚本信任、本地明文记录、Agent 宿主/模型和密钥分发渠道的信任边界。
+Remaining acceptance:
 
-### 尚未完成的发布验收
+- [ ] Deploy the target encrypted version and test CLI, browser, read-only viewing, contacts, and invitation fallback. Inspect server requests/responses, memory, database, logs, and exports for test plaintext or content keys.
+- [ ] Obtain independent security review and record the decision on shared keys, lack of forward secrecy, and lack of automatic rekeying. Implement stronger identity or post-revocation confidentiality first if required; do not claim it already exists.
+- [ ] Validate real native hosts, especially dot: endpoint encryption, key custody, durable storage, and replies after the setup task ends. Remote MCP/Events connectivity alone is insufficient; unsupported hosts must fail without downgrading.
+- [ ] Test lost keys, device changes, and incompatible versions in the actual host/deployment. Cross-device synchronization and server-side key recovery do not exist.
+- [ ] Verify HTTPS, browser-script publishing permissions, fragment removal, persistence, and local clearing on the deployed browser client; establish a supported-browser matrix.
 
-- [ ] 在目标环境部署当前加密版本，复验 CLI、浏览器、只读查看、好友与邀请兜底；检查服务端请求、响应、内存、数据库、日志及导出没有测试明文或内容密钥。
-- [ ] 完成独立安全审查，记录对共享密钥、无前向保密和无自动成员换钥的风险判断；若发布要求更强的独立身份或撤销后保密性，应先实现对应协议并验证，不能宣传现有方案具备这些能力。
-- [ ] 验证真实原生宿主，特别是 dot 的端侧加解密、密钥保管、持久保存及任务结束后的自动回复。仅远程 MCP / Events 接通不代表具备这些能力，不支持时明确拒绝而非降级。
-- [ ] 在真实宿主及目标部署验证密钥丢失、设备变化和版本不兼容的失败路径；跨设备同步与服务端密钥恢复当前不存在。
-- [ ] 在部署的浏览器客户端检查 HTTPS、脚本发布权限、fragment 清除、浏览器持久存储和本地清除；补齐支持的浏览器矩阵。
+E2EE prevents the relay from reading ordinary meeting bodies. Authorized recipients, their execution environments, and their model providers still process plaintext.
 
-端到端加密隔离中转服务的正文访问，不使授权接收方、Agent 宿主或模型提供商无法读取自己处理的明文。上述已完成开发验证不等于当前公共实例部署或安全审计完成。
+## Delivery and endpoint history
 
-## 正文投递与各端历史
+Bodies wait in memory for at most five minutes by default, cleared earlier after required participants durably save and acknowledge. The two-hour room lifetime and ten-minute terminal metadata retention do not extend body retention.
 
-当前协议采用短期内存待投递：正文默认最多保留 5 分钟，必要参与者持久保存并确认后提前清理；会议的 2 小时寿命和结束后 10 分钟元数据保留不延长正文期限。下列目标部署验收仍需在当前加密版本执行，历史结果见[验证记录](validation.md)。
+- [ ] On the target version, retest sender/multi-party receipts, duplicate ACKs, unacknowledged expiry, leave/revocation, late joins, and read-only viewing. Confirm cleared bodies disappear from read APIs, retry responses, and server caches, and missing records are explicit.
+- [x] Development tests cover save-before-ACK, persistence failure without ACK, retry deduplication, local history after server cleanup, and tombstones not replacing saved bodies.
+- [ ] Repeat persistence-failure and export checks on the target deployment and supported browsers.
+- [ ] Verify native-host durable storage and `noknok_meeting_ack` ordering. Tool output, HTTP success, and Events delivery are not durable storage. Do not ACK before saving or promise an archive where reliable persistence is unavailable.
 
-- [ ] 在目标部署复验发送者及多方接收确认、重复确认、未确认超时、退出/撤销、晚加入和只读查看；确认正文从读取接口、重试结果及服务端缓存中清理，缺失记录明确标识。
-- [x] 开发测试覆盖 CLI 和浏览器先保存后确认、写入失败不确认、重试去重、服务清理后读取本地副本及墓碑不覆盖正文。
-- [ ] 在目标部署与受支持浏览器复验上述流程，包括存储失败和导出。
-- [ ] 在真实原生宿主验证正文的持久保存位置与 `noknok_meeting_ack` 顺序。工具返回、HTTP 成功和 Events 通知不等于持久保存；不支持可靠保存时明确限制，不能先确认后补存。
+Cleanup removes application references and subsequent API access; it does not securely overwrite JavaScript memory. Endpoint records contain only received content. A cloud host's storage is not automatically a file on the user's computer.
 
-以上清理移除应用持有的正文及其后续读取能力，不承诺 JavaScript 内存被安全覆写，也不替代端到端加密。长期记录仅在各端已保存的副本中；云端宿主的存储不等于用户电脑本地文件。
+## Control database and recovery
 
-## 数据库：实现、历史证据与待验收
+Node's built-in SQLite stores account/agent bindings, quotas, revocations, minimal redemption metadata, and subscriptions; no separate database purchase is required. Startup creates storage automatically. Credentials are hashed and subscription fields are encrypted at rest; this is neither whole-database encryption nor meeting E2EE.
 
-**数据库代码不依赖采购。** 当前采用 Node 内置 SQLite，不需要购买 MySQL、PostgreSQL 或 Redis。服务首次启动会自动创建数据目录、表和服务密钥；本地可用 loopback origin 验证。
+Back up `control.sqlite`, `signing.key`, and `subscriptions.key` together. Directories use `0700`, files `0600`. The database is bound to its origin. Schema 2 preserves existing registered identities/grants while removing admission records; key rotation and cross-origin migration are not implemented.
 
-| 项目 | 当前状态 |
+- [ ] Implement consistent database/key backups, access controls, retention, and an isolated restore drill. This can be developed locally.
+- [x] Historical restricted deployment checks verified a fresh control volume at `https://api.noknok.cloud`, `/data` permissions, and restoration of synthetic identities and the same subscription ID after application-only recreation. Old in-memory rooms disappeared; new synthetic calls and exchanges worked. These are historical infrastructure checks, not proof of current-release acceptance.
+- [ ] Verify database integrity after abnormal termination and restore a matching database/key backup.
+- [ ] Record schema compatibility and release rollback steps. Add migration/recovery tests before future schema or key changes; do not replace original keys to conceal startup failures.
+
+## Planned operator diagnostics CLI
+
+These commands are proposed, not implemented. Existing `hosted identity`, `hosted subscription-status`, and `hosted inbox` inspect one agent's business state, not global operator state.
+
+| Proposed command | Scope |
 | --- | --- |
-| 身份绑定、授权撤销、配额、邀请兑换元数据 | 已实现 SQLite 持久化；不保存聊天正文或完整通讯录 |
-| 凭据与订阅保护 | 凭据存哈希；订阅记录加密存储；不是整库加密，也不是会议端到端加密 |
-| 初始化与重启 | 自动建库及重启恢复已有本地测试；目标部署保留控制卷的应用容器重建已验证，不等于备份恢复演练 |
-| 部署持久卷 | 历史受限部署已挂载 `control` 卷至 `/data`，权限验证通过；仅重建应用容器后身份与同一订阅 ID 保留，旧临时会议失效 |
-| 数据与服务密钥 | `control.sqlite`、`signing.key`、`subscriptions.key`；目录 `0700`、文件 `0600`；不能只备份数据库而遗漏原密钥 |
-| 升级与迁移 | 当前 schema 为 2；启动时从 1 自动升级并保留已有身份授权，删除准入记录；服务密钥轮换与跨域名迁移尚未实现，升级备份和降级限制见部署说明 |
+| `noknok admin status --data-dir DIR` | Database/schema version, account/agent counts, unexpired subscriptions; distinguish unexpired records from deliverability |
+| `noknok admin agent ID --data-dir DIR` | Enabled/revoked state, owning account, subscription state/expiry; exclude callback addresses and keys |
+| `noknok admin quotas --data-dir DIR` | Global/account/agent counters, units, reset times, filters; obtain thresholds from actual configuration or report unknown |
+| `noknok admin doctor --data-dir DIR` | Integrity, schema compatibility, permissions, configuration/key consistency; advise without repairing |
 
-- [ ] 制定并实现数据库与原服务密钥的一致性备份、访问限制和保留策略；在隔离环境执行恢复演练。此项可以先本地开发，不用等待服务器。
-- [x] 历史受限联调 origin 为 `https://api.noknok.cloud`，使用全新独立控制数据卷。数据库绑定该 origin，不能把本机测试库直接改域名后复用。
-- [x] 在目标机器验证目录/卷权限：`/data` 为 `0700`，数据库与两份服务密钥为 `0600`。
-- [x] 保留控制卷并仅强制重建应用容器后，A/B 合成身份及 B 的同一订阅 ID 恢复；旧临时会议返回 HTTP 404，新会议的回调、合成收发与结束通过。
-- [ ] 验证异常退出后的数据库完整性，以及数据库与原服务密钥的一致性备份恢复。
-- [ ] 记录 schema 兼容和发布回滚步骤；未来变更 schema 或密钥前补齐迁移与恢复测试，不能靠替换原密钥修复启动错误。
+- [ ] Use a genuinely read-only database connection. Do not reuse startup paths that initialize, clean up, or chmod storage. Missing paths must fail without creating an empty database.
+- [ ] Return stable versioned JSON and exit codes, bounded counts/pagination, and identity filters.
+- [ ] Run only locally or over SSH, with no public admin API or global queries exposed to ordinary participants. Exclude tokens, credential hashes, offers, grants, complete callback URLs, service keys, content, and decrypted subscription fields.
+- [ ] State data source and time. SQLite does not contain live rooms, bodies, or notification queues; records cannot prove delivery or wake-up. Use existing authenticated subscription-status results for recent delivery outcomes without persisting chat bodies for diagnostics.
+- [ ] Document the missing-invitation investigation: enabled identity → permission/revocation → subscription validity → quota → delivery result → actual recipient join. Two agent IDs alone cannot reconstruct endpoint-held contacts or grants.
+- [ ] Test missing/corrupt databases, unknown identities, expired subscriptions, permissions, configuration/key mismatches, counts/filters, redaction, and unchanged files/database before and after execution. Document local and Docker/SSH usage.
 
-## 待办：供 Agent 排查的运维 CLI
+Implementation entry points are `packages/cli/src/cli.ts`, `hosted-store.ts`, `hosted-events.ts`, and `hosted-service.ts`. Keep diagnostics separate from startup and business APIs.
 
-**状态：待实现，可交给独立会话开发，无需等待域名或服务器。本节只记录需求，以下 `admin` 命令当前不存在。**
+## Deployment and operations acceptance
 
-现有 `hosted identity`、`hosted subscription-status`、`hosted inbox` 只能以当前 Agent 的身份查看业务状态，不能替代服务运营者的全局诊断。拟增加本机管理命令，命令名可在实现时统一：
+- [x] Historical hosted Docker/Caddy checks covered builds, public HTTPS and certificate validation, and an application port not exposed directly to the host.
+- [ ] Verify certificate renewal and sustained operation; one successful HTTPS request is not renewal evidence.
+- [x] Historical synthetic HTTPS callbacks covered challenges, HMAC signatures, and delivery across container recreation. They did not validate a native host.
+- [ ] Verify current host authentication and native Events subscriptions, then prove autonomous joining and substantive replies after the setup task ends.
+- [ ] Retest encrypted-version identity isolation, revocation, quotas, concurrency, expiry, and logging boundaries. Add alerts and verify provider-side budget controls.
+- [ ] Record evidence for outstanding launch blockers before approving sensitive real-user workloads. Clearly describe the implemented capabilities and limits of ordinary invitations, human participation, and self-hosting.
 
-| 拟定命令 | 排查范围 |
-| --- | --- |
-| `noknok admin status --data-dir DIR` | 数据库/schema 版本、账号与 Agent 数量、未过期订阅数量；区分记录未过期与实际可投递 |
-| `noknok admin agent ID --data-dir DIR` | 指定 Agent 的启用/撤销状态、所属账号、订阅状态与期限，不输出回调地址或签名密钥 |
-| `noknok admin quotas --data-dir DIR` | 全局、账号或 Agent 的计数、计量单位与重置时间，支持身份筛选；阈值若未持久化，需读取对应运行配置或明确未知，不能按默认值推断 |
-| `noknok admin doctor --data-dir DIR` | 数据库完整性、schema 兼容、文件权限、服务配置与密钥一致性；输出问题及建议，不自动修复 |
-
-- [ ] 默认只读，使用真正的只读数据库连接。不能直接复用会自动建库、清理过期记录或更改权限的初始化路径；路径不存在时明确报错，不创建空库。
-- [ ] 输出稳定、带版本的 JSON 和明确退出码，提供计数/分页上限与身份筛选，方便 Agent 快速定位问题。
-- [ ] 只在服务器本机或经 SSH 执行，不新增公网管理接口，不向普通参会 Agent 提供全局查询能力。不输出 token、凭据哈希、兑换码、联系凭证、完整回调 URL、服务密钥、正文或订阅解密原文。
-- [ ] 明确数据来源和时间：SQLite 保存控制状态，不保存聊天正文、活跃会议或实时通知队列。数据库记录不能证明回调已送达或 Agent 已唤醒；近期投递结果由现有受鉴权的 `hosted subscription-status` 获取，不为诊断新增正文持久化。
-- [ ] 编写“B 未收到邀请”的排查步骤：身份是否启用 → 联系授权/撤销结果 → 订阅期限与状态 → 配额 → 近期投递结果 → 接收方是否真实加入。完整联系人和联系凭证在参与端，运维 CLI 不能凭两个 Agent ID 推断完整好友关系。
-- [ ] 用隔离测试数据验证缺失/损坏数据库、未知身份、过期订阅、异常权限、配置/密钥不匹配、计数与筛选、敏感字段不泄露以及执行前后数据库和文件未被修改；补齐本机与 Docker/SSH 使用文档。
-
-实现入口：`packages/cli/src/cli.ts`、`packages/cli/src/hosted-store.ts`、`packages/cli/src/hosted-events.ts`、`packages/cli/src/hosted-service.ts`。新增独立诊断模块及测试，避免改变正常启动或业务接口的行为。
-
-## 受限部署与后续上线验收
-
-- [x] 历史 hosted Docker 构建与 Caddy 配置校验通过；公网域名的 HTTPS 健康检查及证书校验通过，应用 4317 端口未发布至宿主机。
-- [ ] 验证证书自动续期与持续运行；已有证书的 HTTPS 请求成功不构成续期验收。
-- [x] 实际 HTTPS 合成回调的 challenge、HMAC 签名及投递通过，应用容器重建前后共 11 项检查通过；使用合成接收器，不构成原生宿主自动接听验收。
-- [ ] 确认原生宿主接受当前认证方式，再建立真实 MCP Events 订阅；设置任务结束后，由好友发起会议，验证对方自主加入与实质回复。回调 HTTP 200 不算接听成功。
-- [ ] 在加密版本上复验身份隔离、撤销、限额、并发、过期清理与日志边界；补齐运营告警并核对云厂商预算限制。
-- [ ] 全部上线阻断项完成并记录证据后，才开放真实敏感资料的使用。普通邀请、人工参与、自部署的加密能力和限制需明确标识，不能把已实现代码当成已部署证明。
-
-本次受限联调的域名与服务器已就绪。更换部署环境时仍需确认域名、服务器地址、可用的本机 SSH 配置别名及 DNS 配置情况，私钥通过本机安全凭据配置使用，不上传至服务。环境准备和部署验证不能替代数据库恢复或端到端加密验收。
-
-相关文档：[部署说明](deployment.md)、[托管服务使用方法](hosted-service.md)、[公共内测方案](public-service-plan.md)、[已有验证记录](validation.md)。
+For another environment, verify its domain, server, DNS, and authorized local SSH configuration. Use local credential management rather than uploading administrator private keys to the service. Environment preparation does not establish database recovery or encryption acceptance.

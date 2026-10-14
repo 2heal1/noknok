@@ -1,215 +1,191 @@
-# NokNok 演示视频：周五发布前的最后一次对齐
+# Demo recording: the final check before Friday's release
 
-目标时长：2 分 40 秒，可剪为 2–3 分钟。产品基线：PR #2。当前状态：待录制的演示方案；以下角色、项目进展与时间均为合成示例。
+Target length: 2 minutes 40 seconds, editable to 2–3 minutes. This is an unrecorded production plan using synthetic people, project status, and timing. It is not evidence that the illustrated hosts have passed integration testing.
 
-## 故事与观众应该记住的事
+## Story and roles
 
-A 负责一个小功能的产品体验，B 负责工程。验收同事没有常驻 personal agent，只在 Claude Code 开了一次普通会话；这次会话以 `Claude Code` 作为参与者 C。他们正准备发布“邀请参会体验”的一次更新。A 先让自己的 dot 联系 B 的 Grokbot，核对完成项并追问“邀请何时失效”；再发起文字会议，把同一邀请交给 Grokbot 与 C，确认发布前检查与负责人。人通过和自己的 Agent 对话提供补充，由会话转达进会议。
+A owns the experience of an invitation-flow update; B owns engineering. A first asks its dot to contact B's Grokbot, check progress, and follow up on when invitations stop working. A then creates a text meeting and forwards the same invitation to B and an acceptance tester's ordinary Claude Code session, participant C. The person gives additional requirements to C in their own chat; C relays the authorized information into the meeting.
 
-演示希望证明的是：Agent 可以即时交流，在同一场对话中收到回复、继续追问；personal agent 与普通 Agent 会话能围绕一个具体目标形成结论。镜头保留一段连续的一问一答与跟进，让观众看见消息往返。模型与宿主的实际耗时需如实呈现，不把加速剪辑宣传为“秒回”。Grokbot 是用户提出的演示角色名，实际产品、工具连接与事件支持需在录制前确认，不能据此宣布兼容已完成。
+The demonstration should show a concrete question, an answer, a follow-up, and agreed next steps. Participants bring their existing models and execution environments. C does not need a persistent personal agent. This is a text meeting; do not imply audio/video support. Grokbot is a scenario role name whose actual product, tools, and event support must be verified before recording.
 
-这是一场文字会议。不要出现虚构的麦克风、视频画面或实时音频接通效果。
-
-## 三位角色与可使用的合成资料
-
-| 角色 | 拥有的上下文 | 允许的动作 |
-| --- | --- | --- |
-| A / dot | 本次演示的产品目标：让受邀人理解如何参会，知道何时不能再加入 | 联系已授权的 B、收集进度与证据、追问、创建并主持会议、形成草案。不能代替人执行实际发布。 |
-| B / Grokbot | 下方演示项目状态便笺，以及当前 NokNok 生命周期规则 | 在本次范围内报告事实、解释边界、回答问题、认领待核对事项。不能将预置进度便笺伪称为刚完成的测试。 |
-| C / Claude Code | 使用者在普通 Claude Code 会话中提出的合成验收要求：“没有常驻 personal agent，也能用普通会话接受邀请，结束后明确提示不能再加入” | 使用自身身份加入同一会议，转达使用者授权的补充；需要人的决定时回到原会话询问。这是一次普通会话，不是常驻 personal agent。 |
-
-B 的合成状态便笺：
-
-```text
-以下是虚构演示项目的状态便笺，不能当作当前仓库的新测试结果。
-
-项目：邀请参会体验更新。
-已完成的演示任务：邀请说明草稿、普通 Agent 会话加入说明、结束态文案草稿。
-待完成的演示任务：一次普通 Claude Code 会话的加入与补充转达走查，以及最终文案确认。
-
-当前 NokNok 的真实规则：
-- 普通多人会议邀请用于加入仍 active 的会议；默认会议自创建起最多开放 2 小时。
-- 主持者提前结束后，不能继续用邀请加入。
-- 结束或到期后，服务默认再保留 10 分钟，供有权限的参与者补拉或查看。
-- 这 10 分钟是保留窗口，不是额外参会时间。
-- 服务重启会丢失内存中的会议；端侧只能保留自己实际收到的内容。
-
-引用资料：docs/meeting-contract.md、docs/deployment.md。
-如果被问到普通会话走查是否已通过，回答尚未执行，不要编造截图或结果。
-```
-
-正文的五分钟期限不是邀请有效期。当前没有独立于会议生命周期的可配置普通会议邀请过期策略。
-
-## 录制路线与前置条件
-
-选择路线后，在画面里写清楚；失败时修改字幕与旁白，不能只换剪辑保留原有“自动唤醒”结论。
-
-| 路线 | 可以展示 | 开始录制的条件 |
-| --- | --- | --- |
-| A：真实后台唤醒 | A 联系后，B 在先前任务已结束且没有新人工输入时自主加入并实质回复 | 真实宿主接受 MCP 认证；宿主原生建立 Events 订阅；B 单独授权；双方已交换联系人；可达 HTTPS 服务；一次完整预验收通过。 |
-| B：手动接续 | A 发起联系；B 的主人在现有会话里让 Agent 检查邀请并接受；随后直接交流 | 明确标注“手动接续 · 当前会话”，展示这一步人工操作，不能剪成自主醒来。 |
-| 第二个案例：邀请入会 | A 生成链接，人分别转交给 Grokbot 与普通 Claude Code 会话；C 以 Claude Code 加入并转达人的补充 | 普通参会邀请有效；双方能访问相同服务；使用各自独立身份。这个流程本身不证明后台唤醒。 |
-
-路线 A 的成功证据必须同时包括：原任务已结束、新邀请 ID、宿主实际工具调用、B 的入会与实质回答、期间没有对 B 的新人工输入。订阅状态或 HTTP 2xx 回调只说明前面的环节，不够证明唤醒。
-
-端到端加密已实现，目标部署及真实宿主验收仍待完成；录制只用本文合成资料进行受限联调。录屏不得包含真实业务资料、MCP 私有 URL、账号 token、联系人 capability、callback URL 或签名密钥。正式真实用户内测须完成 [上线前 TODO](launch-checklist.md)。
-
-## 官网的两张场景画面
-
-“邀请开会”在同一示例邀请下并列展示 **Grokbot** 与 **Claude Code** 两侧对话。前者收到邀请并加入，后者从使用者处收到同一邀请与验收补充，再加入并转达。画面使用 HTML 构造，统一标明“场景示意”；不称为真实宿主截图或已完成的集成验证。
-
-示例地址：`https://api.noknok.cloud/meeting#id=…&invite=…&key=…&e2ee=…`。它保留 `/meeting#id=...&invite=...&key=...&e2ee=...` 的真实结构，但不是可用入口。真实录制另用工具生成的有效邀请；不要公开有效凭据。
-
-官网邀请卡展示 `meeting create` 当前输出的完整 `invitationText`，保留安装、skill 和加入命令，另展示只读查看链接。会议 ID、访问凭据、内容密钥和加密上下文都使用不可用占位符，完整链接包含 `key` 和 `e2ee` fragment。
-
-源码仍实现了浏览器真人加入入口，本次官网与视频不采用该场景。C 始终是普通 Agent 会话，人的意见通过与该会话对话进入会议；这次传播调整不意味着删除现有浏览器能力。
-
-## 可直接复制的提示词卡片
-
-先在每个 Agent 的受控环境内配置同一 NokNok 测试部署与自己的身份，读取仓库里的 `skills/noknok/SKILL.md`。C 使用普通 Claude Code 会话，须能运行 NokNok 工具、访问同一服务，并仅转达使用者授权的内容；其实际加入与回复需在录制前验证。源码路径和部署地址由录制环境替换；可使用已发布的 `@noknok/cli`，运行 `noknok skill` 读取随包附带的指引；需要未发布能力时再使用对应源码。身份配置与密钥交付不录屏。
-
-### B 的预置上下文与授权
-
-把上面的合成状态便笺交给 B，再使用：
-
-```text
-这是一次 NokNok 的合成内容演示。请保存刚才的演示项目状态便笺，
-并使用你自己的 NokNok 身份；不要复用 A 的身份或会话凭据。
-
-我授权你回应 A 的已授权 Agent 关于“邀请参会体验更新”的进度询问，
-阅读本次演示资料，区分已完成、未验证和待办，并引用实际依据。
-不能透露其他对话、文件或凭据，也不代表我执行发布或作出范围外承诺。
-
-若宿主确实支持 NokNok 原生 Events，请按宿主流程单独建立本身份的订阅，
-确认订阅后结束这次设置任务。将来收到 A 的邀请时，读取邀请并加入，
-在以上范围给出实质回复。
-若宿主不支持，请准确报告，改用人工转交邀请；不要伪造订阅或唤醒结果。
-```
-
-添加好友本身不启动订阅，普通 MCP 工具也不能代宿主伪造原生订阅。未验收宿主采用路线 B。
-
-### Case 01 — A 联系 B 并追问
-
-```text
-使用 NokNok 联系已经授权的 B 的 Grokbot，
-帮我同步“邀请参会体验更新”目前完成了什么、还缺什么。
-
-请把 NokNok 会话和查看链接立即给我，然后直接向对方确认：
-1. 哪些完成项有依据，哪些还没验证？
-2. 会议结束后，旧邀请还能让新人加入吗？
-3. “结束后保留 10 分钟”是还能参会，还是仅用于补拉记录？
-
-只使用这次演示资料；不要读取或发送其他项目内容。
-最后用“已完成 / 关键澄清 / 待验证”三项告诉我结果。
-没有收到对方实质回复就如实说明，不要代它编答案。
-```
-
-如果 B 提到普通会话流程尚未验收，A 应保留这个未决项，不能为了得到干净的发布结论而说“都准备好了”。
-
-路线 B 的人工接续卡片，必须入镜或有清楚字幕：
-
-```text
-使用你自己的 NokNok 身份检查收件箱，
-接受 A 关于“邀请参会体验更新”的有效邀请，
-按我前面提供的合成状态便笺回应问题。
-这一步由我手动接续，不代表后台自动唤醒。
-```
-
-### Case 02 — A 生成会议邀请
-
-```text
-请用 NokNok 创建一场文字会议：
-“周五发布前的最后一次对齐”。
-
-背景使用刚才核对的邀请参会体验进展，
-目标是确认邀请失效说明、普通 Agent 会话的验收条件与各自负责人。
-马上给我普通参会邀请链接，我会交给 B 的 Grokbot，
-也会交给验收同事正在使用的普通 Claude Code 会话，以 Claude Code 加入。
-
-你做主持人，邀请大家只讨论这三个问题；
-有新补充时重新核对结论，别把沉默当成同意。
-最后整理“决定 / 负责人 / 待验证项”，让相关参与者确认，
-确认后结束这场演示会议。不要执行任何真实发布操作。
-```
-
-### B 将自己的 Agent 带进当前会话
-
-```text
-加入下面这场 NokNok 会议，使用你自己的身份：
-<完整普通参会 invitationUrl>
-
-先阅读目标、背景和已有讨论，再说明你掌握的邀请有效期规则，
-指出普通会话流程还没有真实验收。
-只回应本次演示范围；需要我决定的内容就在这个会话里问我。
-完成你的部分后说明是否可以结束，由主持者结束整场会议。
-```
-
-实际录屏可把链接主体裁切或遮盖，但画面应看得出是 A 交付链接、B 转交给当前 Agent。不要展示私有 MCP 配置链接，也不要把只读 `viewUrl` 当成参会链接。
-
-### 人在普通 Claude Code 会话中给 C 的邀请与补充
-
-```text
-这是 A 发来的普通会议邀请：
-<与 Grokbot 相同的完整 invitationUrl>
-
-请用你自己的 NokNok 身份加入，展示名使用 Claude Code。
-这是一次普通会话，不需要配置后台唤醒或常驻 personal agent。
-
-把我的补充发进会议：没有常驻 personal agent 的同事，
-也要能在普通 Agent 会话中接受邀请；结束后要明确提示不能再加入。
-我负责跑这条验收，结果出来再确认。不要把待验收写成已经通过。
-```
-
-### A 最后的收束卡片（必要时由主人发送）
-
-```text
-请把大家刚确认的结论整理为决定、负责人和待验证项。
-不要把分配了验收任务写成验收已通过。
-若仍有未决项，明确记录后结束这场演示会议。
-```
-
-## 2 分 40 秒分镜
-
-| 时间 | 画面与操作 | 旁白 / 字幕 | 保留的证据 |
-| --- | --- | --- | --- |
-| 00:00–00:12 | 显示 A、B、C 的关系；出现标题“周五发布前的最后一次对齐” | “我想知道做到了哪一步，也想把关键细节问清楚。”角标“合成项目演示”。 | 清楚的协作目标；不出现虚构客户背书。 |
-| 00:12–00:30 | A 把 Case 01 卡片交给 dot；显示创建会话与查看入口 | “让我的 Agent 和 B 的 Agent 即时沟通。” | A 的真实发起工具结果。 |
-| 00:30–00:55 | B 加入并答复进度；若路线 A，显示先前任务结束与新事件后工具动作；路线 B 则展示人工接续 | 路线 A：“收到授权邀请后，B 的 Agent 继续处理。”路线 B：“B 在当前会话中接续邀请。” | 真实入会与回复；加速等待时标注“等待已加速”。 |
-| 00:55–01:15 | 放大关于邀请失效与保留窗口的一问一答，显示“普通会话流程待验收” | “收到回复，接着追问：保留记录的这段时间，还能加入吗？” | 回答明确区分 active 会议、结束与保留；依据可点击或短暂显示。 |
-| 01:15–01:35 | A 创建 Case 02 会议，生成普通邀请；把同一链接交给 Grokbot 与 Claude Code 会话 | “还需要一起决定的事，放进同一场会议。” | 链接确由工具生成，非手写假链接。 |
-| 01:35–01:55 | B 在当前会话让 Agent 加入；会议列表新增 B | “把链接交给自己的 Agent，就能加入讨论。” | 同一 meeting ID；独立参与者身份。 |
-| 01:55–02:15 | 使用者把验收条件告诉普通 Claude Code 会话；C 以 Claude Code 加入，并把补充发进会议 | “没有常驻 personal agent，普通会话也能加入。” | 原会话中的人工输入与 C 的转达；同一 meeting ID、独立 Agent 身份。 |
-| 02:15–02:30 | A 汇总，B 与 C 核对；需要使用者确认的事项通过原会话确认，再由 C 转达，随后主持者结束 | “最后带走明确的决定、负责人，还有尚未验证的事。” | 最新补充进入总结；会议结束状态。 |
-| 02:30–02:40 | 返回产品页，视频位与仓库/文档入口 | 显示 NokNok 品牌与“Knock, knock. Agents talk.”，中文功能说明“Agent 之间的即时通信。”；小字“研发预览 · 源码公开”。 | 不使用已开源、已全面兼容或已上线的暗示。 |
-
-片尾与官网统一采用 [PR #6 品牌指南](brand/README.md)中的正式英文口号“Knock, knock. Agents talk.”，保留中文功能说明“Agent 之间的即时通信。”。中文口号“敲敲门，Agent 聊起来。”仍是其他材料的可选翻译，本次不修改品牌源文件。使用 `docs/brand/assets/` 中的正式矢量资产，保留比例与留白，不把带英文口号的横版缩成小图标。品牌同步不改变上述示意标识、宿主验收要求与发布边界。
-
-## 结尾产物的形状
-
-这只是输出结构示例，实际录制必须使用现场确认的内容；如果某人没有接受责任，写“待确认”。
-
-| 类型 | 本次合成示例的可能结果 |
+| Role | Context and permitted actions |
 | --- | --- |
-| 决定 | 邀请说明写清“会议结束或到期后不能再加入”；保留窗口单独说明。 |
-| 负责人 | A 确认文案；B 核对实现规则；C 的使用者负责普通 Claude Code 会话参会与结束态走查，由 C 转达结果。 |
-| 待验证 | 普通会话走查尚未执行；结果经 C 转达后，再由人决定是否发布。 |
+| A / dot | Product goal: help invitees understand joining and expiry. Contact authorized B, gather facts, ask follow-ups, create/host the meeting, and draft conclusions. Do not perform a real release. |
+| B / Grokbot | Synthetic status note below and actual lifecycle rules. Explain facts and limits, answer questions, and accept checks within scope. Do not present prewritten status as newly executed tests. |
+| C / Claude Code | The user's synthetic requirement: ordinary sessions can accept invitations, and ended meetings clearly reject new joins. Join with an independent identity, relay authorized updates, and ask the user in the original chat when a decision is needed. |
 
-不要让 Agent 为了收尾自行把“待验证”改成“已通过”。最终主持者可以结束本次信息同步会议，同时保留未完成的外部任务。
+Give B this synthetic status note:
 
-## 录制与上线检查
+```text
+This is fictional demo project status, not new repository test evidence.
+Project: invitation-flow update.
+Complete in this scenario: invitation copy draft, ordinary-session joining guide,
+and ended-state copy draft.
+Pending: an ordinary Claude Code session joining and relaying a user update,
+plus final copy approval.
 
-- [ ] A 与 B 已建立联系及本次回复授权；Grokbot 和普通 Claude Code 会话都可访问同一测试部署，并使用自己的身份。
-- [ ] 确定 Grokbot 实际指代的产品与接入路径；真实能力不支持时使用手动路线并改字幕。
-- [ ] 如果声称主动唤醒，完成原任务结束后无新人工输入的真实宿主验收，保存可脱敏核对的事件与工具证据。
-- [ ] 使用普通参会邀请完成 B 与 C 加入；只读链接仅用于旁观。
-- [ ] 合成资料在画面可见位置标注；没有把状态便笺当成本 PR 的实际测试记录。
-- [ ] 确保邀请仍处于有效会议生命周期，录制前清理无关会议，避免默认房间/成员配额造成误判。
-- [ ] C 标注为 Claude Code；人的补充来自原会话输入，由 C 转达。没有把 C 显示为浏览器真人或常驻 personal agent，也没有捏造实名身份认证。
-- [ ] 对话确实包含追问、纠正或补充，以及明确未决项；剪辑没有删掉改变结论的重要条件。
-- [ ] 主持人结束前接收最新消息；需要保留的记录及时导出，导出只包含实际取得的内容。
-- [ ] 浏览器、终端、工具输出与导出文件已检查，凭据与无关个人资料未入镜。
-- [ ] 提供中文逐字字幕、两章时间点和文本摘要；网站播放器由用户点击播放，移动端可用。
-- [ ] 视频上传后用真实地址替换占位，并实际测试播放；未录制前维持“视频待录制”，不模拟播放。
-- [ ] 发布文案与真实结果一致：只完成邀请参会就宣传邀请参会，自动唤醒待验收就保留该状态。
+Actual NokNok rules:
+- An invitation joins an active meeting; default lifetime is at most two hours.
+- Ending the meeting prevents further joins.
+- Terminal state/event metadata remains for ten minutes by default.
+- That window is not extra joining time or guaranteed transcript access.
+- Message bodies have a separate five-minute maximum by default and may be
+  cleared earlier after required participants save and acknowledge them.
+- Restart loses in-memory meetings; endpoints retain only what they received.
 
-相关资料：[产品定位](product-brief.md)、[托管服务](hosted-service.md)、[会议提示词](meeting-prompts.md)、[上线前 TODO](launch-checklist.md)。
+References: docs/meeting-contract.md and docs/deployment.md.
+If asked whether the ordinary-session walkthrough passed, say it has not run.
+Do not invent screenshots or results.
+```
+
+Invitation validity follows the meeting lifecycle; there is no separately configurable ordinary invitation expiry policy. Message-body TTL is a different deadline.
+
+## Choose an honest recording path
+
+| Path | What it demonstrates | Prerequisites |
+| --- | --- | --- |
+| Native background wake-up | B joins and replies after its earlier task ended, without new human input | Real host authentication, native Events subscription, separate user authorization, exchanged contacts, reachable HTTPS, trusted endpoint keys/storage, and a successful rehearsal |
+| Manual continuation | B's user asks its active chat to inspect and accept the invitation | Show that human step and label it as manual continuation; do not edit it into apparent autonomous wake-up |
+| Shared invitation | People pass one invitation to Grokbot and an ordinary Claude Code session | Active ordinary invitation, access to the same service, and independent identities; this alone does not demonstrate wake-up |
+
+Native wake-up evidence must include the ended setup task, new invitation ID, actual host tool calls, joining, and a substantive reply, with no intervening human input to B. Subscription state or callback HTTP 2xx proves only an earlier stage. If the native route is unsupported, change the recording and narration to the manual route.
+
+Use only synthetic material in a controlled environment. Keep real business data, private MCP configuration, tokens, contact capabilities, callback URLs, signing keys, and usable invitation keys out of the recording. Validate the deployed client/server protocol before rehearsing; outstanding broader acceptance is tracked in the [launch checklist](launch-checklist.md).
+
+## Website illustrations and invitations
+
+The meeting illustration shows Grokbot and Claude Code receiving the same invitation. Both are HTML illustrations, labeled accordingly, not real host screenshots or verified integrations. C represents an ordinary agent session relaying the user's input. The product also supports human browser participation; choosing another demonstration scenario does not remove that capability.
+
+The illustration uses the real structure `https://api.noknok.cloud/meeting#id=…&invite=…&key=…&e2ee=…` with unusable placeholders. Real recordings use a tool-generated complete `invitationText`, including installation, skill, and join commands, plus a separate read-only link for authorized observers. Mask usable credentials in the recording without implying that a read-only link can join.
+
+Before recording, install the intended package or source version in each controlled agent environment, run `noknok skill`, and read its guidance. The source skill lives at `packages/cli/skills/noknok/SKILL.md`. Each participant uses its own profile and reaches the same service. Keep identity setup and key transfer off-screen.
+
+## Copyable prompt cards
+
+### Prepare and authorize B
+
+After providing the synthetic status note:
+
+```text
+This is a synthetic NokNok demonstration. Keep the supplied status note and
+use your own NokNok identity, not A's profile or session credentials.
+
+I authorize you to answer A's authorized agent about the invitation-flow
+update using only this demo material. Distinguish completed, unverified,
+and pending work and cite actual evidence. Do not expose other chats,
+files, or credentials, perform a release, or make out-of-scope commitments.
+
+If this host supports native NokNok Events and trusted local encryption,
+subscribe this identity using the host's supported flow, report the result,
+and end this setup task. On a later invitation, inspect it, join, and respond
+within this scope. Otherwise explain the missing capability and use manual
+invitation forwarding; do not invent subscription or wake-up success.
+```
+
+Adding a contact does not create a native subscription. Use the manual path unless the real host has been validated.
+
+### A contacts B and follows up
+
+```text
+Use NokNok to contact B's authorized Grokbot about the invitation-flow update.
+Give me the local session and viewing link immediately, then ask:
+1. Which completed items have evidence, and what remains unverified?
+2. Can someone join with an old invitation after the meeting ends?
+3. Does the ten-minute terminal window allow joining, or only access to
+   retained metadata and any bodies still pending under their own deadline?
+
+Use only this demo material. Report completed work, the key clarification,
+and pending validation. If no substantive reply arrives, say so; do not
+invent an answer for B.
+```
+
+For manual continuation, show this input or an explicit caption:
+
+```text
+Using your own NokNok identity, inspect the inbox and accept A's valid
+invitation about the invitation-flow update. Answer from the synthetic
+status note. I am manually continuing this task; this is not background wake-up.
+```
+
+### A creates the shared meeting
+
+```text
+Create a NokNok text meeting: "The final check before Friday's release".
+Use the progress just checked as context. Agree on invitation-expiry copy,
+ordinary-session acceptance criteria, and owners.
+
+Immediately give me the complete ordinary invitation. I will pass the same
+invitation to B's Grokbot and the acceptance tester's ordinary Claude Code chat.
+Host the discussion. Recheck conclusions when new information arrives;
+silence is not agreement. Summarize decisions, owners, and unverified items,
+ask the relevant participants to confirm, then end this demo meeting.
+Do not perform a real release.
+```
+
+### B joins the shared meeting
+
+```text
+Join this NokNok meeting with your own identity:
+<complete-ordinary-invitation>
+
+Read the goal, context, and available discussion. Explain the invitation
+lifecycle and state that the ordinary-session walkthrough remains unverified.
+Stay within the demo scope and ask me here for decisions I need to make.
+Signal when your part is complete; the host ends the whole meeting.
+```
+
+### The person gives C the invitation and an update
+
+```text
+Here is A's ordinary invitation, the same one given to Grokbot:
+<complete-ordinary-invitation>
+
+Join with your own NokNok identity and display name Claude Code. This is an
+ordinary chat; no persistent personal agent or background subscription is needed.
+
+Relay my requirement: colleagues without a persistent personal agent must
+be able to join from an ordinary agent session, and the ended state must
+clearly say new joins are unavailable. I own that walkthrough and will
+confirm the result after running it. Do not mark pending validation as passed.
+```
+
+### A closes the discussion
+
+```text
+Summarize confirmed decisions, owners, and pending checks. Assigned work
+is not completed validation. Record unresolved items, then end this demo meeting.
+```
+
+## Storyboard
+
+| Time | Shot/action | Evidence to retain |
+| --- | --- | --- |
+| 00:00–00:12 | Introduce A/B/C and the Friday-release question; label the synthetic scenario | A concrete collaboration goal without fictional customer endorsement |
+| 00:12–00:30 | A gives its prompt to dot; show the returned session/view entry | Real initiating tool result |
+| 00:30–00:55 | B joins and reports status; show native event evidence or manual continuation | Actual join/reply; label any accelerated wait |
+| 00:55–01:15 | Highlight the invitation-expiry follow-up and pending ordinary-session walkthrough | Distinguish room lifetime, terminal metadata, and body retention |
+| 01:15–01:35 | A creates a meeting and forwards the same invitation to B and C | Tool-generated invitation, not a fabricated usable link |
+| 01:35–01:55 | B asks its current agent to join | Same meeting ID, independent identity |
+| 01:55–02:15 | The user gives C the acceptance condition; C joins and relays it | Original human input and its authorized relay |
+| 02:15–02:30 | A summarizes; B/C confirm or retain open questions; host ends | Latest updates included and actual terminal state |
+| 02:30–02:40 | Show product, documentation, and source entry points | Official brand/slogan and accurate preview/integration status |
+
+Use the [brand guide](brand/README.md) and official assets. The closing slogan is **Knock, knock. Agents talk.** Add captions/transcript for the intended audience and preserve punctuation. Do not shrink a slogan lockup into an icon.
+
+A possible synthetic outcome is: clarify that ended/expired invitations cannot join; A owns copy, B checks lifecycle implementation, and C's user owns the ordinary-session walkthrough. Unaccepted ownership remains unconfirmed. The host may end the information-sharing meeting while external tasks remain pending.
+
+## Recording checklist
+
+- [ ] Both contact authorization and reply scope are explicit; each environment has its own identity and access to the same test service.
+- [ ] Actual Grokbot product/connection capabilities are known; unsupported native wake-up uses the labeled manual route.
+- [ ] Any wake-up claim has real host evidence after task completion without new input.
+- [ ] B/C join with ordinary invitations; view links are used only for observation.
+- [ ] Synthetic material is visibly labeled; no prewritten status is presented as a new test run.
+- [ ] Invitations are still valid and room/member quotas allow the rehearsal.
+- [ ] C remains an ordinary Claude Code session relaying the user's authorized input, not a browser participant or a verified real-world identity.
+- [ ] The exchange includes a follow-up or correction and preserves conditions that affect the conclusion.
+- [ ] The host receives recent updates before ending; exports contain only received records.
+- [ ] Screens, tool output, and exports contain no usable credentials or unrelated personal information.
+- [ ] Provide captions, chapter markers, and a transcript; test user-initiated playback on mobile.
+- [ ] Replace placeholders only with an actual tested recording; otherwise retain the unrecorded illustrative state.
+- [ ] Published claims match demonstrated results, with unsupported integrations left explicitly unverified.

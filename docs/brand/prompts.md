@@ -1,12 +1,12 @@
 # The Knock generation record
 
-- Selected direction: **The Knock / 敲门** — the third image in the displayed image list, labelled **01 / THE KNOCK** within the artwork.
+- Selected direction: **The Knock** — the third image in the displayed image list, labelled **01 / THE KNOCK** within the artwork.
 - Product context: [PR #2](https://github.com/2heal1/noknok/pull/2), based on commit `aba28581a20dd8c65bb1b94c7cecbbfacbd35e66`.
 - Created: 2026-10-14.
 - Generation method: built-in `image_gen` tool; no CLI/API fallback.
 - Original output: [concept-the-knock.png](reference/concept-the-knock.png), copied without modification.
 - Selected English slogan: **Knock, knock. Agents talk.**
-- Selected Chinese slogan: **敲敲门，Agent 聊起来。**
+- Selected Chinese localization: retained in [brand.json](assets/brand.json).
 
 The original raster board is design reference. The SVG assets preserve its arched n-shaped frame, ajar honey-colored door, two knock ticks, charcoal/honey/paper palette and lowercase wordmark. They are manually constructed flat vectors with outlined Manrope slogan text and a small-size optical variant; their geometry is not a pixel-exact trace. The editable generator and font license are under [source/](source/README.md). Use the SVG/PNG assets for product materials, and the raster concept board as the reference.
 

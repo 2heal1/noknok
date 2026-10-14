@@ -81,6 +81,30 @@ jobs:
           printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
           printf 'Verified stable package: `@noknok/cli@%s`\n' "$version" >> "$GITHUB_STEP_SUMMARY"
 
+  archive:
+    name: Archive npm release and source tag
+    needs: stable
+    if: needs.stable.outputs.published-version != '' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out release tooling and complete main history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.18.1
+          package-manager-cache: false
+      - name: Record the published source without claiming deployment success
+        env:
+          NOKNOK_RELEASE_VERSION: ${{ needs.stable.outputs.published-version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/github-release.ts --version "$NOKNOK_RELEASE_VERSION"
+
   deploy:
     name: Deploy verified stable release
     needs: stable

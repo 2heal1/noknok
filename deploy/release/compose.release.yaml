@@ -8,6 +8,7 @@ services:
       NOKNOK_DATA_DIR: /data
       # No backend ports are published; Caddy overwrites forwarded client IPs.
       NOKNOK_TRUST_PROXY: "true"
+      NOKNOK_ADMIN_KEY_HASH: ${NOKNOK_ADMIN_KEY_HASH:-}
       NODE_OPTIONS: --max-old-space-size=192
     volumes: ["control:/data"]
     restart: unless-stopped

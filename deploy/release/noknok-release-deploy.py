@@ -128,12 +128,26 @@ def bootstrap(config, image):
             'env': str(directory / 'deployment.env'), 'directory': str(original.parent), 'kind': 'bootstrap'}
 
 
+def admin_key_hash():
+    # Optional operator-only configuration, never supplied by the SSH deploy caller.
+    path = CONFIG.with_name('admin-key.sha256')
+    if not path.exists():
+        return ''
+    trusted(path)
+    if path.stat().st_mode & 0o077 or path.stat().st_size > 65:
+        raise DeploymentError('Admin key digest must be an owner-only file with a SHA-256 digest.')
+    value = path.read_text().strip()
+    if not re.fullmatch(r'[a-f0-9]{64}', value):
+        raise DeploymentError('Admin key digest is invalid.')
+    return value
+
+
 def release_spec(config, version, image):
     directory = snapshot_dir()
     copy_private(BUNDLE / 'compose.release.yaml', directory / 'compose.yaml')
     values = {'NOKNOK_IMAGE': image, 'NOKNOK_DOMAIN': config['domain'], 'NOKNOK_CONTROL_VOLUME': config['controlVolume'],
               'NOKNOK_CADDY_DATA_VOLUME': config['caddyDataVolume'], 'NOKNOK_CADDY_CONFIG_VOLUME': config['caddyConfigVolume'],
-              'NOKNOK_CADDYFILE': str(BUNDLE / 'Caddyfile.hosted')}
+              'NOKNOK_CADDYFILE': str(BUNDLE / 'Caddyfile.hosted'), 'NOKNOK_ADMIN_KEY_HASH': admin_key_hash()}
     env = directory / 'deployment.env'
     env.write_text(''.join(f'{key}={value}\n' for key, value in values.items()))
     env.chmod(0o600)

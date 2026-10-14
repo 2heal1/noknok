@@ -10,6 +10,7 @@ function integer(env: NodeJS.ProcessEnv, key: string, fallback: number, max: num
 export function hostedDeploymentConfig(env: NodeJS.ProcessEnv = process.env): HostedServiceOptions {
   if (env.NOKNOK_TRUST_PROXY !== undefined && !['true', 'false'].includes(env.NOKNOK_TRUST_PROXY)) throw new TypeError('NOKNOK_TRUST_PROXY must be true or false.');
   return {
+    adminKeyHash: env.NOKNOK_ADMIN_KEY_HASH || undefined,
     dataDir: env.NOKNOK_DATA_DIR, publicUrl: env.NOKNOK_PUBLIC_URL,
     trustProxy: env.NOKNOK_TRUST_PROXY === 'true',
     port: integer(env, 'PORT', 4317, 65535),

@@ -101,6 +101,7 @@ export interface MeetingOptions {
   authorizeCreate?: (req: MeetingRequest, body: Record<string, unknown>) => MeetingActor | undefined;
   beforeCreate?: (actor?: MeetingActor) => void;
   beforeMutation?: (room: MeetingRoom, participant: MeetingParticipant, operation: string) => void;
+  onBodyState?: (state: 'delivered' | 'expired' | 'recipient_unavailable') => void;
   onEvent?: (room: MeetingRoom, event: MeetingEvent) => void;
 }
 export interface DeliveryReceipt { seq: number; token: string }

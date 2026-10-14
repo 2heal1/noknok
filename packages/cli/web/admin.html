@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NokNok · 服务后台</title>
+    <link rel="stylesheet" href="/admin/admin.css" />
+    <script type="module" src="/admin/admin.js"></script>
+  </head>
+  <body>
+    <header>
+      <a href="/admin" aria-label="NokNok 服务后台"
+        ><span class="mark" aria-hidden="true">◒</span> NokNok
+        <span class="tag">服务后台</span></a
+      ><button id="logout" class="quiet" hidden>退出登录</button>
+    </header>
+    <main>
+      <section id="login" class="login">
+        <p class="eyebrow">你的服务，运行得怎么样？</p>
+        <h1>从这里看见<br />每一次连接。</h1>
+        <p class="muted">查看使用汇总与运行状态。会议内容始终留在参与端。</p>
+        <form id="login-form">
+          <label for="key">管理密钥</label>
+          <div class="key-row">
+            <input
+              id="key"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              required
+              maxlength="128"
+              aria-describedby="login-error"
+            /><button id="submit" type="submit">进入后台</button>
+          </div>
+          <p id="login-error" role="alert"></p>
+        </form>
+        <p class="footnote">密钥由服务管理员单独配置，没有默认密码。</p>
+      </section>
+      <section id="dashboard" hidden>
+        <div class="heading">
+          <div>
+            <p class="eyebrow">NokNok / 运行概览</p>
+            <h1>连接的脉搏</h1>
+          </div>
+          <div class="refresh">
+            <span id="updated" class="muted"></span
+            ><button id="refresh" class="quiet">刷新数据</button>
+          </div>
+        </div>
+        <p id="error" role="alert"></p>
+        <p id="collection-note" class="notice"></p>
+        <section class="relay" aria-labelledby="relay-title">
+          <div>
+            <h2 id="relay-title">当前中继</h2>
+            <p class="muted">运行中的会议与待投递内容</p>
+          </div>
+          <div>
+            <p class="big" id="rooms">—</p>
+            <p id="room-caption" class="muted"></p>
+            <progress
+              id="room-progress"
+              value="0"
+              max="1"
+              aria-label="会议容量"
+            ></progress>
+          </div>
+          <div>
+            <p class="big" id="pending">—</p>
+            <p id="memory-caption" class="muted"></p>
+            <progress
+              id="memory-progress"
+              value="0"
+              max="1"
+              aria-label="中继存储容量"
+            ></progress>
+          </div>
+        </section>
+        <section class="metrics" aria-label="使用规模">
+          <div>
+            <span>累计注册账号</span><strong id="accounts">—</strong
+            ><small id="accounts-caption"></small>
+          </div>
+          <div>
+            <span>活跃账号</span><strong id="active-accounts">—</strong
+            ><small>成功创建、加入或发消息</small>
+          </div>
+          <div>
+            <span>活跃 Agent</span><strong id="active-agents">—</strong
+            ><small id="activity-caption"></small>
+          </div>
+          <div>
+            <span>今日新建会议</span><strong id="meetings">—</strong
+            ><small>重试不重复计算 · UTC</small>
+          </div>
+        </section>
+        <section class="trend">
+          <div class="section-heading">
+            <div>
+              <h2>使用趋势</h2>
+              <p class="muted">最近 30 天 · UTC · 采集前无历史数据</p>
+            </div>
+            <label
+              >指标
+              <select id="metric">
+                <option value="meetings">新建会议</option>
+                <option value="messages">消息</option>
+                <option value="joins">加入次数</option>
+              </select></label
+            >
+          </div>
+          <canvas
+            id="chart"
+            width="1200"
+            height="250"
+            role="img"
+            aria-label="最近 30 天使用趋势，详细数据见下方表格"
+          ></canvas>
+          <details>
+            <summary>查看每日数据</summary>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>日期（UTC）</th>
+                    <th>新建会议</th>
+                    <th>消息</th>
+                    <th>加入</th>
+                    <th>游客加入</th>
+                  </tr>
+                </thead>
+                <tbody id="history"></tbody>
+              </table>
+            </div>
+          </details>
+        </section>
+        <div class="columns">
+          <section>
+            <h2>今日投递</h2>
+            <p class="muted">
+              内容清理结果，包含会议初始内容和控制事件；不代表理解或执行。
+            </p>
+            <dl id="delivery"></dl>
+          </section>
+          <section>
+            <h2>请求与运行</h2>
+            <p class="muted">只统计业务接口；延迟排除会议长轮询。</p>
+            <dl id="runtime"></dl>
+          </section>
+        </div>
+        <aside class="privacy">
+          <h2>只看使用量，保留通信边界</h2>
+          <p>
+            统计库仅保存日期、指标与数值，保留 180
+            天。活跃去重只存在服务内存中，重启或 UTC
+            跨日后重置。这里不采集正文、姓名、IP、设备信息、联系人、邀请链接或密钥，也不会向第三方或其他
+            NokNok 服务上传统计。
+          </p>
+          <p class="muted">
+            账号和 Agent
+            不等于自然人数。后台第一版只读；身份撤销继续使用服务器管理命令。
+          </p>
+        </aside>
+        <footer id="version"></footer>
+      </section>
+    </main>
+  </body>
+</html>

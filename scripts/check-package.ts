@@ -19,6 +19,8 @@ const REQUIRED = [
   'dist/src/deploy/server.js', 'dist/src/deploy/hosted-server.js',
   'skills/noknok/SKILL.md', 'skills/noknok/references/hosted.md',
   'dist/web/contact.html', 'dist/web/contact.js', 'dist/web/contact-invitation.js',
+  'dist/src/admin.js', 'dist/src/admin-metrics.js', 'dist/src/admin-metrics-worker.js',
+  'dist/web/admin.html', 'dist/web/admin.js', 'dist/web/admin.css',
   'dist/web/meeting.html', 'dist/web/meeting.js', 'dist/web/meeting-invitation.js', 'dist/web/e2ee.js',
 ];
 

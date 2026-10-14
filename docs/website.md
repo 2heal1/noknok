@@ -1,8 +1,20 @@
 # Product website
 
-The public product website lives in `website/`. It is a standalone static site with no build step or third-party runtime dependencies. The homepage introduces NokNok, illustrates two demo scenarios, reserves a place for the future recording, and links to a public guide at `guide.html`.
+The public product website lives in `website/`. It is a standalone static site with no build step or third-party runtime dependencies. The homepage uses a centered headline, a short subtitle, a large media area, two concise feature rows, and a compact self-hosting/source section. It illustrates two demo scenarios, reserves a place for the future recording, and links to the full public guide at `guide.html`.
 
 The conversations and meeting shown on the website are **illustrative examples**. The website does not connect to a NokNok service, send agent messages, create meeting invitations, or join a real meeting.
+
+## Page structure and visual direction
+
+The visual reference is the [ChatGPT dots page](https://chatgpt.com/zh-Hans-CN/features/dots/?openaicom_referred=true): ample space, a centered hero, large media, and brief feature descriptions. This is a reference for simplicity and hierarchy; the site uses NokNok's own content and does not copy the reference's assets or claims.
+
+- A compact navigation leads into “让你的 Agent，找到他的 Agent。” and the subtitle “即时沟通，把事情聊清楚。”.
+- The off-white page, grayscale text, softly colored illustrations, black pill-shaped links, and large rounded media area keep the focus on the product interaction.
+- Two scene selectors, “同步进展” and “邀请开会”, switch between illustrative conversations while no recording is configured.
+- Two feature rows explain contacting an agent, with the wake-up condition close to the claim, and a group text meeting that also welcomes people without an agent.
+- A compact ending links to self-hosting guidance and the source. The license note belongs in the source area. The footer marks the product preview and points to the current E2EE and real-host wake-up status.
+
+The homepage has no FAQ, long deployment section, repeated call-to-action blocks, or walkthrough modal. Readers follow a normal script link for the complete storyboard. `guide.html` retains the detailed setup instructions, network and identity boundaries, FAQ, and release conditions in the same grayscale visual style. Keep these details in the guide when shortening homepage copy.
 
 ## Local preview
 
@@ -30,7 +42,7 @@ This change prepares the website source and local preview. **No public deploymen
 
 ## Add the recording
 
-The recording has not been produced yet. Until a video source is configured, the homepage displays the planned demo and labels its sample conversations accordingly.
+The recording has not been produced yet. Until a video source is configured, the large media area displays the two selectable illustrative scenes. A short label identifies this as an illustration awaiting a recording, and a normal link opens the full demo script. No empty play button or walkthrough modal stands in for an actual recording.
 
 1. Place the recording and optional poster and captions in `website/media/` (create the directory when needed).
 2. Edit the `siteMedia` export in `website/content.js`:
@@ -45,6 +57,6 @@ The recording has not been produced yet. Until a video source is configured, the
 
 3. Preview the site and verify playback, controls, captions, and the layout on both mobile and desktop before publishing.
 
-Use a browser-compatible MP4 or WebM file. The native video player is rendered only when `src` is set; leave `src` empty to keep the planned-demo state. Poster and WebVTT captions are optional, although captions are recommended for accessibility. Prefer self-hosted relative URLs so the website remains portable, including under a subpath. No external video embed or analytics integration is needed.
+Use a browser-compatible MP4 or WebM file. The native video player is rendered in the large media area only when `src` is set; leave `src` empty to keep the selectable illustrative scenes. The player uses native controls and does not autoplay with sound. Poster and WebVTT captions are optional, although captions are recommended for accessibility. Prefer self-hosted relative URLs so the website remains portable, including under a subpath. No external video embed or analytics integration is needed.
 
 The proposed recording connects a task handoff to a joint decision meeting. Follow the [demo script](demo-script.md) and [product brief](product-brief.md) when updating the recording or website copy. Keep a clear distinction between verified product behavior and illustrative UI, and do not describe an unreleased recording as a live demonstration.

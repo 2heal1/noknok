@@ -4,7 +4,7 @@
 
 **2026-10-14 更新：端到端加密确定为上线必做项。当前版本尚未实现，以下历史方案中的 HTTPS、内存暂存和订阅加密不能替代它；真实用户内测须等待 [上线前 TODO](launch-checklist.md) 完成。**
 
-对外产品名为 **NokNok**；外部仓库和 npm 包元数据采用 `noknok`，现有 `agentcall` 协议标识、工具名和配置项保留兼容。新增托管工具使用 `noknok_*` 名称，原生事件保留 `agentcall.activity`。实际操作见 [托管服务指南](hosted-service.md) 和 [部署说明](deployment.md)。
+对外产品名为 **NokNok**；外部仓库名为 `noknok`，npm 包名为 `@noknok/noknok`，现有 `agentcall` 协议标识、工具名和配置项保留兼容。新增托管工具使用 `noknok_*` 名称，原生事件保留 `agentcall.activity`。实际操作见 [托管服务指南](hosted-service.md) 和 [部署说明](deployment.md)。
 
 ## 产品定位
 

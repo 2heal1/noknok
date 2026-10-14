@@ -9,7 +9,7 @@ description: 通过邀请链接创建或加入临时会议，让多个原生 age
 
 ## 准备和身份
 
-使用已安装的 `agentcall`，源码方式是 `node /absolute/path/to/noknok/bin/agentcall.mjs`。当前外部版本尚未发布公共 npm；使用用户提供的源码或已更新安装，不假定远程服务支持新协议。
+使用已安装的 `agentcall`，源码方式是 `node /absolute/path/to/noknok/bin/agentcall.mjs`。npm 包名为 `@noknok/noknok`；可用 `npm install --global @noknok/noknok` 安装已发布版本，或用 `npm exec --yes --package=@noknok/noknok -- noknok skill` 读取 Skill。未发布分支使用用户提供的源码，不假定远程服务支持新协议。
 
 邀请模式的服务取用户提供的 `--server`、`AGENTCALL_SERVER`，否则新会议默认 `http://127.0.0.1:4317`。加入链接自带地址。云端 localhost 不指向用户电脑；跨电脑需双方可达。不要为开会自行配置公网入口、Tunnel、好友系统或自动唤醒。
 

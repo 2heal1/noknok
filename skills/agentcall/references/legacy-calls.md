@@ -9,7 +9,7 @@ description: Use NokNok to generate a friend link, add an agent contact, call a 
 
 ## 好友通信：由 Agent 完成初始化
 
-用户只需说“生成我的交友链接”“添加这个好友”“联系这个好友”。不要要求用户编写名称、存储目录、角色配置或完整命令。使用本地源码 CLI（当前 npm 0.5.0 尚未发布此功能）；完整说明在 `../../../docs/local-contacts.md`。
+用户只需说“生成我的交友链接”“添加这个好友”“联系这个好友”。不要要求用户编写名称、存储目录、角色配置或完整命令。使用本地源码 CLI；完整说明在 `../../../docs/local-contacts.md`。
 
 1. **确认自己的绑定。** 若本会话已获得 `localAgent`，后续所有命令加 `--agent <自己的 localAgent>`，包括 `send/receive/finish/history/view/sessions`；宿主已绑定 `AGENTCALL_AGENT` 或 MCP 时自动复用。不要扫描硬盘、选用“最近的/唯一的身份”，或读对方的目录。已有明确属于自己的 `--state-dir` 仍可继续使用，无需迁移。
 2. **首次生成链接。** 没有自己的绑定时执行 `agentcall friend-link`。若从可信宿主信息或自身上下文明确知道自己运行在 dot，自动加 `--product dot`；豆包工作加 `--product doubaowork`，其他已知产品使用对应产品名。CLI 分别生成 `agent-dot`、`agent-doubaowork` 等默认展示名；宿主也可设置 `AGENTCALL_PRODUCT`。不需要用户填写名称，不通过系统用户名、项目目录或其他 Agent 的资料猜产品。产品未知时使用通用名称 `agent`，不要伪称自己属于某个产品。用户明确指定的名称用 `--name`，优先于产品默认名。CLI 自动生成独立身份和目录，默认使用本地交换机 `http://127.0.0.1:4317`。保留返回的 `localAgent`，仅向用户展示名称、`contactLink` 和有效期。
@@ -42,7 +42,7 @@ description: Use NokNok to generate a friend link, add an agent contact, call a 
 
 ## 普通邀请的准备
 
-- 当前使用源码 CLI `node /absolute/path/to/noknok/bin/noknok.mjs`，路径以实际安装位置为准。下文 `agentcall` 为兼容命令名，可替换为这个源码前缀。外部包名为 `noknok`，尚未发布公共 npm，不假定可通过 npx 安装。
+- 当前使用源码 CLI `node /absolute/path/to/noknok/bin/noknok.mjs`，路径以实际安装位置为准。下文 `agentcall` 为兼容命令名，可替换为这个源码前缀。npm 包名为 `@noknok/noknok`；使用已发布版本或用户提供的源码，不假定未发布分支可通过 npx 安装。
 - `agentcall --help` 列出能力；`agentcall skill` 或 `agentcall --skill` 输出本说明，`agentcall skill --path` 返回安装包内的 Skill 路径。通话名称由 agent 根据当前会话自行选择，无需主人配置角色；接通后直接向对方了解它的环境与能力，不假设已知对方工作区。
 - 默认使用本机交换机 `http://127.0.0.1:4317`，需先启动服务；跨机器使用用户提供的可达服务地址。用 `--server URL` 或 `AGENTCALL_SERVER` 覆盖，优先级为命令行参数、环境变量、本机默认地址。不同机器上的 `127.0.0.1` 指向各自本机，示例域名不提供公共服务。
 - CLI 输出 JSON。保存自己获得的 **`session`**，后续命令都使用这个本地句柄；`callId` 不是句柄。同一台机器的两个 agent 也会拿到不同的 `session`，不得混用。不要从其他 agent 的本地会话文件中获取身份。

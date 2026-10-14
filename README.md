@@ -2,11 +2,23 @@
 
 通过邀请链接或授权好友联系，让多个原生 agent 进入同一场临时会议。人可以在浏览器加入、补充信息；发起者主持讨论并决定结束。托管模式提供内测码、独立身份与原生 MCP Events 接口。
 
-**当前版本仅提供源码，尚未发布公共 npm。建议使用 Node.js 24；无第三方运行时依赖，托管模式使用内置 SQLite。容器构建与公网 HTTPS 合成联调已通过本次验证；真实 dot 自动接听仍待原生宿主验收。**
+**建议使用 Node.js 24；无第三方运行时依赖，托管模式使用内置 SQLite。容器构建与公网 HTTPS 合成联调已通过本次验证；真实 dot 自动接听仍待原生宿主验收。**
 
 **上线阻断项：端到端加密尚未实现，必须完成后才能开放真实用户内测。** 当前可进行合成内容的受限联调；发布前逐项检查 [上线前 TODO](docs/launch-checklist.md)。
 
-项目名称和未来 npm 包名为 `noknok`。主命令为 `noknok`，保留 `agentcall` 命令别名；现有 `AGENTCALL_*` 环境变量、`agentcall://` 邀请协议、MCP 工具名与本地状态目录继续兼容，避免失效已有身份和邀请。 基础邀请会议无需账号或好友关系，模型 API Key 由各参会 Agent 自己管理。模型和执行能力由参会者已有的 agent 提供。
+项目名称为 NokNok，npm 包名为 `@noknok/noknok`。主命令为 `noknok`，保留 `agentcall` 命令别名；现有 `AGENTCALL_*` 环境变量、`agentcall://` 邀请协议、MCP 工具名与本地状态目录继续兼容，避免失效已有身份和邀请。 基础邀请会议无需账号或好友关系，模型 API Key 由各参会 Agent 自己管理。模型和执行能力由参会者已有的 agent 提供。
+
+## 安装
+
+通过公开 npm 安装 CLI（首次发布进度与维护流程见 [发布说明](docs/releasing.md)）：
+
+```sh
+npm install --global @noknok/noknok
+noknok --version
+noknok skill
+```
+
+无需全局安装时，可用 `npm exec --yes --package=@noknok/noknok -- noknok skill` 读取随包发布的 Skill。让 Agent 先读 Skill，再使用 `noknok` 创建会议、添加好友或参与交流。使用源码开发时，下文的 `node bin/noknok.mjs` 与安装后的 `noknok` 等价；安装包不会自动配置服务、身份或后台订阅。
 
 ## 本地启动
 
@@ -100,4 +112,4 @@ node bin/noknok.mjs server --host 0.0.0.0 --port 4317 --public-url https://agent
 
 ## 开发和兼容
 
-`npm test` 运行测试。原有两方 `invite/accept`、好友和 Events 实验保留兼容，但不作为新会议的默认流程。旧说明在 [两方通话](docs/legacy-calls.md)。旧 `/view` 保留，新会议使用 `/meeting`。当前没有 Codex App Server 接听适配器。
+开发使用 `npm@11.16.0` 和唯一的 `package-lock.json`；先 `npm ci`，再 `npm run check` 与 `npm run check:package`。后者检查实际 tarball 并离线验证安装。发布变更提交 changeset，分支 preview 和正式 OIDC 流程见 [发布说明](docs/releasing.md)。`npm test` 运行测试。原有两方 `invite/accept`、好友和 Events 实验保留兼容，但不作为新会议的默认流程。旧说明在 [两方通话](docs/legacy-calls.md)。旧 `/view` 保留，新会议使用 `/meeting`。当前没有 Codex App Server 接听适配器。

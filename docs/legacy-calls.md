@@ -1,4 +1,4 @@
-> 旧版两方通话/好友实验参考。新会议请使用 [当前说明](../README.md)。当前版本仅提供源码，公共 npm 尚未发布。
+> 旧版两方通话/好友实验参考。新会议请使用 [当前说明](../README.md)。npm 包名为 `@noknok/noknok`，未发布分支使用源码。
 
 # NokNok
 
@@ -6,7 +6,7 @@
 
 **当前版本：0.5.0。Node.js 22+，无第三方运行时依赖，不需要模型 API Key。** 模型和执行能力由双方已有的 agent 提供。默认使用 HTTP 长轮询；两端都主动连接交换机，不需要向对方暴露本地端口。
 
-**源码新增：本地好友与后台接收。** 使用 `npm run start:local` 启动本地内存交换机。让 Agent 读取 Skill 后，直接说“生成交友链接”“添加这个好友”“联系好友”；Agent 提供已知产品名，CLI 自动生成 `agent-dot`、`agent-doubaowork` 等展示名及独立身份、目录。dot 完成一次性[后台接收与 MCP Events 接入](background-receiver.md)后，独立后台组件接听并保存消息，Events 通知宿主处理；当前模型任务可以结束，添加好友不再需要模型等待。呼叫立即返回 Session 和查看链接。操作见 [本地好友流程](local-contacts.md)。此功能尚未发布到 npm；真实 dot 的事件触发需连接对应账号的 Events 插件并验证。
+**源码新增：本地好友与后台接收。** 使用 `npm run start:local` 启动本地内存交换机。让 Agent 读取 Skill 后，直接说“生成交友链接”“添加这个好友”“联系好友”；Agent 提供已知产品名，CLI 自动生成 `agent-dot`、`agent-doubaowork` 等展示名及独立身份、目录。dot 完成一次性[后台接收与 MCP Events 接入](background-receiver.md)后，独立后台组件接听并保存消息，Events 通知宿主处理；当前模型任务可以结束，添加好友不再需要模型等待。呼叫立即返回 Session 和查看链接。操作见 [本地好友流程](local-contacts.md)。具体可用版本以 npm 发布记录为准；真实 dot 的事件触发需连接对应账号的 Events 插件并验证。
 
 **源码新增：无 Tunnel 的公网通信入口。** `agentcall gateway` 同时提供内存交换机和绑定单个身份的 MCP 入口；本机接收器主动连接公网服务，只处理限定的通信操作。原生助手保留自己的模型与工具。详见 [设计与边界](native-agent-design.md)、[部署和 dot 验收提示词](background-receiver.md)。MCP 工具接入与后台唤醒是两种能力；本地模拟测试不代表真实 dot 已通过验收。
 
@@ -20,7 +20,7 @@ node bin/noknok.mjs skill
 node bin/noknok.mjs skill --path
 ```
 
-`noknok` 是外部包名，当前尚未发布公共 npm。后续发布后可使用包内 CLI；当前邀请详情中的 npx 指令须替换为接听方本地源码 CLI。`agentcall` 作为兼容命令别名，以下示例可替换为 `node /absolute/path/to/noknok/bin/noknok.mjs`。
+`@noknok/noknok` 是 npm 包名，`noknok` 是 CLI 命令。使用已发布版本时可直接使用邀请中的指令；未发布版本须替换为接听方本地源码 CLI。`agentcall` 作为兼容命令别名，以下示例可替换为 `node /absolute/path/to/noknok/bin/noknok.mjs`。
 
 默认服务是 `http://127.0.0.1:4317`。发起方需自行启动服务，跨机器时通过 `--server URL` 或 `AGENTCALL_SERVER` 使用双方可达的地址；接听端从邀请取得地址。优先级为命令行参数、环境变量、本机默认地址。用 `view <session>` 获取只读页面，示例域名 `relay.example.com` 不提供实际公共服务。
 

@@ -1,5 +1,5 @@
 {
-  "name": "noknok",
+  "name": "@noknok/noknok",
   "version": "0.6.0",
   "description": "Lightweight, self-hosted meetings for native agents and people",
   "type": "module",
@@ -11,7 +11,8 @@
     "agentcall": "bin/agentcall.mjs"
   },
   "publishConfig": {
-    "registry": "https://registry.npmjs.org"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "repository": {
     "type": "git",
@@ -24,14 +25,20 @@
     "test": "node --test test/*.test.mjs",
     "demo": "node scripts/demo.mjs",
     "poc:mcp-events": "node poc/mcp-events/server.mjs",
-    "start:hosted": "node bin/noknok.mjs hosted-server"
+    "start:hosted": "node bin/noknok.mjs hosted-server",
+    "check": "npm test",
+    "check:package": "node scripts/check-package.mjs",
+    "changeset": "changeset",
+    "version": "changeset version && npm install --package-lock-only --ignore-scripts",
+    "release": "changeset publish"
   },
   "files": [
     "bin",
     "src",
     "web",
     "skills",
-    "scripts",
+    "scripts/demo.mjs",
+    "scripts/probe-mcp-events.mjs",
     "deploy",
     "poc/mcp-events",
     "README.md",
@@ -42,5 +49,9 @@
   "homepage": "https://github.com/2heal1/noknok#readme",
   "bugs": {
     "url": "https://github.com/2heal1/noknok/issues"
+  },
+  "packageManager": "npm@11.16.0",
+  "devDependencies": {
+    "@changesets/cli": "2.31.1"
   }
 }

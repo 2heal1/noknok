@@ -3,24 +3,25 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { resolve, join } from 'node:path';
 import { homedir } from 'node:os';
-import { fail } from './client.js';
+import { api, fail } from './client.js';
 import { startRelay } from './relay.js';
 import { resolveAgentProfile } from './profiles.js';
 import { meetingCommand, decodeMeetingLink } from './meeting-client.js';
 import { packageFile } from './asset-paths.js';
 import type { CliOptions } from './runtime-types.js';
-import { hostedCommand, decodeHostedContact } from './hosted-client.js';
+import { hostedCommand, decodeHostedContact, selectedMeetingService } from './hosted-client.js';
+import { DEFAULT_HOSTED_SERVER } from './service-config.js';
 
 const PACKAGE = JSON.parse(await readFile(packageFile('package.json'), 'utf8'));
-const DEFAULT_SERVER = 'http://127.0.0.1:4317';
 const SKILL_PATH = fileURLToPath(packageFile('skills/noknok/SKILL.md'));
 
 const HELP = `${PACKAGE.name} ${PACKAGE.version} — lightweight meetings for agents and people (Node.js >=22.13)
 
-Hosted beta (contacts plus optional native MCP Events):
-  noknok hosted setup --server URL --code-file FILE [--product PRODUCT]
-  noknok hosted friend-link|friends|inbox|subscription-status --agent HANDLE
-  noknok hosted friend-add LINK --agent HANDLE
+Hosted service (automatic first-use identity plus optional native MCP Events):
+  noknok hosted setup [--server URL] [--product PRODUCT]
+  noknok hosted friend-link [--agent HANDLE] [--server URL] [--product PRODUCT]
+  noknok hosted friend-add LINK [--agent HANDLE] [--product PRODUCT]
+  noknok hosted friends|inbox|subscription-status --agent HANDLE
   noknok hosted friend-remove PEER --agent HANDLE
   noknok hosted call PEER --purpose TEXT --agent HANDLE
   noknok hosted accept INVITATION_ID --agent HANDLE
@@ -30,7 +31,7 @@ Hosted setup stores credentials locally. Keep localAgent; never guess a profile.
 Friend addition returns immediately. Native Events subscription is a separate action.
 Hosted call/accept/create return am_ sessions compatible with meeting send/receive.
 
-Invitation meetings (basic relay creation; hosted creation uses hosted create):
+Invitation meetings (automatic hosted setup; private relays also supported):
   noknok meeting create --purpose TEXT [--context TEXT|--context-file FILE] [--product PRODUCT] [--server URL]
   noknok meeting join LINK [--product PRODUCT] [--name NAME]
   noknok meeting send SESSION --text TEXT [--type request|message|result|progress|waiting_for_user] [--to PARTICIPANT] [--reply-to SEQ]
@@ -41,7 +42,7 @@ Invitation meetings (basic relay creation; hosted creation uses hosted create):
   noknok meeting leave SESSION
   noknok meeting sessions
 
-Meetings default to http://127.0.0.1:4317 or NOKNOK_SERVER. Creation returns a reusable
+Meetings default to https://api.noknok.cloud or NOKNOK_SERVER. Creation returns a reusable
 invitation for agents or browser guests, a private read-only view link, and your am_ session.
 Save localAgent and use --agent HANDLE for later commands; profiles are created automatically.
 Only the host may end a meeting. ready signals agreement but never closes the meeting itself.
@@ -80,14 +81,13 @@ Options:
 
 Hosted service operator commands (Node.js 22.13+):
   noknok hosted-server --data-dir DIR --public-url ORIGIN [--host 127.0.0.1] [--port 4317]
-  noknok beta-code --data-dir DIR --public-url ORIGIN [--uses 1] [--output-file PRIVATE_FILE]
   noknok revoke-agent --data-dir DIR --public-url ORIGIN --agent-id ID
 
 Environment:
   NOKNOK_DATA_DIR        Persistent hosted control state, never chat transcripts
   NOKNOK_PUBLIC_URL      Canonical hosted HTTPS origin (HTTP loopback for tests)
   NOKNOK_DELIVERY_TTL_SECONDS Hosted pending-body deadline (default: 300, maximum: 3600)
-  NOKNOK_SERVER       Override the default relay (${DEFAULT_SERVER})
+  NOKNOK_SERVER       Override the default meeting/hosted service (${DEFAULT_HOSTED_SERVER})
   NOKNOK_HOME         Local state directory
   NOKNOK_AGENT        Optional identity binding, equivalent to --agent HANDLE
   NOKNOK_PRODUCT      Agent product supplied by the host; --product overrides it
@@ -109,7 +109,6 @@ delivery is not proof that a host ran its agent. Plaintext remote-tool fallback 
 
 const COMMAND_OPTIONS: Record<string, string[]> = {
   'hosted-server': ['host', 'port', 'public-url', 'data-dir'],
-  'beta-code': ['public-url', 'data-dir', 'uses', 'expires-hours', 'output-file'],
   'revoke-agent': ['public-url', 'data-dir', 'agent-id'],
   server: ['host', 'port', 'public-url', 'retention-seconds', 'meeting-ttl-seconds'],
   'local-server': ['port', 'retention-seconds', 'meeting-ttl-seconds'],
@@ -118,10 +117,10 @@ const COMMAND_OPTIONS: Record<string, string[]> = {
 };
 
 const HOSTED_OPTIONS: Record<string, string[]> = {
-  setup: ['server', 'code-file', 'name', 'product'],
-  identity: [], 'friend-link': [], 'friend-add': [], friends: [], 'friend-remove': [],
+  setup: ['server', 'name', 'product'],
+  identity: [], 'friend-link': ['server', 'product', 'name'], 'friend-add': ['server', 'product', 'name'], friends: [], 'friend-remove': [],
   call: ['purpose', 'context', 'context-file', 'name', 'request-id'],
-  create: ['purpose', 'context', 'context-file', 'name', 'request-id'],
+  create: ['purpose', 'context', 'context-file', 'name', 'product', 'server', 'request-id'],
   accept: ['name', 'request-id'], inbox: [], 'subscription-status': [], config: [],
 };
 
@@ -209,7 +208,7 @@ function expectArgs(args: string[], count: number) {
 export async function main(argv: string[], { signal, emit }: RunOptions = {}) {
   const parsed = parse(argv);
   const { command, args, options, flags } = parsed;
-  if (flags.help || flags.version || !command || ['help', 'skill', 'server', 'local-server', 'hosted-server', 'beta-code', 'revoke-agent'].includes(command)) {
+  if (flags.help || flags.version || !command || ['help', 'skill', 'server', 'local-server', 'hosted-server', 'revoke-agent'].includes(command)) {
     return execute(parsed, { signal, emit });
   }
   if (command === 'meeting' && args[0] === 'join') {
@@ -217,9 +216,10 @@ export async function main(argv: string[], { signal, emit }: RunOptions = {}) {
     decodeMeetingLink(args[1]);
   }
   if (command === 'hosted' && args[0] === 'friend-add') { expectArgs(args, 2); decodeHostedContact(args[1]); }
+  if ((command === 'meeting' || command === 'hosted') && args[0] === 'create' && !options.purpose?.trim()) throw fail('INVALID_ARGUMENT', 'Provide --purpose with the meeting goal.');
   const binding = await resolveAgentProfile({
     agent: options.agent ?? process.env.NOKNOK_AGENT,
-    stateDir: options['state-dir'], create: (command === 'hosted' && args[0] === 'setup') || command === 'mcp' || (command === 'meeting' && ['create', 'join'].includes(args[0])),
+    stateDir: options['state-dir'], create: (command === 'hosted' && ['setup', 'create', 'friend-link', 'friend-add'].includes(args[0])) || command === 'mcp' || (command === 'meeting' && ['create', 'join'].includes(args[0])),
   });
   if (!binding && command === 'hosted') throw fail('AGENT_REQUIRED', 'Run hosted setup first, then reuse its exact --agent handle. Do not choose another agent profile from disk.');
   if (!binding && command === 'mcp') throw fail('AGENT_REQUIRED', 'Reuse the localAgent returned by meeting create/join or hosted setup.');
@@ -251,7 +251,7 @@ async function execute({ command, args, options, flags }: ParsedCommand, { signa
     if (options.path !== undefined) throw fail('INVALID_ARGUMENT', '--path is a flag and does not take a value.');
     return process.stdout.write(flags.path ? `${SKILL_PATH}\n` : await readFile(SKILL_PATH, 'utf8'));
   }
-  if (['hosted-server', 'beta-code', 'revoke-agent'].includes(command)) {
+  if (['hosted-server', 'revoke-agent'].includes(command)) {
     expectArgs(args, 0);
     const dataDir = options['data-dir'] || process.env.NOKNOK_DATA_DIR;
     const publicUrl = options['public-url'] || process.env.NOKNOK_PUBLIC_URL;
@@ -272,19 +272,18 @@ async function execute({ command, args, options, flags }: ParsedCommand, { signa
         if (!options['agent-id']) throw fail('INVALID_ARGUMENT', 'Provide --agent-id from the identity to revoke.');
         control.revokeAgent(options['agent-id']); return output({ revoked: true, agentId: options['agent-id'] });
       }
-      const uses = number(options.uses, 1, '--uses', 10);
-      const hours = number(options['expires-hours'], 168, '--expires-hours', 8760);
-      const minted = control.mintCode({ uses, expiresInMs: hours * 3600000 });
-      if (options['output-file']) {
-        const { writeFile } = await import('node:fs/promises');
-        await writeFile(options['output-file'], minted.code + '\n', { mode: 0o600, flag: 'wx' });
-        return output({ outputFile: resolve(options['output-file']), uses: minted.uses, expiresAt: minted.expiresAt });
-      }
-      return output(minted);
     } finally { control.close(); }
   }
   const directory = options['state-dir'] || process.env.NOKNOK_HOME || join(homedir(), '.noknok');
   if (command === 'hosted') return output(await hostedCommand(args[0], args.slice(1), options, { signal, textInput }));
+  if (command === 'meeting' && args[0] === 'create') {
+    const server = await selectedMeetingService(options, signal);
+    if (new URL(server).pathname !== '/') throw fail('INVALID_SERVER', 'Meeting service must use an HTTP(S) origin without a path prefix.');
+    const discovery = await api(server, '/health', { method: 'GET', signal });
+    if (discovery.mode === 'hosted') return output(await hostedCommand('create', [], { ...options, server }, { signal, textInput }));
+    if (server === DEFAULT_HOSTED_SERVER) throw fail('INVALID_RESPONSE', 'Official service did not report hosted mode.');
+    return output(await meetingCommand('create', [], { ...options, server }, { signal, textInput }));
+  }
   if (command === 'meeting') return output(await meetingCommand(args[0], args.slice(1), options, { signal, textInput }));
   if (command === 'mcp') {
     expectArgs(args, 0);

@@ -5,6 +5,7 @@ services:
     environment:
       NOKNOK_PUBLIC_URL: https://${NOKNOK_DOMAIN:?set NOKNOK_DOMAIN}
       NOKNOK_DATA_DIR: /data
+      NOKNOK_MAX_ACCOUNTS: ${NOKNOK_MAX_ACCOUNTS:-1000}
       NOKNOK_DELIVERY_TTL_SECONDS: ${NOKNOK_DELIVERY_TTL_SECONDS:-300}
       NODE_OPTIONS: --max-old-space-size=192
     volumes:

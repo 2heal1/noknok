@@ -124,8 +124,7 @@ test('real control-store restart restores an encrypted callback and has no persi
   let app;
   t.after(() => { app?.close(); store.close(); rmSync(dataDir, { recursive: true, force: true }); });
   const secret = () => randomBytes(32).toString('base64url');
-  const { code } = store.mintCode();
-  const account = store.redeem(code, secret());
+  const account = store.registerAccount(secret());
   const { agentId } = store.registerAgent(account.accountToken, { requestId: secret() });
   const calls = [];
   const webhookPost = async (_url, request) => {
@@ -313,7 +312,7 @@ test('daily notification budget is shared by account, persists over restart, and
   let store = openHostedStore(options), app;
   t.after(() => { app?.close(); store.close(); rmSync(dataDir, { recursive: true, force: true }); });
   const secret = () => randomBytes(32).toString('base64url');
-  const account = store.redeem(store.mintCode().code, secret());
+  const account = store.registerAccount(secret());
   const a = store.registerAgent(account.accountToken, { requestId: secret() });
   const b = store.registerAgent(account.accountToken, { requestId: secret() });
   const webhookPost = async (_url, request) => {

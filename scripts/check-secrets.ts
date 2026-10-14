@@ -19,7 +19,7 @@ const RULES: SecretRule[] = [
   { id: 'CLOUD_ACCESS_KEY', pattern: /\b(?:AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16}|LTAI[A-Za-z0-9]{16,})\b/g },
   { id: 'MODEL_API_TOKEN', pattern: /\bsk-(?:proj-|ant-)?[A-Za-z0-9_-]{24,}\b/g },
   { id: 'SLACK_TOKEN', pattern: /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/g },
-  { id: 'NOKNOK_CREDENTIAL', pattern: /\b(?:nk_(?:account|agent|beta)_[A-Za-z0-9_-]{24,}|nk1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{32,}|whsec_[A-Za-z0-9+/=_-]{24,})\b/g },
+  { id: 'NOKNOK_CREDENTIAL', pattern: /\b(?:nk_[a-z]+_[A-Za-z0-9_-]{24,}|nk1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{32,}|whsec_[A-Za-z0-9+/=_-]{24,})\b/g },
   { id: 'AUTH_LITERAL', pattern: /(?:_authToken|_auth|privateKey|signingKey|api[_-]?key|access[_-]?token|secret[_-]?key|password)["']?\s*[:=]\s*["'][A-Za-z0-9+/_=.-]{24,}["']/gi },
   { id: 'NPM_AUTH_CONFIG', pattern: /(?:^|\n)[^\n=]*(?:_authToken|_auth|_password)\s*=\s*(?!\$\{)[A-Za-z0-9+/_=-]{20,}(?:\s|$)/g },
   { id: 'INTERNAL_REFERENCE', pattern: /(?:code\.byted\.org|sso\.bytedance\.com|bytedance\.larkoffice\.com|[A-Za-z0-9._-]+\.(?:boe|byted)\.(?:org|com|net)|\/Users\/bytedance\/|\/home\/bytedance\/|[A-Za-z0-9._%+-]+@bytedance\.com)/gi },

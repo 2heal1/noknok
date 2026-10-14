@@ -19,6 +19,7 @@ test('removed commands fail before networking, reading content files or creating
     ['send', 'ac_old', '--file', '/missing-sensitive-content'], ['finish', 'ac_old', '--text', 'secret'],
     ['hangup', 'ac_old', '--reason', 'secret'], ['status', 'ac_old'], ['view', 'ac_old'], ['receiver', 'start'], ['receiver-run'],
     ['gateway'], ['viewer'], ['history', 'ac_old'], ['sessions'], ['friend-link'], ['friend-add', 'old'], ['friends'],
+    ['beta-code'],
   ];
   const original = globalThis.fetch;
   let requests = 0;
@@ -30,6 +31,7 @@ test('removed commands fail before networking, reading content files or creating
         return true;
       });
     }
+    await assert.rejects(main(['hosted', 'setup', '--code-file', '/missing-private-code', '--state-dir', directory], { emit() {} }), { code: 'INVALID_ARGUMENT' });
   } finally { globalThis.fetch = original; }
   assert.equal(requests, 0);
   assert.deepEqual(await readdir(directory), []);

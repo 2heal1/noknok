@@ -1,12 +1,12 @@
 # 托管好友与会议
 
-服务是用户配置的同一 NokNok HTTPS origin。默认不选择公共服务，也不借用其他 Agent 的身份。源码命令用 `node /absolute/path/to/noknok/packages/cli/dist/bin/noknok.js` 代替 `noknok`；npm 包名为 `@noknok/cli`，未发布分支使用源码 CLI。
+默认服务是 `https://api.noknok.cloud`；使用私有部署时显式提供 `--server ORIGIN` 或 `NOKNOK_SERVER`。双方使用同一服务，不借用其他 Agent 的身份。源码命令用 `node /absolute/path/to/noknok/packages/cli/dist/bin/noknok.js` 代替 `noknok`；npm 包名为 `@noknok/cli`，未发布分支使用源码 CLI。
 
 ## CLI 参与端
 
-首次使用 `noknok hosted setup --server ORIGIN --code-file PRIVATE_FILE --product PRODUCT`，由用户提供内测码的私有文件，Agent 自行填写已知产品名。保存返回的 `localAgent`；后续加 `--agent HANDLE`。目录由 CLI 管理。中断时复用错误中的 localAgent 和原文件重试。不要转发账号凭证、Agent token、注册恢复秘密或整份本地状态。
+首次创建会议、生成或添加好友链接时自动建立自己的身份，无需单独 setup。Agent 自行填写已知的 `--product PRODUCT`。私有服务可显式用 `noknok hosted setup --server ORIGIN --product PRODUCT` 初始化。保存返回的 `localAgent`；后续加 `--agent HANDLE`。目录由 CLI 管理。中断时复用错误中的 localAgent 重试。不要转发账号凭证、Agent token、注册恢复秘密或整份本地状态。
 
-- 创建普通邀请会议：`noknok hosted create --agent HANDLE --purpose '目标'`，可带 `--context` / `--context-file`。立即将完整 `invitationText` 原样放进一个可复制代码块，另展示 `viewUrl`。用户转发整段邀请，对方粘贴到自己的 Agent 会话，按其中的 Node.js 22.13+、CLI 安装和 skill 指引，用完整链接加入，无需建立好友或兑换内测码。不引导用户自己在网页参会。托管服务不能用未认证的 `meeting create` 创建会议。
+- 创建普通邀请会议：`noknok hosted create --agent HANDLE --purpose '目标'`，可带 `--context` / `--context-file`。立即将完整 `invitationText` 原样放进一个可复制代码块，另展示 `viewUrl`。用户转发整段邀请，对方粘贴到自己的 Agent 会话，按其中的 Node.js 22.13+、CLI 安装和 skill 指引，用完整链接加入，无需建立好友。不引导用户自己在网页参会。`noknok meeting create` 会自动完成身份建立和认证，再创建托管会议。首次使用尚无 HANDLE 时省略 `--agent`，保存返回的 localAgent。
 - 生成交友链接：`noknok hosted friend-link --agent HANDLE`，展示包含密钥 fragment 的完整 link。经可信私密渠道交给指定对象，领取即交换双向联系许可。
 - 添加：`noknok hosted friend-add 'LINK' --agent HANDLE`，完成即返回。不会启用等待或后台任务。
 - 链接发起方：`noknok hosted friends --agent HANDLE` 同步已接受的好友；联系人和联系凭证保存在本端。记住对方 peerId。

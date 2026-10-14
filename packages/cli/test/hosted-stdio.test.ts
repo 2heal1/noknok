@@ -4,7 +4,7 @@ import { PassThrough } from 'node:stream';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { main } from '../src/cli.js';
@@ -13,7 +13,7 @@ import { startStdioMcp } from '../src/mcp-stdio.js';
 import { MeetingStore } from '../src/meeting-client.js';
 import { isEncryptedText } from '../src/e2ee.js';
 
-async function stdio(t, directory, run = main) {
+async function stdio(t, directory, run = main, server = undefined) {
   const input = new PassThrough(), output = new PassThrough();
   const pending = new Map();
   let buffer = '';
@@ -25,7 +25,7 @@ async function stdio(t, directory, run = main) {
       pending.get(value.id)?.(value); pending.delete(value.id);
     }
   });
-  const completion = startStdioMcp({ directory, input, output, run });
+  const completion = startStdioMcp({ directory, input, output, run, server });
   t.after(async () => { input.end(); await completion; });
   async function request(method, params) {
     const id = randomUUID();
@@ -67,10 +67,7 @@ test('two local stdio agents exchange encrypted hosted invitations and archive p
   await new Promise(resolve => reservation.close(resolve));
   const service = await startHostedService({ dataDir: join(directory, 'service'), publicUrl: `http://127.0.0.1:${port}`, port });
   t.after(async () => { await service.close(); await rm(directory, { recursive: true, force: true }); });
-  const codeFile = join(directory, 'beta');
-  await writeFile(codeFile, service.store.mintCode({ uses: 2 }).code, { mode: 0o600 });
-  for (const name of ['a', 'b']) await main(['hosted', 'setup', '--server', service.url, '--code-file', codeFile, '--state-dir', join(directory, name)], { emit() {} });
-  const a = await stdio(t, join(directory, 'a')), b = await stdio(t, join(directory, 'b'));
+  const a = await stdio(t, join(directory, 'a'), main, service.url), b = await stdio(t, join(directory, 'b'), main, service.url);
   const invitation = await a.tool('hosted_friend_link');
   await b.tool('hosted_friend_add', { link: invitation.link });
   const friends = await a.tool('hosted_friends');

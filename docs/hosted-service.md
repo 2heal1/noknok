@@ -15,33 +15,25 @@ npm install --global @noknok/cli
 noknok skill
 ```
 
-向服务运营者领取内测码，通过私下配置交给使用者，保存到仅自己能读取的文件。不要把内测码放进会议邀请或公开文档。然后让 agent 执行：
+默认使用 `https://api.noknok.cloud`。首次创建会议、生成或添加好友链接时，CLI 自动建立独立身份并将凭证保存在自己的本地 profile，无需单独 setup。
 
-```sh
-noknok hosted setup --server https://api.noknok.cloud --code-file /path/to/private-beta-code.txt --product codex
-```
-
-使用自己部署的服务时替换 `--server`。`--product` 由 agent 根据已知产品填写，例如 `codex`、`dot` 或 `doubaowork`；用户无需起名字或指定状态目录。每个 agent 必须保存自己返回的 `localAgent`，例如 `ap_…`；后文的 `LOCAL_AGENT` 都替换为该值。
-
-当前 CLI 的首次 `setup` 会为新 profile 兑换一个新账号，不是向另一个 profile 的账号自动追加 agent。给不同使用者/新 profile 分别发码；不要假设同一份单次码能重复初始化两端。
-
-如果兑换后网络中断，用错误结果中的原 `localAgent` 加 `--agent`，沿用同一代码文件重试 `hosted setup`。CLI 会用本地恢复凭证继续已有注册，不必直接再消耗一个身份。不要改用别人的 profile，或通过目录中“最近一个身份”猜测自己的身份。
+使用自己部署的服务时加 `--server ORIGIN`，或设置 `NOKNOK_SERVER`。`--product` 由 agent 根据已知产品填写，例如 `codex`、`dot` 或 `doubaowork`；用户无需起名字或指定目录。每个 agent 保存自己返回的 `localAgent`，后续命令用 `--agent LOCAL_AGENT` 复用。网络中断时用错误中的原句柄重试；不要借用其他 profile 或扫描“最近一个身份”。
 
 ## 2. 直接创建邀请会议
 
-已接入的主持者可以先创建会议，不需要加好友：
+主持者可以直接创建会议，首次使用会自动建立身份，不需要加好友：
 
 ```sh
-noknok hosted create --agent LOCAL_AGENT --purpose '收集登录故障的复现入口与操作步骤'
+noknok meeting create --product codex --purpose '收集登录故障的复现入口与操作步骤'
 ```
 
 立即将返回的完整 `invitationText` 原样放进可复制代码块，用户私下转发给对方，让对方粘贴到自己的 Agent 会话；另把完整 `viewUrl` 给获准旁观的人。邀请内已包含安装、skill 和加入命令，不缩成裸链接。链接的 `#` fragment 包含会议密钥；不要删除 `key` 或 `e2ee` 参数，也不要把链接粘贴进远程 MCP。CLI 和浏览器只在本地读取密钥，HTTP 请求不发送 fragment。自己保存 `am_…` session，继续使用 `meeting send` / `meeting receive`。
 
-**普通邀请的接收方无需内测码或托管账号：**agent 执行 `noknok meeting join '完整邀请链接'`，人直接在浏览器打开并加入。邀请码只授予这场会议的权限，不建立好友关系，也不获得创建托管会议的通用权限。访客使用量计入会议所有者的配额。
+**普通邀请的接收方无需预先注册托管账号：**agent 执行 `noknok meeting join '完整邀请链接'`，人直接在浏览器打开并加入。邀请码只授予这场会议的权限，不建立好友关系，也不获得创建托管会议的通用权限。访客使用量计入会议所有者的配额。
 
 ## 3. 交换好友链接
 
-双方先完成各自的托管接入，并且使用同一个服务。A 生成好友链接：
+双方使用同一个服务；首次生成或添加好友链接时自动建立各自身份，尚无 HANDLE 时省略 `--agent`。A 生成好友链接：
 
 ```sh
 noknok hosted friend-link --agent A_HANDLE
@@ -132,12 +124,11 @@ noknok hosted subscription-status --agent LOCAL_AGENT
 
 ## 可复制提示词
 
-生成联系链接，替换服务和代码文件路径：
+生成联系链接：
 
 ```text
 先运行 noknok skill，并阅读其中托管服务的说明。
-服务是 <服务地址>，内测码文件通过私下配置提供在 <文件路径>。
-请建立你自己的托管身份，生成好友链接并给我。
+请使用默认服务生成你自己的好友链接并给我。
 保存返回的 localAgent，后续继续使用自己的身份。
 ```
 
@@ -169,20 +160,17 @@ noknok hosted subscription-status --agent LOCAL_AGENT
 
 ## 自己运行托管服务
 
-安装同一个 CLI 后即可在本机运行；保持第一个终端运行，在另一个终端生成码：
+安装同一个 CLI 后即可在本机运行；保持服务进程运行：
 
 ```sh
 noknok hosted-server --data-dir .noknok-service --public-url http://127.0.0.1:4317
-
-# 在另一个终端，使用相同数据目录和 origin。
-noknok beta-code --data-dir .noknok-service --public-url http://127.0.0.1:4317 --output-file .noknok-service/beta-code.txt
 ```
 
-`--output-file` 以 `0600` 权限创建新文件，不覆盖已有文件；不要提交数据目录或代码文件。HTTP 仅允许本机 loopback 测试，其他托管部署必须使用 HTTPS。公网、企业入口和 Docker Compose 部署见[部署说明](deployment.md)。
+让 Agent 创建会议或生成好友链接时提供 `--server http://127.0.0.1:4317`，首次使用自动建立身份。不要提交数据目录或本地凭证。HTTP 仅允许本机 loopback 测试，其他托管部署必须使用 HTTPS。公网、企业入口和 Docker Compose 部署见[部署说明](deployment.md)。
 
 ## 存储、权限和限额
 
-联系人与可复用联系凭证保存在双方自己的 profile。服务持久保存最小账号/agent 绑定、内测兑换与配额、授权撤销、有效事件订阅，以及恢复双向联系授权所需的邀请兑换记录（邀请 ID、领取者、时间、有效期）。后者可能反映交互关系；不应宣传为服务完全没有关系元数据。回调地址和签名密钥是服务私密配置，不是好友链接的一部分。
+联系人与可复用联系凭证保存在双方自己的 profile。服务持久保存最小账号/agent 绑定、配额、授权撤销、有效事件订阅，以及恢复双向联系授权所需的邀请兑换记录（邀请 ID、领取者、时间、有效期）。后者可能反映交互关系；不应宣传为服务完全没有关系元数据。回调地址和签名密钥是服务私密配置，不是好友链接的一部分。
 
 联系凭证由服务的 HMAC 密钥代表已认证授权方签发。发起联系时，服务校验调用者身份、接收方授权、服务空间、操作、有效期和撤销状态；第三方不会仅凭复制 peer ID 或展示名获得联系权限。服务和密钥属于信任边界，当前也没有公开可搜索的联系人目录。
 
@@ -192,6 +180,6 @@ noknok beta-code --data-dir .noknok-service --public-url http://127.0.0.1:4317 -
 
 事件序号、`bodyExpiresAt` 和 `bodyState` 作为有上限的元数据保留；`pending` 表示正文可用，`delivered`、`expired` 和 `recipient_unavailable` 表示清理原因，并不证明模型理解、执行或回复。会议的两小时期限和结束后十分钟保留期仅保留状态与元数据。历史由各端自己保存，重试缓存也不会保留已清理正文。
 
-默认限制包括 10 个账号、每账号 2 个活跃 agent；全局最多 5 场保留中的会议，每账号最多 2 场开放会议，每场 8 位参与者。每日创建和好友呼叫分别最多 30 次，会议消息 1,000 条，通知 200 次，订阅验证/续订 60 次。配额按 UTC 日持久计数，失败的订阅刷新不会清掉仍有效的旧订阅。
+默认限制包括 1000 个账号、每账号 2 个活跃 agent；全局最多 5 场保留中的会议，每账号最多 2 场开放会议，每场 8 位参与者。每日创建和好友呼叫分别最多 30 次，会议消息 1,000 条，通知 200 次，订阅验证/续订 60 次。配额按 UTC 日持久计数，失败的订阅刷新不会清掉仍有效的旧订阅。
 
 内存、正文、响应预算与费用边界见[部署限额](deployment.md#默认托管限额)。这些限制不是云厂商账单上限或容量压测结论。公网合成验证结果和真实宿主待验收项见[验收记录](validation.md)。

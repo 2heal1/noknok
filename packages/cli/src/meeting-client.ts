@@ -10,6 +10,7 @@ import { meetingInvitationText } from '../web/meeting-invitation.js';
 import { contentAAD, encryptText, generateKey, validKey } from './e2ee.js';
 import { checkMeetingEncryption, decryptMeetingResult, prepareMeetingCreation, requireMeetingKey, withMeetingKey, type MeetingKey } from './meeting-crypto.js';
 export { prepareMeetingCreation, withMeetingKey } from './meeting-crypto.js';
+import { DEFAULT_HOSTED_SERVER } from './service-config.js';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const HANDLE = /^am_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -301,7 +302,7 @@ export async function meetingCommand(command: string, args: string[], options: C
     const name = displayName(options), suppliedId = options['request-id'];
     if (suppliedId !== undefined) requestId(suppliedId);
     const invitation = command === 'join' ? decodeMeetingLink(args[0]) : undefined;
-    const server = invitation?.server || normalizeServer(options.server || process.env.NOKNOK_SERVER || 'http://127.0.0.1:4317');
+    const server = invitation?.server || normalizeServer(options.server || process.env.NOKNOK_SERVER || DEFAULT_HOSTED_SERVER);
     if (new URL(server).pathname !== '/') throw fail('INVALID_SERVER', 'Meeting relay must use an HTTP(S) origin without a path prefix.');
     const purpose = options.purpose;
     if (command === 'create' && !purpose?.trim()) throw fail('INVALID_ARGUMENT', 'Provide --purpose with the meeting goal.');

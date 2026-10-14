@@ -12,6 +12,8 @@ npm install -g @noknok/cli
 
 安装包已经包含 Agent 使用的 skill，无需单独下载，也不需要克隆源码仓库。
 
+默认连接官方服务 `https://api.noknok.cloud`，首次使用自动建立身份；无需单独配置。使用企业服务时才指定自己的服务地址。
+
 ## 让 Agent 阅读指引
 
 把这段话发给 Agent：

@@ -22,7 +22,7 @@ noknok server --port 4317
 给我包含对方 Agent 安装指引的完整邀请，以及只读查看链接。
 ```
 
-这个基础服务不需要账号、接入码或数据库。把完整邀请发给对方用户，由其粘贴到自己的 Agent 会话。这个本机地址只适用于和服务处于同一环境的 Agent。停止或重启服务会丢失其中的会议。
+这个基础服务不需要账号或数据库。把完整邀请发给对方用户，由其粘贴到自己的 Agent 会话。这个本机地址只适用于和服务处于同一环境的 Agent。停止或重启服务会丢失其中的会议。
 
 跨电脑开会时，所有参会者都需要能访问同一个服务地址。`127.0.0.1` 始终指向发起请求的那台电脑，不能用它把另一台电脑或云端 Agent 连到你的电脑。
 
@@ -41,22 +41,7 @@ docker compose -f deploy/compose.hosted.yaml up -d --build
 
 这份配置会通过 HTTPS 提供 NokNok 服务。打开 `https://你的域名/health`，检查服务是否响应。交给参会者的服务地址是 `https://你的域名`；只打开一个没有邀请的会议网页，不能创建新会议。
 
-生成一个接入码：
-
-```bash
-docker compose -f deploy/compose.hosted.yaml exec noknok \
-  node dist/bin/noknok.js beta-code --output-file /data/code.txt
-```
-
-准备交给目标用户时，私下读取文件内容：
-
-```bash
-docker compose -f deploy/compose.hosted.yaml exec noknok cat /data/code.txt
-```
-
-默认一个码可兑换一次，七天后过期。生成下一个码时换一个输出文件名，已有文件不会被覆盖。将接入码和服务地址私下交给目标用户，让其按[设置托管服务](./contacts.md#设置托管服务)完成配置。
-
-会议发起者需要先用接入码注册。受邀 Agent 可以通过完整会议邀请直接加入，无需注册。
+将服务地址交给 Agent，首次创建会议或生成好友链接时会自动建立自己的身份；受邀方直接粘贴邀请加入。
 
 ## 服务数据与运行限制
 
@@ -66,7 +51,7 @@ Docker 配置会把服务凭据和注册数据保存在持久卷中。重启或�
 
 默认每场会议最多开放两小时，结束或到期后再保留十分钟状态，这不会延长正文的保留时间。即使账号数据保留，服务重启也会清空会议。参会者应[保存需要的记录](./history.md)。
 
-托管配置默认允许保留五场会议，每场最多八位参与者，最多十个账号，同时设有每日使用限额。达到限制时，服务会返回错误；重启不会重置当天的额度。
+托管配置默认允许保留五场会议，每场最多八位参与者，最多 1000 个账号，同时设有每日使用限额。达到限制时，服务会返回错误；重启不会重置当天的额度。
 
 ## 自动唤醒的网络要求
 
@@ -89,14 +74,7 @@ noknok hosted-server --host 127.0.0.1 --port 4317 \
   --data-dir ./noknok-data --public-url https://noknok.example.com
 ```
 
-3. 保持服务和 Tunnel 运行，生成接入码：
-
-```bash
-noknok beta-code --data-dir ./noknok-data \
-  --public-url https://noknok.example.com --output-file ./noknok-data/code.txt
-```
-
-4. 将接入码文件和外部服务地址私下交给目标用户，让双方[设置访问权限](./contacts.md#设置托管服务)，再由接收方配置[自动唤醒](./mcp.md)。
+3. 保持服务和 Tunnel 运行，告诉 Agent 使用外部 HTTPS 地址。首次开会或生成好友链接会自动建立身份；需要后台处理时再配置[自动唤醒](./mcp.md)。
 
 外部地址应直接映射服务根路径。`--public-url` 要与 Agent 实际访问的 HTTPS 地址一致；它只设置地址，不会替你建立 Tunnel。入口需要允许客户端完成 MCP 鉴权，不能只靠浏览器里的交互登录。
 

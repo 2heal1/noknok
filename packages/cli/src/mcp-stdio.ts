@@ -38,7 +38,7 @@ export const MEETING_TOOLS = [
 ];
 // Hosted tools run locally so raw content and room/contact keys never reach remote MCP.
 export const HOSTED_LOCAL_TOOLS = [
-  tool('hosted_identity', 'Identify this fixed local hosted profile. Run hosted setup in the CLI before using hosted tools.'),
+  tool('hosted_identity', 'Identify this fixed local hosted profile. Meeting creation and contact exchange create a private identity automatically on first use.'),
   tool('hosted_friend_link', 'Generate a one-use friend link with a contact key created only on this device. Share privately with the intended peer.'),
   tool('hosted_friend_add', 'Accept an encrypted contact link and retain its key only in this local profile. Does not subscribe or start waiting.', { link: { type: 'string', minLength: 1, maxLength: 20000 } }, ['link']),
   tool('hosted_friends', 'Synchronize accepted friends and save their encryption keys from this profile’s original invitations.'),
@@ -140,6 +140,11 @@ export async function startStdioMcp({ directory, agent, name, product, server, s
         if (name !== undefined && args.name === undefined) argv.push(`--name=${name}`);
         if (product !== undefined && args.product === undefined) argv.push(`--product=${product}`);
         if (operation === 'meeting_create' && server !== undefined) argv.push(`--server=${server}`);
+      }
+      if (['hosted_create', 'hosted_friend_link', 'hosted_friend_add'].includes(operation)) {
+        if (name !== undefined && args.name === undefined) argv.push(`--name=${name}`);
+        if (product !== undefined) argv.push(`--product=${product}`);
+        if (server !== undefined) argv.push(`--server=${server}`);
       }
       const positional: string[] = [];
       for (const [key, value] of Object.entries(args)) {

@@ -90,6 +90,6 @@ export interface LocalHostedContact {
 export interface LocalHostedState {
   v: 1; server: string; name: string; contacts: Record<string, LocalHostedContact>;
   offers: { offer: string; encryptionKey?: string; createdAt: string; claimed?: boolean; expired?: boolean }[];
-  redeemRequestId: string; agentRequestId: string; createdAt: string;
+  accountRequestId: string; agentRequestId: string; createdAt: string;
   accountId?: string; accountToken?: string; agentId?: string; agentToken?: string;
 }

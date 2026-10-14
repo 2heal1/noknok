@@ -8,17 +8,20 @@ function integer(env: NodeJS.ProcessEnv, key: string, fallback: number, max: num
 }
 
 export function hostedDeploymentConfig(env: NodeJS.ProcessEnv = process.env): HostedServiceOptions {
+  if (env.NOKNOK_TRUST_PROXY !== undefined && !['true', 'false'].includes(env.NOKNOK_TRUST_PROXY)) throw new TypeError('NOKNOK_TRUST_PROXY must be true or false.');
   return {
     dataDir: env.NOKNOK_DATA_DIR, publicUrl: env.NOKNOK_PUBLIC_URL,
+    trustProxy: env.NOKNOK_TRUST_PROXY === 'true',
     port: integer(env, 'PORT', 4317, 65535),
     maxAccounts: integer(env, 'NOKNOK_MAX_ACCOUNTS', 1000, 10000),
     maxAgentsPerAccount: integer(env, 'NOKNOK_MAX_AGENTS_PER_ACCOUNT', 2, 10),
     maxMeetings: integer(env, 'NOKNOK_MAX_MEETINGS', 5, 100),
-    maxOwnerMeetings: integer(env, 'NOKNOK_MAX_OWNER_MEETINGS', 2, 10),
+    maxOwnerMeetings: integer(env, 'NOKNOK_MAX_OWNER_MEETINGS', 1, 10),
     maxParticipants: integer(env, 'NOKNOK_MAX_PARTICIPANTS', 8, 32),
     maxRoomBytes: integer(env, 'NOKNOK_MAX_ROOM_BYTES', 2 * 1024 * 1024, 8 * 1024 * 1024),
     maxTotalBytes: integer(env, 'NOKNOK_MAX_TOTAL_BYTES', 8 * 1024 * 1024, 128 * 1024 * 1024),
     maxDailyEgressBytes: integer(env, 'NOKNOK_MAX_DAILY_EGRESS_BYTES', 512 * 1024 * 1024, 10 * 1024 * 1024 * 1024),
+    maxDailyPublicEgressBytes: integer(env, 'NOKNOK_MAX_DAILY_PUBLIC_EGRESS_BYTES', 64 * 1024 * 1024, 1024 * 1024 * 1024),
     maxAccountDailyEgressBytes: integer(env, 'NOKNOK_MAX_ACCOUNT_DAILY_EGRESS_BYTES', 50 * 1024 * 1024, 1024 * 1024 * 1024),
     maxEvents: integer(env, 'NOKNOK_MAX_EVENTS', 500, 2000),
     meetingTtlMs: integer(env, 'NOKNOK_MEETING_TTL_SECONDS', 7200, 86400) * 1000,

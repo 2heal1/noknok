@@ -76,16 +76,26 @@ These are conservative resource limits, not load-test results:
 
 | Scope | Default limit |
 | --- | --- |
-| Registration | 30 requests per minute globally; 1000 accounts; 2 active agents per account |
-| Meetings | 5 retained rooms globally; 2 open rooms per account; 8 participants per room |
+| Registration | 30 requests per minute globally; new accounts: 10/hour and 20/day per client IP (IPv6 /64), 100/day globally; 1000 stored accounts; 2 active agents per account |
+| Meetings | 5 retained rooms globally; 1 open room per account; 8 participants per room |
 | Pending body memory | 2 MiB per room, 8 MiB globally; at most 5 minutes by default, cleared earlier after all required acknowledgments; metadata/runtime overhead is additional |
 | Events and requests | 500 events per room; 128 KiB request body |
 | Per account per day | 30 creations, 30 contact calls, 1000 messages, 200 notifications, 60 subscription validations/renewals |
-| Response budget | 50 MiB daily service-payload accounting per room owner; 512 MiB HTTP response bodies globally per day |
+| Response budget | 50 MiB daily service-payload accounting per room owner and a separate 50 MiB/account MCP response cap; 512 MiB authenticated response bodies globally per day; anonymous responses have a separate 64 MiB/day budget; health responses are exempt |
 
-Daily quotas use fixed UTC windows and persist across restarts. Guests consume the room owner's allowance. Request rates, queues, and concurrency have additional bounds. Subscription validation consumes quota before the request is sent.
+Registration and daily quotas use fixed UTC windows and persist across restarts. Only newly created accounts consume registration quota; retries with the same private request ID do not. Registration source keys are HMACs, not stored client IPs. Hourly/daily limits can be reached on either side of a window boundary; they are not rolling windows. Guests consume the room owner's allowance. Request rates, queues, and concurrency have additional bounds. Subscription validation consumes quota before the request is sent.
 
 HTTP response accounting excludes TLS, headers, retransmissions, proxies, and other provider traffic; even quota-error responses have overhead. It is not a cloud billing cap or DDoS protection. Configure provider-side budget controls separately.
+
+### Simple abuse protection
+
+The Compose templates enable `NOKNOK_TRUST_PROXY=true` because the application port is not published and Caddy overwrites `X-Forwarded-For`. Direct starts default to `false` and ignore forwarded headers. Only enable this option when the backend is reachable exclusively through a trusted proxy that replaces the header with a single client IP. Do not expose port 4317, put untrusted containers on the backend network, or accept arbitrary forwarding chains. If a CDN is added, separately configure and verify its trust boundary at Caddy; do not simply trust client-supplied headers. See [Caddy proxy defaults](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#defaults).
+
+`NOKNOK_MAX_DAILY_PUBLIC_EGRESS_BYTES` configures the anonymous response budget (default 64 MiB). Static meeting assets, registration responses and unauthenticated errors use this bucket; authenticated MCP and capability-authorized meeting responses use the existing business budget. All successful MCP response bodies (including discovery) additionally have a 50 MiB/account/day cap, using `NOKNOK_MAX_ACCOUNT_DAILY_EGRESS_BYTES`; room owners retain their independent existing meeting-response cap. Refused over-budget responses do not debit the global business allowance. `/health` is exempt from byte budgets and the global request bucket, but still has per-client request and connection/concurrency bounds. Exhausting anonymous bytes can prevent new registrations or browser page loads; existing authenticated clients retain their separate allowance.
+
+These controls slow bulk registration and reduce single-account room occupancy. They do not verify that an account belongs to a unique human, prevent distributed denial of service, or stop attackers with enough IPs from using the daily registration ceiling or all five room slots. Shared NAT users share registration limits; public admission is intentionally capped at 100 new accounts/day. Revocations do not free persistent account slots. A larger public rollout needs operator monitoring and edge/provider protection, rather than only larger application limits.
+
+Existing automated installations use administrator-owned deployment resources. Before deploying this release, update the fixed `compose.release.yaml` through the documented installer update procedure so the isolated backend receives `NOKNOK_TRUST_PROXY=true`. Package publication alone does not update those files; no Caddy changes are required for a direct Caddy-to-application setup.
 
 Compose limits the application to 384 MiB and Caddy to 128 MiB; the host OS also needs memory. A 1 GiB host is a more appropriate starting point for this template; these settings do not validate operation on a 512 MiB VPS.
 

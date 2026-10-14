@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
-import { startHostedService } from '../src/hosted-service.js';
+import { clientRateKey, startHostedService } from '../src/hosted-service.js';
 import { generateKey, encryptText, contentAAD, isEncryptedText } from '../src/e2ee.js';
 import { decryptMeetingResult } from '../src/meeting-crypto.js';
 import { hostedDeploymentConfig } from '../src/deploy/hosted-server.js';
@@ -27,7 +27,7 @@ async function fixture(t, options = {}) {
     }, ...options });
   let service = await start();
   t.after(async () => { await service.close(); await rm(dataDir, { recursive: true, force: true }); });
-  async function raw(path, { token, method = 'POST', value } = {}) {
+  async function raw(path, { token, method = 'POST', value, headers = {} } = {}) {
     // Test clients encrypt before crossing the HTTP boundary, including direct REST.
     if (value && path === '/v1/meetings' && !value.encryption) {
       const key = generateKey(), encryptionId = randomUUID();
@@ -40,7 +40,7 @@ async function fixture(t, options = {}) {
       const credentials = roomKeys.get(match[1]);
       value = { ...value, text: await encryptText(credentials.key, value.text, contentAAD(credentials.encryptionId, value.type || 'message', participants.get(token), 'text', value.to, value.replyTo)) };
     }
-    const response = await fetch(service.origin + path, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' }, ...(value ? { body: JSON.stringify(value) } : {}) });
+    const response = await fetch(service.origin + path, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json', ...headers }, ...(value ? { body: JSON.stringify(value) } : {}) });
     const body = await response.json();
     if (body.participant?.token) participants.set(body.participant.token, body.participant.id);
     return { status: response.status, body };
@@ -138,17 +138,43 @@ test('hosted service gates all creation and disables legacy registration/proxy r
   assert.match(await asset.text(), /export function meetingInvitationText/);
 });
 
-test('public registration keeps account ownership and a bounded registration rate', async t => {
+test('registration throttles new accounts even with spoofed headers, but retries survive restart', async t => {
   const f = await fixture(t);
   const requestId = secret();
   const first = await f.raw('/v1/hosted/accounts', { value: { requestId } });
-  const retry = await f.raw('/v1/hosted/accounts', { value: { requestId } });
-  assert.deepEqual(retry.body, first.body);
-  const unauthenticated = await f.raw('/v1/hosted/agents', { value: { requestId: secret() } });
-  assert.equal(unauthenticated.status, 401);
-  for (let i = 0; i < 28; i++) assert.equal((await f.raw('/v1/hosted/accounts', { value: { requestId: secret() } })).status, 200);
+  assert.equal(first.status, 200);
+  for (let i = 0; i < 9; i++) assert.equal((await f.raw('/v1/hosted/accounts', {
+    value: { requestId: secret() }, headers: { 'X-Forwarded-For': `192.0.2.${i + 1}` },
+  })).status, 200);
+  const blocked = await f.raw('/v1/hosted/accounts', { value: { requestId: secret() } });
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.body.error.code, 'QUOTA_EXCEEDED');
+  await f.restart();
+  assert.deepEqual((await f.raw('/v1/hosted/accounts', { value: { requestId } })).body, first.body);
   assert.equal((await f.raw('/v1/hosted/accounts', { value: { requestId: secret() } })).status, 429);
-  assert.equal(f.service.store.db.prepare('SELECT COUNT(*) AS n FROM accounts').get().n, 29);
+  assert.equal(f.service.store.db.prepare('SELECT COUNT(*) AS n FROM accounts').get().n, 10);
+  assert.equal((await f.raw('/v1/hosted/agents', { value: { requestId: secret() } })).status, 401);
+});
+
+test('isolated proxy clients receive independent registration budgets', async t => {
+  const f = await fixture(t, { trustProxy: true });
+  for (let i = 0; i < 10; i++) assert.equal((await f.raw('/v1/hosted/accounts', {
+    value: { requestId: secret() }, headers: { 'X-Forwarded-For': '192.0.2.1' },
+  })).status, 200);
+  assert.equal((await f.raw('/v1/hosted/accounts', { value: { requestId: secret() }, headers: { 'X-Forwarded-For': '192.0.2.1' } })).status, 429);
+  assert.equal((await f.raw('/v1/hosted/accounts', { value: { requestId: secret() }, headers: { 'X-Forwarded-For': '192.0.2.2' } })).status, 200);
+});
+
+test('client rate keys reject forwarded chains and normalize IPv4 and IPv6 subnets', () => {
+  const req = (address, forwarded) => ({ socket: { remoteAddress: address }, headers: { 'x-forwarded-for': forwarded } });
+  assert.equal(clientRateKey(req('::ffff:192.0.2.1', '192.0.2.2')), '192.0.2.1');
+  assert.equal(clientRateKey(req('::ffff:c000:201')), '192.0.2.1');
+  assert.equal(clientRateKey(req('127.0.0.1', '192.0.2.2'), true), '192.0.2.2');
+  for (const forwarded of ['192.0.2.2, 192.0.2.3', 'not-an-ip', ['192.0.2.2', '192.0.2.3']]) {
+    assert.equal(clientRateKey(req('127.0.0.1', forwarded), true), '127.0.0.1');
+  }
+  assert.equal(clientRateKey(req('2001:db8::1')), clientRateKey(req('2001:0db8:0000:0000:ffff::2')));
+  assert.notEqual(clientRateKey(req('2001:db8::1')), clientRateKey(req('2001:db8:0:1::1')));
 });
 
 test('friend meeting uses authenticated recipient, delivers minimal event and supports agents plus a human', async t => {
@@ -196,7 +222,7 @@ test('friend meeting uses authenticated recipient, delivers minimal event and su
 });
 
 test('unavailable subscription preserves same meeting fallback and revocation cancels pending notification', async t => {
-  const f = await fixture(t);
+  const f = await fixture(t, { maxOwnerMeetings: 2 });
   const a = await f.register(), b = await f.register();
   const friend = await f.pair(a, b);
   const call = await f.tool(a, 'call', { peer_id: b.agentId, capability: friend.contact.capability, purpose: 'Fallback', request_id: 'fallback' });
@@ -257,6 +283,12 @@ test('low-resource deployment defaults are bounded and reject unsafe environment
   assert.equal(config.maxAccounts, 1000);
   assert.equal(hostedDeploymentConfig({ NOKNOK_MAX_ACCOUNTS: '2000' }).maxAccounts, 2000);
   assert.throws(() => hostedDeploymentConfig({ NOKNOK_MAX_ACCOUNTS: '10001' }));
+  assert.equal(config.maxOwnerMeetings, 1);
+  assert.equal(config.trustProxy, false);
+  assert.equal(hostedDeploymentConfig({ NOKNOK_TRUST_PROXY: 'true' }).trustProxy, true);
+  assert.throws(() => hostedDeploymentConfig({ NOKNOK_TRUST_PROXY: 'yes' }), /NOKNOK_TRUST_PROXY/);
+  assert.equal(config.maxDailyPublicEgressBytes, 64 * 1024 * 1024);
+  assert.throws(() => hostedDeploymentConfig({ NOKNOK_MAX_DAILY_PUBLIC_EGRESS_BYTES: '0' }));
   assert.equal(config.maxMeetings, 5); assert.equal(config.maxParticipants, 8);
   assert.equal(config.maxTotalBytes, 8 * 1024 * 1024);
   assert.equal(config.deliveryTtlMs, 300_000);
@@ -346,11 +378,16 @@ test('response byte budgets apply to guest reads and survive service restarts', 
     if (result.status !== 200) break;
   }
   assert.equal(result.status, 429);
-  f.service.store.consumeServiceQuota('egress_bytes', { limit: 100_000, windowMs: 86_400_000, amount: 90_000 });
+  const used = f.service.store.db.prepare("SELECT count FROM quotas WHERE owner='service' AND bucket='egress_bytes'").get().count;
+  f.service.store.consumeServiceQuota('egress_bytes', { limit: 100_000, windowMs: 86_400_000, amount: 100_000 - used });
   await f.restart();
-  // Repeated responses exhaust the same persisted global bucket after restart.
-  for (let i = 0; i < 200; i++) { result = await f.raw('/health', { method: 'GET' }); if (result.status !== 200) break; }
+  // Authenticated MCP responses still exhaust the persisted business bucket.
+  for (let i = 0; i < 100; i++) {
+    result = await f.raw('/mcp', { token: a.agentToken, value: { jsonrpc: '2.0', id: i, method: 'ping' } });
+    if (result.status !== 200) break;
+  }
   assert.equal(result.status, 429); assert.equal(result.body.error.code, 'service_egress_limit');
+  assert.equal((await f.raw('/health', { method: 'GET' })).status, 200);
 });
 
 test('native agents explicitly acknowledge saved bodies; hosted retry caches cannot resurrect them', async t => {
@@ -517,4 +554,46 @@ test('idle meetings are removed from hosted sessions and targeted invitation inb
   assert.equal(f.service.meetings.inspect(call.meeting.id), undefined);
   assert.equal((await f.tool(b, 'inbox')).invitations.length, 0);
   await assert.rejects(f.tool(a, 'meeting_read', { meeting_id: call.meeting.id }));
+});
+
+test('anonymous response exhaustion cannot drain meeting or health budgets and survives restart', async t => {
+  const f = await fixture(t, { maxDailyPublicEgressBytes: 2000 });
+  const actor = await f.register();
+  const room = await f.tool(actor, 'meeting_create', { purpose: 'Private budget', request_id: 'separate-budget' });
+  const response = await fetch(f.service.origin + '/meeting.js');
+  assert.equal(response.status, 429);
+  assert.equal((await response.json()).error.code, 'public_egress_limit');
+  // Actually fill the public bucket: a refused oversized response does not debit it.
+  const used = f.service.store.db.prepare("SELECT count FROM quotas WHERE owner='service' AND bucket='public_egress_bytes'").get().count;
+  f.service.store.consumeServiceQuota('public_egress_bytes', { limit: 2000, windowMs: 86_400_000, amount: 2000 - used });
+  await f.restart();
+  assert.equal((await f.raw('/missing', { method: 'GET' })).body.error.code, 'public_egress_limit');
+  assert.equal((await f.raw('/health', { method: 'GET' })).status, 200);
+  // Rooms disappear on restart; an existing identity can still create and read.
+  const replacement = await f.tool(actor, 'meeting_create', { purpose: 'Still works', request_id: 'replacement' });
+  assert.notEqual(replacement.meeting.id, room.meeting.id);
+  assert.equal((await f.raw(`/v1/meetings/${replacement.meeting.id}`, { method: 'GET', token: replacement.participant.token })).status, 200);
+});
+
+test('default meeting ownership cap stops one identity from holding multiple rooms', async t => {
+  const f = await fixture(t), actor = await f.register();
+  await f.tool(actor, 'meeting_create', { purpose: 'One', request_id: 'one' });
+  await assert.rejects(f.tool(actor, 'meeting_create', { purpose: 'Two', request_id: 'two' }), error => error.code === 'owner_meeting_limit');
+});
+
+test('request throttling behind a proxy blocks one client without blocking another', async t => {
+  const f = await fixture(t, { trustProxy: true });
+  for (let i = 0; i < 1200; i++) assert.equal((await f.raw('/health', { method: 'GET', headers: { 'X-Forwarded-For': '192.0.2.1' } })).status, 200);
+  assert.equal((await f.raw('/health', { method: 'GET', headers: { 'X-Forwarded-For': '192.0.2.1' } })).status, 429);
+  assert.equal((await f.raw('/health', { method: 'GET', headers: { 'X-Forwarded-For': '192.0.2.2' } })).status, 200);
+});
+
+test('authenticated discovery cannot let one account drain the global business allowance', async t => {
+  const f = await fixture(t, { maxAccountDailyEgressBytes: 500 }), a = await f.register(), b = await f.register();
+  const blocked = await f.raw('/mcp', { token: a.agentToken, value: { jsonrpc: '2.0', id: 1, method: 'tools/list' } });
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.body.error.code, 'account_egress_limit');
+  const reply = await f.raw('/mcp', { token: b.agentToken, value: { jsonrpc: '2.0', id: 2, method: 'ping' } });
+  assert.equal(reply.status, 200);
+  assert.deepEqual(reply.body.result, {});
 });

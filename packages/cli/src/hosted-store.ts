@@ -185,7 +185,7 @@ export class HostedStore {
     if (!row) fail(401, 'UNAUTHENTICATED', 'Invalid agent credential');
     return { agentId: row.id, accountId: row.account_id };
   }
-  registerAccount(requestId: string) {
+  registerAccount(requestId: string, registrationSource?: string) {
     retrySecret(requestId);
     const requestHash = digest(requestId);
     return this._transaction(() => {
@@ -195,6 +195,14 @@ export class HostedStore {
         return { accountId: previous.id, accountToken: this._credential('account', previous.id, requestId) };
       }
       if (this._requiredRow('SELECT COUNT(*) n FROM accounts').n >= this.maxAccounts) fail(429, 'ACCOUNT_CAPACITY', 'The service account limit has been reached');
+      if (registrationSource !== undefined) {
+        // Count only new accounts, atomically with the insert. Quota rows
+        // retain a keyed hash, never the client address itself.
+        const owner = `registration:${this._derive('registration-source', text(registrationSource, 'registrationSource'))}`;
+        this._consumeQuotaInTransaction(owner, 'accounts.hour', { limit: 10, windowMs: 3_600_000 });
+        this._consumeQuotaInTransaction(owner, 'accounts.day', { limit: 20, windowMs: DAY });
+        this._consumeQuotaInTransaction('service', 'accounts.day', { limit: 100, windowMs: DAY, service: true });
+      }
       const accountId = opaqueId('account');
       const accountToken = this._credential('account', accountId, requestId);
       this.db.prepare('INSERT INTO accounts(id,token_hash,request_hash) VALUES (?,?,?)').run(accountId, digest(accountToken), requestHash);
@@ -301,23 +309,24 @@ export class HostedStore {
     // Internal operator-controlled budget, not an anonymous quota API.
     return this._consumeQuota('service', bucket, { limit, windowMs, amount, service: true });
   }
-  _consumeQuota(owner: string, bucket: string, { limit, windowMs, amount, service = false }: { limit: number; windowMs: number; amount: number; service?: boolean }) {
+  _consumeQuota(owner: string, bucket: string, options: { limit: number; windowMs: number; amount?: number; service?: boolean }) {
+    return this._transaction(() => this._consumeQuotaInTransaction(owner, bucket, options));
+  }
+  _consumeQuotaInTransaction(owner: string, bucket: string, { limit, windowMs, amount = 1, service = false }: { limit: number; windowMs: number; amount?: number; service?: boolean }) {
     if (typeof bucket !== 'string' || !/^[a-zA-Z0-9_.:-]{1,64}$/.test(bucket)) fail(400, 'INVALID_ARGUMENT', 'Invalid quota bucket');
     boundedInteger(limit, 'limit', 1, Number.MAX_SAFE_INTEGER);
     boundedInteger(amount, 'amount', 1, limit);
     boundedInteger(windowMs, 'windowMs', 100, 365 * DAY);
     const now = this.now(), start = Math.floor(now / windowMs) * windowMs, resetAt = start + windowMs;
-    return this._transaction(() => {
-      this.db.prepare('DELETE FROM quotas WHERE expires_at<=?').run(now);
-      const previous = this._row('SELECT window_start,count FROM quotas WHERE owner=? AND bucket=?', owner, bucket);
-      const count = previous?.window_start === start ? previous.count : 0;
-      // Subtraction avoids overflowing safe integers when count + amount is huge.
-      if (count > limit - amount) fail(429, 'QUOTA_EXCEEDED', 'Operation quota exhausted');
-      if (!previous && service && this._requiredRow('SELECT COUNT(*) n FROM quotas WHERE owner=?', owner).n >= 256) fail(429, 'QUOTA_CAPACITY', 'The service quota bucket limit has been reached');
-      if (!previous && this._requiredRow('SELECT COUNT(*) n FROM quotas').n >= Math.min(100_000, this.maxAgentRecords * 100) + 256) fail(429, 'QUOTA_CAPACITY', 'The service quota counter limit has been reached');
-      this.db.prepare('INSERT INTO quotas(owner,bucket,window_start,expires_at,count) VALUES (?,?,?,?,?) ON CONFLICT(owner,bucket) DO UPDATE SET window_start=excluded.window_start,expires_at=excluded.expires_at,count=excluded.count').run(owner, bucket, start, resetAt, count + amount);
-      return { remaining: limit - count - amount, resetAt };
-    });
+    this.db.prepare('DELETE FROM quotas WHERE expires_at<=?').run(now);
+    const previous = this._row('SELECT window_start,count FROM quotas WHERE owner=? AND bucket=?', owner, bucket);
+    const count = previous?.window_start === start ? previous.count : 0;
+    // Subtraction avoids overflowing safe integers when count + amount is huge.
+    if (count > limit - amount) fail(429, 'QUOTA_EXCEEDED', 'Operation quota exhausted');
+    if (!previous && service && this._requiredRow('SELECT COUNT(*) n FROM quotas WHERE owner=?', owner).n >= 256) fail(429, 'QUOTA_CAPACITY', 'The service quota bucket limit has been reached');
+    if (!previous && this._requiredRow('SELECT COUNT(*) n FROM quotas').n >= Math.min(100_000, this.maxAgentRecords * 100) + 256) fail(429, 'QUOTA_CAPACITY', 'The service quota counter limit has been reached');
+    this.db.prepare('INSERT INTO quotas(owner,bucket,window_start,expires_at,count) VALUES (?,?,?,?,?) ON CONFLICT(owner,bucket) DO UPDATE SET window_start=excluded.window_start,expires_at=excluded.expires_at,count=excluded.count').run(owner, bucket, start, resetAt, count + amount);
+    return { remaining: limit - count - amount, resetAt };
   }
   _encrypt(agentId, value) {
     const nonce = randomBytes(12), cipher = createCipheriv('aes-256-gcm', this.encryptionKey, nonce);

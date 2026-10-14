@@ -15,12 +15,14 @@ import { HOSTED_TOOLS } from './hosted-contract.js';
 import { RpcError, validateArguments } from './mcp-stdio.js';
 import { decodeMeetingLink } from './meeting-client.js';
 import { isEncryptedText } from './e2ee.js';
+import { viewerBrandAssets } from './viewer-assets.js';
 
 const PACKAGE = JSON.parse(await readFile(packageFile('package.json'), 'utf8'));
 const VERSION = '2026-07-28';
 const HEADERS = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
   'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
 const ASSETS = new Map([
+  ...viewerBrandAssets,
   ['/contact', ['contact.html', 'text/html; charset=utf-8']],
   ['/contact.js', ['contact.js', 'text/javascript; charset=utf-8']],
   ['/contact-invitation.js', ['contact-invitation.js', 'text/javascript; charset=utf-8']],

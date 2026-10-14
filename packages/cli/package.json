@@ -40,5 +40,8 @@
     "./server": "./dist/src/hosted-service.js",
     "./relay": "./dist/src/relay.js",
     "./deploy": "./dist/src/deploy/hosted-server.js"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
   }
 }

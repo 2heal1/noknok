@@ -329,7 +329,7 @@ export async function decryptMeetingPayload(payload, { id, key, encryptionId, en
 
 if (typeof document !== 'undefined') startMeetingApp();
 
-function startMeetingApp() {
+export function startMeetingApp() {
   const initialHash = location.hash;
   let parsed = parseMeetingLocation(location.pathname, initialHash);
   const previousInvitation = history.state?.noknokInvitation;

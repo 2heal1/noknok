@@ -1,0 +1,53 @@
+name: Docs Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/docs/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - 'tsconfig.base.json'
+      - 'scripts/deploy-docs.ts'
+      - 'scripts/deploy-hosted.ts'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noknok-docs-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == '2heal1/noknok' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: noknok-docs-production
+    steps:
+      - name: Check out main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.18.1
+          package-manager-cache: false
+      - name: Set up pnpm
+        run: corepack enable && corepack prepare pnpm@10.34.7 --activate
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check credentials and build website
+        run: pnpm check:secrets && pnpm --filter @noknok/docs typecheck && pnpm --filter @noknok/docs build
+      - name: Publish static website and verify HTTPS revision
+        env:
+          NOKNOK_DEPLOY_HOST: ${{ vars.NOKNOK_DEPLOY_HOST }}
+          NOKNOK_DEPLOY_PORT: ${{ vars.NOKNOK_DEPLOY_PORT }}
+          NOKNOK_PUBLIC_URL: ${{ vars.NOKNOK_DOCS_URL }}
+          NOKNOK_DEPLOY_SSH_KEY: ${{ secrets.NOKNOK_DOCS_SSH_KEY }}
+          NOKNOK_DEPLOY_KNOWN_HOSTS: ${{ secrets.NOKNOK_DEPLOY_KNOWN_HOSTS }}
+        run: node scripts/deploy-docs.ts

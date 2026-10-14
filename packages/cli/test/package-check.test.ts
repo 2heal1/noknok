@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
 import { readPackageArchive, validatePackageFiles } from '../../../scripts/check-package.js';
+import { fingerprintFiles } from '../../../scripts/runtime-fingerprint.js';
 
 const manifest = {
   name: '@noknok/cli', version: '0.0.1', type: 'module',
@@ -22,7 +23,9 @@ function packageFiles(overrides = {}) {
     ['skills/noknok/references/two-party-calls.md', '# Legacy\n'],
     ['dist/web/meeting.html', '<!doctype html>\n'], ['dist/web/meeting.js', 'export {};\n'],
   ]);
-  return new Map([...files].map(([path, text]) => [path, Buffer.from(text)]));
+  const bytes = new Map([...files].map(([path, text]) => [path, Buffer.from(text)]));
+  bytes.set('dist/runtime-fingerprint.json', Buffer.from(JSON.stringify(fingerprintFiles(bytes, { ...manifest, ...overrides }))));
+  return bytes;
 }
 
 function archive(entries) {
@@ -82,9 +85,10 @@ test('the bundled logo notice is allowed and still checked for sensitive content
   const files = packageFiles();
   const path = 'dist/web/THIRD_PARTY_NOTICES.txt';
   files.set(path, Buffer.from('MIT License\nCopyright (c) 2023 LobeHub\n'));
+  files.set('dist/runtime-fingerprint.json', Buffer.from(JSON.stringify(fingerprintFiles(files, manifest))));
   assert.equal(validatePackageFiles(files, manifest).fileCount, files.size);
-  files.set(path, Buffer.from('-----BEGIN OPENSSH PRIVATE KEY-----\ntest-only\n'));
-  assert.throws(() => validatePackageFiles(files, manifest), { code: 'PRIVATE_KEY_CONTENT' });
+  files.set(path, Buffer.from(`npm_${'a'.repeat(36)}`));
+  assert.throws(() => validatePackageFiles(files, manifest), { code: 'CREDENTIAL_CONTENT' });
 });
 
 test('allowed text paths still reject accidentally embedded keys, live-format credentials and development paths', () => {

@@ -1,12 +1,20 @@
 # 稳定版发布后的自动部署
 
-本流程面向托管服务维护者。它只自动更新程序，不开放注册、不生成内测码、不完成端到端加密或原生宿主验收。网站是独立静态产物，不随本流程部署。
+本流程面向托管服务维护者。它只自动更新程序，不开放注册、不生成内测码、不完成端到端加密或原生宿主验收。网站由独立的 [Docs Deploy](docs-deployment.md) 工作流发布。
 
 ## 触发与失败处理
 
 `release.yml` 的 stable job 发布精确版本并验证 npm `latest` 后，才输出 `published-version`。依赖它的 deploy job 使用 `noknok-production` 环境，执行 `scripts/deploy-hosted.ts`。有待发布 Changesets 的普通合入只更新版本 PR，不部署；`workflow_dispatch` 仍只发布 preview，也不部署。npm 发布失败或校验失败时不会获得部署版本。
 
 发布和部署共用不取消进行中任务的并发组，服务器还会加独占锁。部署失败会使 Release 显示失败，但**不能撤回已经成功的 npm 发布**。修复部署问题后可重跑失败的 deploy job；它使用原稳定版本，不重新发布。若重跑完整工作流，已存在的不可变 npm 版本会跳过上传，再做版本验证。
+
+## 按运行文件差异决定是否升级
+
+每次构建生成 `dist/runtime-fingerprint.json`，摘要覆盖全部编译后的 `dist` 运行文件、会议页面资源，以及影响执行的 package 配置。打包检查会从实际 tarball 重算摘要。版本号、描述、README、文档和 Skill 不参与比较。
+
+服务器构建并验证已发布包后，将运行摘要与固定 Dockerfile、Compose、下载策略的摘要组合，与当前实际部署状态比较。相同则返回 `unchanged-runtime`，保留当前容器、版本和会议；不同才切换容器。比较对象是当前线上版本，因此失败或跳过的中间发布不会造成漏判。没有摘要的早期版本无法证明相同，会正常部署。
+
+因此 npm `latest` 可以高于线上程序的版本：例如 `0.1.1` 只更新 Skill 时，服务可继续运行内容相同的 `0.1.0`。`state.json.current.version` 是实际运行版本，`lastCheckedVersion` 是最近因运行内容相同而跳过的版本。部署程序或策略更新仍由管理员安装，不由普通发布替换。
 
 ## GitHub 环境
 

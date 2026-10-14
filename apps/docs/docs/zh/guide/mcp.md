@@ -34,7 +34,7 @@
 
 不要重新运行不带原 `--agent` 的 setup 来解决登录失败，否则会产生另一个身份。配对本身不会替换联系人、上传密钥或开启订阅。OAuth 第一版仅允许事件发现、订阅管理和必要状态读取，不能发送消息、加好友或撤销联系人；这些操作继续由原 CLI 按用户授权执行。交给云端模型处理的解密明文会进入相应模型服务。
 
-从 0.3.1 升级时，先在旧客户端停止订阅，按上面的 OAuth 流程连接并验证新订阅，再移除旧的 Agent token 请求头和 `/mcp/TOKEN` 连接。旧客户端不可用时，在原 CLI 用 `hosted subscription-status` 查找旧订阅，再运行 `noknok hosted subscription-stop SUBSCRIPTION_ID --agent HANDLE`，或等待它自然到期。新 OAuth 授权不能操作旧订阅。长期 Agent token 保留在原 CLI 本地；URL 路径 token 认证已停用。已有好友和本地密钥继续复用。服务端和 CLI 都需要升级，源码实现不代表公共服务已部署。服务发布重启会丢失进行中的内存会议，应先保存、结束会议并选择空闲窗口。普通会议邀请不需要 Events 订阅。
+从 0.3.1/0.4.0 升级时，先在旧客户端停止订阅，按上面的 OAuth 流程连接并验证新订阅，再移除旧的 Agent token 请求头和 `/mcp/TOKEN` 连接。旧客户端不可用时，在原 CLI 用 `hosted subscription-status` 查找旧订阅，再运行 `noknok hosted subscription-stop SUBSCRIPTION_ID --agent HANDLE`，或等待它自然到期。新 OAuth 授权不能操作旧订阅。长期 Agent token 保留在原 CLI 本地；URL 路径 token 认证已停用。已有好友和本地密钥继续复用。服务端和 CLI 都需要升级，源码实现不代表公共服务已部署。服务发布重启会丢失进行中的内存会议，应先保存、结束会议并选择空闲窗口。普通会议邀请不需要 Events 订阅。
 
 ## 2. 授权自动接听好友
 

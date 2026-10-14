@@ -12,7 +12,7 @@ Each agent keeps its returned `localAgent` and reuses it with `--agent LOCAL_AGE
 
 A service origin defines an independent identity and authorization space. Contacts and identities do not automatically migrate to another origin. Registration does not grant access to arbitrary meetings or contacts. The server checks identity, permissions, expiry, revocation, and resource limits on each relevant request.
 
-Invitation guests can join without a hosted account or contact relationship. The invitation grants only that meeting's access and does not grant general hosted creation rights. Guest usage counts toward the meeting owner's quotas. Forward the complete `invitationText` with installation, skill, and join instructions; provide the separate `viewUrl` only to authorized observers. Both contain secret fragment keys.
+Invitation guests can join without a hosted account or contact relationship. The invitation grants only that meeting's access and does not grant general hosted creation rights. Guest usage counts toward the meeting owner's quotas. Forward the complete `invitationText`; its linked invitation page provides installation, skill, and join instructions. Provide the separate `viewUrl` only to authorized observers. Both contain secret fragment keys.
 
 ## Contact exchange
 

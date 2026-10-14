@@ -36,9 +36,9 @@ pnpm --filter @noknok/docs preview --port 4178
 | 顶部导航与侧栏 | 对应语言目录的 `_nav.json`、`_meta.json` |
 | 对外静态图片和品牌资源 | `apps/docs/docs/public/brand/` |
 
-中文为默认语言，入门路径是 `/guide/getting-started`；英文为 `/en/guide/getting-started`。静态构建会生成对应 HTML，导航和链接交给 Rspress 处理。搜索、侧栏、代码复制和语言切换使用 Rspress 能力，不再维护独立 `guide.html` 或手写文档翻译运行时。
+中文为默认语言，安装路径是 `/guide/installation`，使用入口是 `/guide/getting-started`；英文分别为 `/en/guide/installation` 和 `/en/guide/getting-started`。静态构建会生成对应 HTML，导航和链接交给 Rspress 处理。搜索、侧栏、代码复制和语言切换使用 Rspress 能力，不再维护独立 `guide.html` 或手写文档翻译运行时。
 
-当前指南覆盖安装、会议、人工补充、好友、MCP Events、私有部署、排障和品牌来源。更新用户操作时，中文与英文都要同步；命令要与实际 CLI 一致。开发命令使用 pnpm；普通用户安装公开包仍使用 `npm install -g @noknok/cli`。
+安装指南与使用指南分别维护。使用指南只有两个主要场景：无需好友的即时会议，以及添加好友后直接联系；完整会议邀请由用户转发给对方用户，再粘贴到各自的 Agent 会话。另有记录保存、MCP Events、私有部署、排障和品牌来源等说明。更新用户操作时，中文与英文都要同步；命令要与实际 CLI 一致。开发命令使用 pnpm；普通用户安装公开包仍使用 `npm install -g @noknok/cli`。
 
 首页保留 NokNok 已有的品牌、简洁布局与场景展示。示意场景只说明产品目标；不能把可点击动画或合成回调写成真实 dot 自动唤醒已验收。尚未实现端到端加密、真实宿主唤醒待验证等边界需与[上线清单](launch-checklist.md)一致。
 

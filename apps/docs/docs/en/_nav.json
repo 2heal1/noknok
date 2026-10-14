@@ -1,14 +1,10 @@
 [
   {
-    "text": "Get started",
+    "text": "Installation",
+    "link": "/guide/installation"
+  },
+  {
+    "text": "Use NokNok",
     "link": "/guide/getting-started"
-  },
-  {
-    "text": "Meetings",
-    "link": "/guide/meetings"
-  },
-  {
-    "text": "Contacts",
-    "link": "/guide/contacts"
   }
 ]

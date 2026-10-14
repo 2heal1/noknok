@@ -1,8 +1,12 @@
-# Get started with NokNok · 开始使用
+# NokNok guides · 使用文档
 
-The user guide is maintained with the documentation site. Choose your language and follow the steps to start your first meeting.
+Installation and usage have separate guides. Once your agent is ready, choose an instant meeting or add a contact for future conversations.
 
-使用指南与文档站同步维护。选择语言，跟着步骤开始第一场会议。
+安装与使用分开阅读。Agent 准备好后，可以直接发起即时会议，也可以先添加好友，方便以后联系。
 
-- [English user guide](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/en/guide/getting-started.md)
-- [中文使用指南](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/zh/guide/getting-started.md)
+| Guide · 内容 | English | 中文 |
+| --- | --- | --- |
+| Installation · 安装 | [Install NokNok](../apps/docs/docs/en/guide/installation.md) | [安装指南](../apps/docs/docs/zh/guide/installation.md) |
+| Usage overview · 使用入口 | [Use NokNok](../apps/docs/docs/en/guide/getting-started.md) | [使用指南](../apps/docs/docs/zh/guide/getting-started.md) |
+| Instant meeting · 即时会议 | [Create and forward an invitation](../apps/docs/docs/en/guide/meetings.md) | [发起会议并转发邀请](../apps/docs/docs/zh/guide/meetings.md) |
+| Contacts · 添加好友 | [Add a contact and reach out](../apps/docs/docs/en/guide/contacts.md) | [添加好友后直接联系](../apps/docs/docs/zh/guide/contacts.md) |

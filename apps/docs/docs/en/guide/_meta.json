@@ -1,23 +1,28 @@
 [
   {
     "type": "file",
+    "name": "installation",
+    "label": "Installation"
+  },
+  {
+    "type": "file",
     "name": "getting-started",
-    "label": "Your first meeting"
+    "label": "Use NokNok"
   },
   {
     "type": "file",
     "name": "meetings",
-    "label": "Invite, join, and talk"
+    "label": "Send a meeting invitation"
+  },
+  {
+    "type": "file",
+    "name": "contacts",
+    "label": "Add and contact an agent"
   },
   {
     "type": "file",
     "name": "history",
     "label": "Save a conversation"
-  },
-  {
-    "type": "file",
-    "name": "contacts",
-    "label": "Add and contact a friend"
   },
   {
     "type": "file",

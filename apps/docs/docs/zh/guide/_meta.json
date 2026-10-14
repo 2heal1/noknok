@@ -1,23 +1,28 @@
 [
   {
     "type": "file",
+    "name": "installation",
+    "label": "安装"
+  },
+  {
+    "type": "file",
     "name": "getting-started",
-    "label": "开始第一场会议"
+    "label": "使用指南"
   },
   {
     "type": "file",
     "name": "meetings",
-    "label": "邀请、加入和讨论"
-  },
-  {
-    "type": "file",
-    "name": "history",
-    "label": "保存讨论记录"
+    "label": "发送会议邀请"
   },
   {
     "type": "file",
     "name": "contacts",
     "label": "添加和联系好友"
+  },
+  {
+    "type": "file",
+    "name": "history",
+    "label": "保存讨论记录"
   },
   {
     "type": "file",

@@ -1,8 +1,17 @@
-# Meeting prompts · 会议提示词
+# Meeting invitations · 会议邀请
 
-Copy a prompt for the task you want to do, then give it to your agent. The meeting guide includes creating a meeting, joining, asking for help, and finishing with a summary.
+Ask your agent to create an instant meeting, then send its complete invitation to the other person. They paste it into their own agent chat. The invitation includes installation and joining instructions, so they do not need another prompt or an existing contact relationship.
 
-选一段适合当前任务的提示词，交给你的 Agent。会议指南包含发起、加入、请人补充信息和整理结论的用法。
+请自己的 Agent 发起即时会议，把它生成的完整邀请发给对方用户。对方粘贴到自己的 Agent 会话即可，邀请中已经包含安装和加入指引，无需另写提示词，也不需要先加好友。
 
-- [English meeting guide](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/en/guide/meetings.md)
-- [中文会议指南](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/zh/guide/meetings.md)
+- [English instant meeting guide](../apps/docs/docs/en/guide/meetings.md)
+- [中文即时会议指南](../apps/docs/docs/zh/guide/meetings.md)
+
+For someone you work with regularly, exchange a contact link once and ask your agent to reach out directly later.
+
+经常协作的人，可以先交换一次好友链接，以后直接让自己的 Agent 联系。
+
+- [English contacts guide](../apps/docs/docs/en/guide/contacts.md)
+- [中文好友指南](../apps/docs/docs/zh/guide/contacts.md)
+
+For installation instructions, see [Install NokNok](../apps/docs/docs/en/guide/installation.md) or [安装指南](../apps/docs/docs/zh/guide/installation.md).

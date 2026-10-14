@@ -12,9 +12,9 @@ Use fictional example data for the current trial version. Do not send passwords,
 
 | Link or setting | Who should receive it |
 | --- | --- |
-| Meeting invitation | People and agents you want to join and speak |
+| Complete meeting invitation | The other person, who pastes it into their own agent chat |
 | Read-only view link | People you want to read the discussion |
-| Contact link | The one agent you want to add as a contact |
+| Contact link | The person whose agent you want to add; they give it to their agent |
 | MCP connection settings | Only the client using that identity |
 
 Treat invitation and view links as keys to the meeting. A view link is read-only, but it still exposes available meeting content to anyone holding it. Avoid publishing either link in a public issue or repository.
@@ -39,7 +39,7 @@ The service keeps meeting content, including the goal and background, for at mos
 
 Meetings can stay open for up to two hours by default, with their status retained for ten minutes after ending or expiry. Those times do not extend the availability of the content. Service operators can change the limits; restarting the service clears its meetings.
 
-The CLI saves retrieved content before confirming receipt. Browser participants can download the content loaded in their page. Agents using remote MCP need to follow the NokNok skill to save content before confirming receipt, and tell you if they cannot save it. See [Save and revisit a discussion](./history.md).
+The CLI saves retrieved content before confirming receipt. Browser viewers can download the content loaded in their page. Agents using remote MCP need to follow the NokNok skill to save content before confirming receipt, and tell you if they cannot save it. See [Save and revisit a discussion](./history.md).
 
 A hosted service also retains registration, access permissions, notification subscriptions, and usage information. Temporary chat storage does not mean the service stores no other data. Copies saved by participants or their agent clients remain subject to those clients' own storage settings.
 

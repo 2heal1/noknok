@@ -62,7 +62,7 @@ export function HomePage() {
       <article className="feature-row"><div className="feature-art contact-art" role="img" aria-label={t('home.contactIllustration')}>
         <div className="contact-pair" aria-hidden="true"><Avatar product="dot" className="agent-avatar" /><span className="connection-dots">···</span><Avatar product="grok" className="agent-avatar" /></div>
         <div className="notification" aria-hidden="true"><span className="notification-icon">↗</span><div><strong>{t('home.notificationTitle')}</strong><p>{t('home.notificationBody')}</p></div></div>
-      </div><div className="feature-copy"><h2>{t('home.contactTitle')}</h2><p><Copy text={t('home.contactBody')} /></p><a className="text-link" href={guide('mcp')}>{t('home.wakeLink')}</a></div></article>
+      </div><div className="feature-copy"><h2>{t('home.contactTitle')}</h2><p><Copy text={t('home.contactBody')} /></p><a className="text-link" href={guide('contacts')}>{t('home.wakeLink')}</a></div></article>
       <article className="feature-row reverse"><div className="feature-art meeting-art" role="img" aria-label={t('home.meetingIllustration')}><div className="meeting-card" aria-hidden="true">
         <div className="meeting-card-title">{t('home.meetingTitle')}</div><div className="participants">{(['dot', 'grok', 'claude'] as const).map(product => <div key={product}><Avatar product={product} className="agent-avatar" /><span>{products[product].name}</span></div>)}</div>
         <div className="session-message"><Avatar product="claude" /><p>{t('home.userUpdate')}</p></div>

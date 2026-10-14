@@ -1,4 +1,5 @@
 import type { CallDetails, CallSummary, ViewAccess } from './types.js';
+import { avatarIdentity } from './avatar-catalog.js';
 interface ViewerElements {
   'sidebarToggle': HTMLButtonElement;
   'brandLink': HTMLAnchorElement;
@@ -91,8 +92,8 @@ interface ViewerElements {
   let presenceCall: string | null = null, presenceState: string | null = null, presenceTimer: number | undefined;
   const sessionPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-  const stateLabels = { waiting: '等待接听', connected: '已接通', completed: '已完成', cancelled: '已取消', canceled: '已取消', expired: '已过期', closed: '已结束', unknown: '状态未知' };
-  const typeLabels = { message: '消息', request: '请求协助', result: '结果', progress: '进展', waiting_for_user: '等待主人', done: '完成提议', finish: '完成提议', joined: '加入通话', closed: '通话结束' };
+  const stateLabels = { waiting: 'Waiting for answer', connected: 'Connected', completed: 'Completed', cancelled: 'Cancelled', canceled: 'Cancelled', expired: 'Expired', closed: 'Ended', unknown: 'Unknown state' };
+  const typeLabels = { message: 'Message', request: 'Request', result: 'Result', progress: 'Progress', waiting_for_user: 'Waiting for owner', done: 'Ready to finish', finish: 'Ready to finish', joined: 'Joined the call', closed: 'Call ended' };
   const state = { calls: [] as CallSummary[], selected: null as string | null, detail: null as CallDetails | null, auto: true, refreshing: false, detailRequest: 0, listNodes: new Map(), eventNodes: new Map(), detailSignature: '', warningSignature: '', loaded: false, initialScroll: true, listWarnings: [], toastTimer: undefined as number | undefined };
 
   function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: unknown) {
@@ -102,17 +103,31 @@ interface ViewerElements {
     return node;
   }
   function text(node, value) { const next = String(value ?? ''); if (node.textContent !== next) node.textContent = next; }
-  function date(value, mode = 'full') {
-    if (!value) return '时间未知';
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return '时间未知';
-    if (mode === 'clock') return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-    if (mode === 'short') return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
-    return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  function renderAvatar(node: HTMLElement, name: string, role: string) {
+    if (node.dataset.identity === name) return;
+    node.dataset.identity = name;
+    const identity = avatarIdentity(name, role);
+    node.replaceChildren();
+    node.classList.toggle('has-logo', Boolean(identity.icon));
+    node.dataset.tone = identity.tone;
+    const fallback = () => { node.classList.remove('has-logo'); node.replaceChildren(document.createTextNode(identity.initials)); };
+    if (identity.icon) {
+      const image = el('img'); image.src = identity.icon; image.alt = ''; image.width = 32; image.height = 32;
+      image.addEventListener('error', fallback, { once: true });
+      node.append(image);
+    } else fallback();
   }
-  function badge(node, value) { text(node, stateLabels[value] || value || '状态未知'); node.dataset.state = value || 'unknown'; }
-  function participant(call, role) { return call?.participants?.[role]?.name || (role === 'caller' ? '发起方' : '尚未接听'); }
-  function coverage(call) { return call.coverage === 'relay' ? '服务器记录' : call.coverage === 'both' ? '双端记录' : call.coverage === 'callee' ? '接听端记录' : '发起端记录'; }
+  function date(value, mode = 'full') {
+    if (!value) return 'Unknown time';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return 'Unknown time';
+    if (mode === 'clock') return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    if (mode === 'short') return d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }) + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return d.toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  function badge(node, value) { text(node, stateLabels[value] || value || 'Unknown state'); node.dataset.state = value || 'unknown'; }
+  function participant(call, role) { return call?.participants?.[role]?.name || (role === 'caller' ? 'Caller' : 'Awaiting answer'); }
+  function coverage(call) { return call.coverage === 'relay' ? 'Server records' : call.coverage === 'both' ? 'Both sides recorded' : call.coverage === 'callee' ? 'Callee records' : 'Caller records'; }
   function toast(message) { (document.querySelector('dialog[open]') || document.body).append(ui.toast); text(ui.toast, message); ui.toast.hidden = false; clearTimeout(state.toastTimer); state.toastTimer = setTimeout(() => { ui.toast.hidden = true; }, 2600); }
   const panelButtons = { sidebar: ui.sidebarToggle, infoPanel: ui.topbarCall, toolsPanel: ui.toolsToggle };
   function openPanel(id, focusTarget) {
@@ -128,28 +143,28 @@ interface ViewerElements {
   function parseViewLink(raw) {
     const value = raw.trim();
     if (sessionPattern.test(value)) return { callId: value.toLowerCase(), token: value.toLowerCase(), kind: 'session', hash: `#session=${value.toLowerCase()}` };
-    if (/^ac_/i.test(value)) throw new Error('请填写邀请中的 Session，ac_ 开头的是本地会话编号。');
+    if (/^ac_/i.test(value)) throw new Error('Enter the Session from the invitation. IDs starting with ac_ are local session IDs.');
     let url;
-    try { url = new URL(value); } catch { throw new Error('Session 格式不正确，请复制邀请中的完整编号。'); }
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('请填写有效的 Session 或查看链接。');
-    if (url.origin !== location.origin) throw new Error('这个链接属于其他交换机，请直接打开原链接查看。');
-    if (!/^\/view\/?$/.test(url.pathname) || url.search) throw new Error('这不是查看链接，请复制邀请中的 Session。');
+    try { url = new URL(value); } catch { throw new Error('Invalid Session. Copy the complete ID from the invitation.'); }
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Enter a valid Session or viewing link.');
+    if (url.origin !== location.origin) throw new Error('This link belongs to another server. Open the original link to view it.');
+    if (!/^\/view\/?$/.test(url.pathname) || url.search) throw new Error('This is not a viewing link. Copy the Session from the invitation.');
     const params = new URLSearchParams(url.hash.slice(1));
     if (params.has('session')) {
       const session = params.get('session');
-      if (params.getAll('session').length !== 1 || Array.from(params.keys()).some((key) => key !== 'session') || !sessionPattern.test(session || '')) throw new Error('查看链接中的 Session 不完整。');
+      if (params.getAll('session').length !== 1 || Array.from(params.keys()).some((key) => key !== 'session') || !sessionPattern.test(session || '')) throw new Error('The viewing link contains an incomplete Session.');
       return parseViewLink(session);
     }
     const callId = params.get('call');
     const token = params.get('token');
-    if (params.getAll('call').length !== 1 || params.getAll('token').length !== 1 || Array.from(params.keys()).some((key) => key !== 'call' && key !== 'token') || !sessionPattern.test(callId || '') || !/^acv_[A-Za-z0-9_-]{43}$/.test(token || '')) throw new Error('查看链接不完整，请复制邀请中的 Session。');
+    if (params.getAll('call').length !== 1 || params.getAll('token').length !== 1 || Array.from(params.keys()).some((key) => key !== 'call' && key !== 'token') || !sessionPattern.test(callId || '') || !/^acv_[A-Za-z0-9_-]{43}$/.test(token || '')) throw new Error('Incomplete viewing link. Copy the Session from the invitation.');
     return { callId, token, kind: 'legacy', hash: url.hash };
   }
   function retentionNote(source: NonNullable<CallDetails['source']> = {}) {
     const ms = Number(source.retentionMs);
-    const duration = Number.isFinite(ms) && ms > 0 ? (ms >= 3600000 ? `${Number((ms / 3600000).toFixed(1))} 小时` : `${Math.ceil(ms / 60000)} 分钟`) : '有限时间';
-    const ending = source.availableUntil ? `本次记录预计保留至 ${date(source.availableUntil)}。` : `通话结束后保留 ${duration}。`;
-    return `记录保存在服务器内存中，服务重启会丢失。${ending}`;
+    const duration = Number.isFinite(ms) && ms > 0 ? (ms >= 3600000 ? `${Number((ms / 3600000).toFixed(1))} hours` : `${Math.ceil(ms / 60000)} minutes`) : 'a limited time';
+    const ending = source.availableUntil ? `These records are available until ${date(source.availableUntil)}. ` : `Records are retained after the call for ${duration}. `;
+    return `Records are stored in server memory and are lost on restart. ${ending}`;
   }
   function nearBottom() { const s = ui.messageScroll; return s.scrollHeight - s.scrollTop - s.clientHeight < 90; }
   function scrollBottom() { ui.messageScroll.scrollTop = ui.messageScroll.scrollHeight; ui.jumpToLatest.hidden = true; }
@@ -159,20 +174,20 @@ interface ViewerElements {
     if (access) headers.Authorization = `Bearer ${access.token}`;
     const response = await fetch(path, { headers, cache: 'no-store', redirect: 'error', referrerPolicy: 'no-referrer' });
     if (!response.ok) {
-      const message = access && response.status === 401 ? 'Session 或查看链接无效，记录也可能已过期或因服务重启清空。' : access && response.status === 404 ? '未找到这次通话，记录可能已过期或因服务重启清空。' : `读取失败（HTTP ${response.status}）。请确认${access ? '交换机' : '记录查看服务'}仍在运行。`;
+      const message = access && response.status === 401 ? 'Invalid Session or viewing link. The records may have expired or been cleared on restart.' : access && response.status === 404 ? 'Call not found. The records may have expired or been cleared on restart.' : `Unable to load records (HTTP ${response.status}). Make sure the ${access ? 'relay server' : 'record viewer'} is still running.`;
       const error = Object.assign(new Error(message), { status: response.status }); throw error;
     }
     const result = await response.json();
-    if (!result || typeof result !== 'object') throw new Error('服务返回了无法识别的数据。请刷新重试。');
+    if (!result || typeof result !== 'object') throw new Error('The server returned unrecognized data. Refresh to try again.');
     return result;
   }
-  function showError(error) { text(ui.apiError, error instanceof Error ? error.message : `无法读取${remoteMode ? '服务器' : '本地'}记录，请刷新重试。`); ui.apiError.hidden = false; text(ui.refreshStatus, '读取失败 · 可手动重试'); }
+  function showError(error) { text(ui.apiError, error instanceof Error ? error.message : `Unable to load ${remoteMode ? 'server' : 'local'} records. Refresh to try again.`); ui.apiError.hidden = false; text(ui.refreshStatus, 'Unable to load · Try refreshing'); }
   function warnings(node, items) {
     const signature = JSON.stringify(items || []);
     if (node.dataset.signature === signature) return;
     node.dataset.signature = signature;
     node.replaceChildren();
-    for (const item of items || []) node.append(el('p', '', item.message || item.code || '部分本地记录无法读取。'));
+    for (const item of items || []) node.append(el('p', '', item.message || item.code || 'Some local records could not be read.'));
     node.hidden = !(items || []).length;
   }
 
@@ -199,20 +214,20 @@ interface ViewerElements {
       if (!node) { node = createCallNode(call); state.listNodes.set(call.key, node); }
       badge(node.querySelector('.state-badge'), call.state);
       text(node.querySelector('.call-item-time'), date(call.lastActivityAt || call.createdAt, 'short'));
-      text(node.querySelector('.call-item-title'), call.purpose || '未命名通话');
+      text(node.querySelector('.call-item-title'), call.purpose || 'Untitled call');
       text(node.querySelector('.call-item-people'), `${participant(call, 'caller')} ↔ ${participant(call, 'callee')}`);
-      text(node.querySelector('.call-item-preview'), call.preview || '暂无消息');
+      text(node.querySelector('.call-item-preview'), call.preview || 'No messages yet');
       text(node.querySelector('.call-item-coverage'), coverage(call));
-      text(node.querySelector('.call-item-count'), `${call.messageCount ?? 0} 条消息`);
+      text(node.querySelector('.call-item-count'), `${call.messageCount ?? 0} messages`);
       node.classList.toggle('is-selected', call.key === state.selected);
       node.setAttribute('aria-current', call.key === state.selected ? 'true' : 'false');
-      node.setAttribute('aria-label', `${call.purpose || '未命名通话'}，${stateLabels[call.state] || '状态未知'}，${participant(call, 'caller')} 与 ${participant(call, 'callee')}`);
+      node.setAttribute('aria-label', `${call.purpose || 'Untitled call'}, ${stateLabels[call.state] || 'Unknown state'}, ${participant(call, 'caller')} and ${participant(call, 'callee')}`);
       if (ui.callList.children[index] !== node) ui.callList.insertBefore(node, ui.callList.children[index] || null);
     });
     const allKeys = new Set(state.calls.map((call) => call.key));
     for (const key of state.listNodes.keys()) if (!allKeys.has(key)) state.listNodes.delete(key);
     ui.listEmpty.hidden = visible.length > 0;
-    text(ui.listEmpty, state.calls.length ? '没有匹配的通话，试试其他关键词。' : remoteMode ? '输入 Session 打开通话。' : '还没有本地通话记录。');
+    text(ui.listEmpty, state.calls.length ? 'No matching calls. Try another search.' : remoteMode ? 'Enter a Session to open a call.' : 'No local call records yet.');
   }
 
   function safeRichText(container, content) {
@@ -223,9 +238,9 @@ interface ViewerElements {
     const appendCode = () => {
       const block = el('div', 'code-block');
       const heading = el('div', 'code-heading');
-      const copy = el('button', 'copy-code', '复制代码'); copy.type = 'button';
+      const copy = el('button', 'copy-code', 'Copy code'); copy.type = 'button';
       const raw = code.join('\n');
-      copy.addEventListener('click', () => copyText(raw, '代码已复制'));
+      copy.addEventListener('click', () => copyText(raw, 'Code copied'));
       heading.append(el('span', '', language || 'text'), copy);
       const pre = el('pre'); pre.append(el('code', '', raw));
       block.append(heading, pre); container.append(block); code = [];
@@ -265,12 +280,12 @@ interface ViewerElements {
     ui.callPresence.classList.toggle('is-joining', joining);
     const waiting = call.state === 'waiting';
     const connected = call.state === 'connected';
-    text(ui.presenceStatus, waiting ? '正在呼叫另一位 agent' : connected ? '双方已接通' : stateLabels[call.state] || '通话状态未知');
-    text(ui.presenceNote, waiting ? '邀请已发出，等待对方加入' : connected ? '他们的对话会出现在这里' : '通话记录保留在下方');
-    if (!remoteMode) text(ui.presenceNote, '本地最后一次观察到的状态');
+    text(ui.presenceStatus, waiting ? 'Calling another agent' : connected ? 'Both agents are connected' : stateLabels[call.state] || 'Unknown call state');
+    text(ui.presenceNote, waiting ? 'Invitation sent. Waiting for the other agent to join.' : connected ? 'Their conversation will appear here' : 'The call records appear below');
+    if (!remoteMode) text(ui.presenceNote, 'Last observed state in local records');
     const expiry = waiting && remoteMode && call.expiresAt && !Number.isNaN(new Date(call.expiresAt).getTime());
     ui.presenceExpiry.hidden = !expiry;
-    if (expiry) { text(ui.presenceExpiry, `邀请有效至 ${date(call.expiresAt, 'clock')}`); ui.presenceExpiry.dateTime = call.expiresAt; }
+    if (expiry) { text(ui.presenceExpiry, `Invitation expires at ${date(call.expiresAt, 'clock')}`); ui.presenceExpiry.dateTime = call.expiresAt; }
     else { text(ui.presenceExpiry, ''); ui.presenceExpiry.removeAttribute('datetime'); }
     if (joining) presenceTimer = setTimeout(finishJoining, 1500);
   }
@@ -279,27 +294,30 @@ interface ViewerElements {
     const signature = JSON.stringify({ call, sessions: detail.sessions, warnings: detail.warnings, source: detail.source });
     if (state.detailSignature === signature) return;
     state.detailSignature = signature;
-    text(ui.callPurpose, call.purpose || '未命名通话');
+    text(ui.callPurpose, call.purpose || 'Untitled call');
     badge(ui.callState, call.state);
     badge(ui.infoState, call.state);
-    ui.topbarCall.setAttribute('aria-label', `${participant(call, 'caller')} 与 ${participant(call, 'callee')}，${stateLabels[call.state] || '状态未知'}。查看通话详情与背景`);
-    ui.callState.title = remoteMode ? '最近一次刷新时的交换机状态' : '本地最后一次记录中的状态，不代表交换机当前状态';
-    text(ui.callCreated, `${date(call.createdAt)} 发起`);
+    ui.topbarCall.setAttribute('aria-label', `${participant(call, 'caller')} and ${participant(call, 'callee')}, ${stateLabels[call.state] || 'Unknown state'}. View call details and context`);
+    ui.callState.title = remoteMode ? 'Server state at the last refresh' : 'Last locally recorded state; the current server state may differ';
+    text(ui.callCreated, `Started ${date(call.createdAt)}`);
     text(ui.callShortId, `Session ${call.callId || '—'}`);
     ui.callShortId.title = call.callId || '';
     text(ui.callerName, participant(call, 'caller'));
     text(ui.calleeName, participant(call, 'callee'));
+    for (const role of ['caller', 'callee']) {
+      for (const id of [`${role}Avatar`, `${role}PresenceAvatar`]) renderAvatar($(id), participant(call, role), role);
+    }
     const roles = new Set((detail.sessions || []).map((session) => session.role));
-    text(ui.callerSource, remoteMode ? '由交换机记录' : roles.has('caller') ? '本机有此端记录' : '来自对方消息');
-    text(ui.calleeSource, remoteMode ? call.participants?.callee ? '由交换机记录' : '等待另一端加入' : roles.has('callee') ? '本机有此端记录' : call.participants?.callee ? '来自对方消息' : '等待另一端加入');
-    text(ui.coverageNote, remoteMode ? `显示本次通话双方发送到交换机的完整消息与事件。${retentionNote(detail.source)}` : call.coverage === 'both' ? `已合并本机 ${call.localSessionCount || detail.sessions.length} 份会话记录，同一事件只显示一次。` : `仅有${call.coverage === 'callee' ? '接听端' : '发起端'}的本地记录，未被此端观察到的消息可能缺失。`);
+    text(ui.callerSource, remoteMode ? 'Recorded by the server' : roles.has('caller') ? 'Recorded on this device' : 'From peer messages');
+    text(ui.calleeSource, remoteMode ? call.participants?.callee ? 'Recorded by the server' : 'Waiting for the other agent' : roles.has('callee') ? 'Recorded on this device' : call.participants?.callee ? 'From peer messages' : 'Waiting for the other agent');
+    text(ui.coverageNote, remoteMode ? `Shows all messages and events sent to the server during this call. ${retentionNote(detail.source)}` : call.coverage === 'both' ? `Merged ${call.localSessionCount || detail.sessions.length} local session records. Each event appears once.` : `Only ${call.coverage === 'callee' ? 'Callee' : 'Caller'} records are available locally. Messages not observed by this side may be missing.`);
     const context = typeof call.context === 'string' ? call.context : call.context ? JSON.stringify(call.context, null, 2) : '';
-    if (ui.callContext.dataset.value !== context) { safeRichText(ui.callContext, context || '这次通话没有附带背景。'); ui.callContext.dataset.value = context; }
-    text(ui.contextHint, context ? `${context.length.toLocaleString()} 字符` : '未提供');
+    if (ui.callContext.dataset.value !== context) { safeRichText(ui.callContext, context || 'No context was provided for this call.'); ui.callContext.dataset.value = context; }
+    text(ui.contextHint, context ? `${context.length.toLocaleString()} characters` : 'Not provided');
     warnings(ui.detailWarnings, detail.warnings);
-    text(ui.recordNote, `${remoteMode ? '服务器记录' : '本地已观察记录'} · ${call.eventCount ?? detail.events.length} 个事件 · ${remoteMode ? '双方完整事件' : coverage(call)}`);
+    text(ui.recordNote, `${remoteMode ? 'Server records' : 'Locally observed records'} · ${call.eventCount ?? detail.events.length} events · ${remoteMode ? 'All events from both sides' : coverage(call)}`);
     if (remoteMode) text(ui.sourceDescription, retentionNote(detail.source));
-    document.title = `${call.purpose || '通话记录'} · NokNok`;
+    document.title = `${call.purpose || 'Call records'} · NokNok`;
   }
 
   function createEvent(event, detail) {
@@ -308,8 +326,8 @@ interface ViewerElements {
       const node = el('div', 'system-event'); node.setAttribute('role', 'listitem'); node.dataset.seq = event.seq;
       const content = el('div', 'system-event-content');
       const names = data.participants || detail.call.participants;
-      let label = event.type === 'joined' ? `${names?.callee?.name || '接听方'} 加入通话` : event.type === 'closed' ? `通话${stateLabels[data.state] || '已结束'}` : typeLabels[event.type] || event.type;
-      if (event.type === 'closed' && data.reason === 'both_participants_finished') label = '双方确认完成 · 通话结束';
+      let label = event.type === 'joined' ? `${names?.callee?.name || 'Callee'} joined the call` : event.type === 'closed' ? `Call ${stateLabels[data.state] || 'ended'}` : typeLabels[event.type] || event.type;
+      if (event.type === 'closed' && data.reason === 'both_participants_finished') label = 'Both sides confirmed completion · Call ended';
       const time = el('time', '', date(event.at, 'clock')); time.title = date(event.at); if (event.at) time.dateTime = event.at;
       content.append(el('span', '', label), time);
       const reason = data.text || (data.reason && data.reason !== 'both_participants_finished' ? data.reason : '');
@@ -319,21 +337,23 @@ interface ViewerElements {
     const node = el('div', 'message'); node.dataset.role = event.from; node.dataset.type = event.type; node.dataset.seq = event.seq; node.setAttribute('role', 'listitem');
     const heading = el('div', 'message-heading');
     const time = el('time', 'message-time', date(event.at, 'clock')); time.title = date(event.at); if (event.at) time.dateTime = event.at;
-    const avatar = el('span', 'message-avatar', event.from === 'caller' ? 'A' : 'B'); avatar.setAttribute('aria-hidden', 'true');
-    heading.append(avatar, el('strong', '', participant(detail.call, event.from)));
+    const avatar = el('span', 'agent-avatar message-avatar'); avatar.setAttribute('aria-hidden', 'true');
+    renderAvatar(avatar, participant(detail.call, event.from), event.from);
+    heading.append(el('strong', '', participant(detail.call, event.from)));
     if (event.type !== 'message') heading.append(el('span', 'message-type', typeLabels[event.type] || event.type));
     heading.append(time);
     const bubble = el('div', 'message-bubble');
-    safeRichText(bubble, data.text ?? '（无文本内容）');
+    safeRichText(bubble, data.text ?? '(No text content)');
     const provenance = el('div', 'message-provenance');
     const sources = new Set((event.observedBy || []).map((id) => detail.sessions.find((session) => session.id === id)?.role).filter(Boolean));
-    const sourceLabel = remoteMode ? '服务器记录' : sources.has('caller') && sources.has('callee') ? '双端均有记录' : sources.has('callee') ? '接听端记录' : sources.has('caller') ? '发起端记录' : '本地记录';
-    provenance.append(el('span', 'message-seq', `#${event.seq}`), el('span', '', `${event.from === 'caller' ? '发起端' : '接听端'} · ${sourceLabel}`));
-    if (data.replyTo) provenance.append(el('span', '', `回复 ${data.replyTo}`));
+    const sourceLabel = remoteMode ? 'Server records' : sources.has('caller') && sources.has('callee') ? 'Recorded by both sides' : sources.has('callee') ? 'Callee records' : sources.has('caller') ? 'Caller records' : 'Local records';
+    provenance.append(el('span', 'message-seq', `#${event.seq}`), el('span', '', `${event.from === 'caller' ? 'Caller' : 'Callee'} · ${sourceLabel}`));
+    if (data.replyTo) provenance.append(el('span', '', `Reply to ${data.replyTo}`));
     const metadata = el('details', 'message-details');
-    const summary = el('summary', '', '···'); summary.setAttribute('aria-label', `查看消息 ${event.seq} 的记录信息`); summary.title = '消息记录信息';
+    const summary = el('summary', '', '···'); summary.setAttribute('aria-label', `View message ${event.seq} record details`); summary.title = 'Message record details';
     metadata.append(summary, provenance); heading.append(metadata);
-    node.append(heading, bubble); return node;
+    const body = el('div', 'message-body'); body.append(heading, bubble);
+    node.append(avatar, body); return node;
   }
   function renderEvents({ filterChanged = false } = {}) {
     const detail = state.detail;
@@ -346,7 +366,7 @@ interface ViewerElements {
     const anchor = oldAnchor ? { seq: oldAnchor.dataset.seq, top: oldAnchor.getBoundingClientRect().top } : null;
     const query = ui.messageSearch.value.trim().toLocaleLowerCase();
     const role = ui.roleFilter.value;
-    const events = detail.events.filter((event) => (role === 'all' || event.from === role) && [event.data?.text, event.data?.reason, typeLabels[event.type], event.type, event.from === 'system' ? '系统' : participant(detail.call, event.from)].join(' ').toLocaleLowerCase().includes(query));
+    const events = detail.events.filter((event) => (role === 'all' || event.from === role) && [event.data?.text, event.data?.reason, typeLabels[event.type], event.type, event.from === 'system' ? 'System' : participant(detail.call, event.from)].join(' ').toLocaleLowerCase().includes(query));
     const keys = new Set(events.map((event) => String(event.seq)));
     for (const child of (Array.from(ui.messageList.children) as HTMLElement[])) if (!keys.has(child.dataset.seq ?? '')) child.remove();
     events.forEach((event, index) => {
@@ -363,12 +383,12 @@ interface ViewerElements {
     });
     const allKeys = new Set(detail.events.map((event) => String(event.seq)));
     for (const key of state.eventNodes.keys()) if (!allKeys.has(key)) state.eventNodes.delete(key);
-    text(ui.messageCount, query || role !== 'all' ? `${events.length} / ${detail.events.length} 条` : `${detail.events.length} 条记录`);
+    text(ui.messageCount, query || role !== 'all' ? `${events.length} / ${detail.events.length} events` : `${detail.events.length} records`);
     ui.filterNotice.hidden = !query && role === 'all';
-    text(ui.filterNoticeText, `已筛选 · ${events.length} 条`);
+    text(ui.filterNoticeText, `Filtered · ${events.length} events`);
     ui.toolsToggle.classList.toggle('has-filter', Boolean(query || role !== 'all'));
     ui.messagesEmpty.hidden = events.length > 0 || (!detail.events.length && detail.call.state === 'waiting');
-    text(ui.messagesEmpty, detail.events.length ? '没有匹配的消息。调整关键词或来源筛选后再试。' : '这次通话尚无消息记录。接听或收发消息后，记录会出现在这里。');
+    text(ui.messagesEmpty, detail.events.length ? 'No matching messages. Try another search or source filter.' : 'No messages yet. Records will appear after agents connect and exchange messages.');
     if (filterChanged) { ui.messageScroll.scrollTop = 0; ui.jumpToLatest.hidden = true; }
     else if (follow) scrollBottom();
     else {
@@ -383,15 +403,15 @@ interface ViewerElements {
   function empty(title, description) { ui.callDetail.hidden = true; ui.topbarCall.hidden = true; ui.filterNotice.hidden = true; ui.toolsToggle.classList.remove('has-filter'); ui.emptyDetail.hidden = false; text(ui.emptyTitle, title); text(ui.emptyDescription, description); }
   function clearRemoteDisplay() {
     resetPresence();
-    document.title = 'NokNok · 通话记录';
+    document.title = 'NokNok · Call records';
     for (const id of ['callPurpose', 'callState', 'infoState', 'callCreated', 'callShortId', 'callerName', 'calleeName', 'callerSource', 'calleeSource', 'coverageNote', 'contextHint', 'recordNote', 'messageCount', 'apiError']) text(ui[id], '');
     delete ui.infoState.dataset.state;
-    ui.topbarCall.setAttribute('aria-label', '查看通话详情与背景');
+    ui.topbarCall.setAttribute('aria-label', 'View call details and context');
     ui.callState.removeAttribute('title'); delete ui.callState.dataset.state;
     ui.callShortId.removeAttribute('title');
     ui.callContext.replaceChildren(); delete ui.callContext.dataset.value; ui.contextDetails.open = false;
     ui.detailWarnings.replaceChildren(); delete ui.detailWarnings.dataset.signature; ui.detailWarnings.hidden = true;
-    text(ui.sourceDescription, '记录保存在服务器内存中，服务重启会丢失；通话结束后仅保留有限时间。');
+    text(ui.sourceDescription, 'Records are stored in server memory and are lost on restart. They remain available for a limited time after the call.');
   }
   async function loadDetail(key) {
     const request = ++state.detailRequest;
@@ -401,8 +421,8 @@ interface ViewerElements {
       const path = remoteMode && access?.kind === 'session' ? '/v1/session-view' : `${remoteMode ? '/v1/views/' : '/api/calls/'}${encodeURIComponent(key)}`;
       const detail = await json(path, access);
       if (request !== state.detailRequest || key !== state.selected || (remoteMode && access !== viewAccess)) return;
-      if (!detail.call || !Array.isArray(detail.events)) throw new Error('通话数据不完整，请刷新重试。');
-      if (remoteMode && detail.call.callId !== access?.callId) throw new Error('服务返回的通话与查看链接不一致，请刷新重试。');
+      if (!detail.call || !Array.isArray(detail.events)) throw new Error('Incomplete call data. Refresh to try again.');
+      if (remoteMode && detail.call.callId !== access?.callId) throw new Error('The returned call does not match the viewing link. Refresh to try again.');
       detail.sessions ||= [];
       detail.events.sort((a, b) => a.seq - b.seq);
       state.detail = detail;
@@ -417,7 +437,7 @@ interface ViewerElements {
         clearRemoteDisplay();
       }
       showError(error);
-      if (!state.detail) empty('暂时无法读取这次通话', remoteMode ? error.message || '请检查交换机服务，或重新填写 Session。' : '请检查查看服务，或打开通话列表选择其他通话。');
+      if (!state.detail) empty('This call is currently unavailable', remoteMode ? error.message || 'Check the server or enter the Session again.' : 'Check the viewer service or choose another call from the list.');
     }
   }
   async function selectCall(key, { updateHash = true } = {}) {
@@ -427,7 +447,7 @@ interface ViewerElements {
       state.selected = key; state.detail = null; state.detailSignature = ''; state.eventNodes.clear(); state.initialScroll = true;
       ui.messageList.replaceChildren(); ui.messageSearch.value = ''; ui.roleFilter.value = 'all'; ui.contextDetails.open = false; ui.callContext.dataset.value = '';
       ui.apiError.hidden = true; ui.jumpToLatest.hidden = true;
-      empty('正在打开通话', remoteMode ? '正在读取交换机保存的双方消息与事件。' : '读取本机已观察到的对话与事件。');
+      empty('Opening call', remoteMode ? 'Loading both agents’ messages and events from the server.' : 'Loading locally observed messages and events.');
       renderCalls();
     }
     if (updateHash && !remoteMode) history.replaceState(null, '', `#call=${encodeURIComponent(key)}`);
@@ -441,43 +461,43 @@ interface ViewerElements {
       if (remoteMode) {
         const access = viewAccess!;
         await selectCall(access.callId, { updateHash: false });
-        if (access === viewAccess && ui.apiError.hidden) text(ui.refreshStatus, `${state.auto ? '已更新' : '已暂停自动刷新'} · ${date(new Date().toISOString(), 'clock')}`);
+        if (access === viewAccess && ui.apiError.hidden) text(ui.refreshStatus, `${state.auto ? 'Updated' : 'Auto-refresh paused'} · ${date(new Date().toISOString(), 'clock')}`);
         return;
       }
       const data = await json('/api/calls');
       state.calls = Array.isArray(data.calls) ? data.calls.slice().sort((a, b) => String(b.lastActivityAt || b.createdAt || '').localeCompare(String(a.lastActivityAt || a.createdAt || ''))) : [];
       state.loaded = true;
-      text(ui.sourceDirectory, data.source?.directory || '未提供路径');
+      text(ui.sourceDirectory, data.source?.directory || 'Path unavailable');
       warnings(ui.listWarnings, data.warnings);
       renderCalls();
       ui.apiError.hidden = true;
       if (!state.selected) {
         const key = hashKey() || state.calls[0]?.key;
-        if (key) await selectCall(key); else empty('还没有通话记录', '使用 NokNok 创建或接听一次通话，然后刷新。CLI 收到的消息会保存在本地，并出现在这里。');
+        if (key) await selectCall(key); else empty('No call records yet', 'Create or accept a NokNok call, then refresh. Messages received by the CLI are saved locally and appear here.');
       } else await loadDetail(state.selected);
-      if (ui.apiError.hidden) text(ui.refreshStatus, `${state.auto ? '已更新' : '已暂停自动刷新'} · ${date(new Date().toISOString(), 'clock')}`);
-    } catch (error) { showError(error); if (!state.loaded) empty(`无法读取${remoteMode ? '服务器' : '本地'}记录`, '请确认查看服务仍在运行，再打开右上角工具，点击“立即刷新”。'); }
+      if (ui.apiError.hidden) text(ui.refreshStatus, `${state.auto ? 'Updated' : 'Auto-refresh paused'} · ${date(new Date().toISOString(), 'clock')}`);
+    } catch (error) { showError(error); if (!state.loaded) empty(`Unable to load ${remoteMode ? 'server' : 'local'} records`, 'Make sure the viewer is running, then open Search and export and select Refresh now.'); }
     finally { state.refreshing = false; ui.refreshButton.disabled = false; }
   }
-  async function copyText(value, success = '对话已复制') {
+  async function copyText(value, success = 'Conversation copied') {
     try {
       if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
       else {
         const previous = document.activeElement;
-        const area = el('textarea', '', value); area.style.position = 'fixed'; area.style.opacity = '0'; area.setAttribute('aria-label', '复制内容'); document.body.append(area); area.select();
+        const area = el('textarea', '', value); area.style.position = 'fixed'; area.style.opacity = '0'; area.setAttribute('aria-label', 'Copy content'); document.body.append(area); area.select();
         const copied = document.execCommand('copy'); area.remove(); if (previous instanceof HTMLElement) previous.focus(); if (!copied) throw new Error('copy');
       }
       toast(success);
-    } catch { toast('复制失败，可使用“下载 Markdown”保存对话。'); }
+    } catch { toast('Copy failed. Use Download Markdown to save the conversation.'); }
   }
   function markdown() {
     if (!state.detail) return '';
     const { call, events } = state.detail;
-    const lines = [`# ${call.purpose || 'NokNok 通话记录'}`, '', `- 通话：${call.callId}`, `- 发起端：${participant(call, 'caller')}`, `- 接听端：${participant(call, 'callee')}`, `- 发起时间：${date(call.createdAt)}`, `- 最近记录状态：${stateLabels[call.state] || call.state}`, `- 来源：${coverage(call)}；${remoteMode ? '本次通话双方发送到交换机的完整消息与事件。' : '仅包含本地已观察记录。'}`, ''];
-    if (call.context) lines.push('## 通话背景', '', typeof call.context === 'string' ? call.context : JSON.stringify(call.context, null, 2), '');
-    lines.push('## 对话', '');
+    const lines = [`# ${call.purpose || 'NokNok call records'}`, '', `- Call: ${call.callId}`, `- Caller: ${participant(call, 'caller')}`, `- Callee: ${participant(call, 'callee')}`, `- Started: ${date(call.createdAt)}`, `- Last recorded state: ${stateLabels[call.state] || call.state}`, `- Source: ${coverage(call)}; ${remoteMode ? 'All messages and events sent to the server during this call.' : 'Contains locally observed records only.'}`, ''];
+    if (call.context) lines.push('## Call context', '', typeof call.context === 'string' ? call.context : JSON.stringify(call.context, null, 2), '');
+    lines.push('## Conversation', '');
     for (const event of events) {
-      lines.push(`### #${event.seq} · ${event.from === 'system' ? '系统' : participant(call, event.from)} · ${typeLabels[event.type] || event.type} · ${date(event.at)}`, '', event.data?.text || event.data?.reason || typeLabels[event.type] || event.type, '');
+      lines.push(`### #${event.seq} · ${event.from === 'system' ? 'System' : participant(call, event.from)} · ${typeLabels[event.type] || event.type} · ${date(event.at)}`, '', event.data?.text || event.data?.reason || typeLabels[event.type] || event.type, '');
     }
     return lines.join('\n');
   }
@@ -495,14 +515,14 @@ interface ViewerElements {
     clearRemoteDisplay();
     renderCalls();
     if (!access) {
-      empty('打开一段通话', '输入邀请中的 Session，看看双方聊到哪里。');
-      text(ui.refreshStatus, '等待 Session');
-      document.title = 'NokNok · 通话记录';
+      empty('Open a call', 'Enter the Session from the invitation to follow the conversation.');
+      text(ui.refreshStatus, 'Waiting for a Session');
+      document.title = 'NokNok · Call records';
       return;
     }
-    text(ui.refreshStatus, '正在读取服务器记录…');
+    text(ui.refreshStatus, 'Loading server records…');
     selectCall(access.callId, { updateHash: false }).then(() => {
-      if (access === viewAccess && ui.apiError.hidden) text(ui.refreshStatus, `${state.auto ? '已更新' : '已暂停自动刷新'} · ${date(new Date().toISOString(), 'clock')}`);
+      if (access === viewAccess && ui.apiError.hidden) text(ui.refreshStatus, `${state.auto ? 'Updated' : 'Auto-refresh paused'} · ${date(new Date().toISOString(), 'clock')}`);
     });
   }
   function loadRemoteHash() {
@@ -535,14 +555,14 @@ interface ViewerElements {
   ui.messageSearch.addEventListener('input', () => renderEvents({ filterChanged: true }));
   ui.roleFilter.addEventListener('change', () => renderEvents({ filterChanged: true }));
   ui.refreshButton.addEventListener('click', () => refresh());
-  ui.autoRefresh.addEventListener('click', () => { state.auto = !state.auto; ui.autoRefresh.setAttribute('aria-pressed', String(state.auto)); ui.autoRefresh.setAttribute('aria-label', state.auto ? '暂停自动刷新' : '开启自动刷新'); ui.autoRefresh.title = state.auto ? '暂停自动刷新' : '开启自动刷新'; text(ui.autoRefreshLabel, state.auto ? '自动刷新' : '已暂停'); text(ui.refreshStatus, state.auto ? '自动刷新已开启' : '已暂停自动刷新'); toast(state.auto ? '自动刷新已开启' : '自动刷新已暂停'); if (state.auto) refresh(); });
+  ui.autoRefresh.addEventListener('click', () => { state.auto = !state.auto; ui.autoRefresh.setAttribute('aria-pressed', String(state.auto)); ui.autoRefresh.setAttribute('aria-label', state.auto ? 'Pause auto-refresh' : 'Enable auto-refresh'); ui.autoRefresh.title = state.auto ? 'Pause auto-refresh' : 'Enable auto-refresh'; text(ui.autoRefreshLabel, state.auto ? 'Auto-refresh' : 'Paused'); text(ui.refreshStatus, state.auto ? 'Auto-refresh enabled' : 'Auto-refresh paused'); toast(state.auto ? 'Auto-refresh enabled' : 'Auto-refresh paused'); if (state.auto) refresh(); });
   ui.jumpToLatest.addEventListener('click', scrollBottom);
   ui.messageScroll.addEventListener('scroll', () => { if (nearBottom()) ui.jumpToLatest.hidden = true; }, { passive: true });
   ui.copyConversation.addEventListener('click', () => { if (state.detail) copyText(markdown()); });
   ui.downloadConversation.addEventListener('click', () => {
     if (!state.detail) return;
     const url = URL.createObjectURL(new Blob([markdown()], { type: 'text/markdown;charset=utf-8' }));
-    const link = el('a'); link.href = url; link.download = `noknok-${state.detail.call.callId || 'conversation'}.md`; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); toast('已下载对话记录');
+    const link = el('a'); link.href = url; link.download = `noknok-${state.detail.call.callId || 'conversation'}.md`; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); toast('Conversation downloaded');
   });
   window.addEventListener('hashchange', () => { if (remoteMode) loadRemoteHash(); else { const key = hashKey(); if (key && key !== state.selected) selectCall(key, { updateHash: false }); } });
   setInterval(() => { if (state.auto && !document.hidden) refresh({ automatic: true }); }, 2000);
@@ -556,14 +576,14 @@ interface ViewerElements {
   if (remoteMode) {
     document.body.classList.add('remote-mode');
     ui.brandLink.addEventListener('click', (event) => event.preventDefault());
-    ui.sidebar.setAttribute('aria-label', '当前通话');
-    ui.callList.setAttribute('aria-label', '获准查看的通话');
-    text(ui.sidebarTitle, '查看通话'); text(ui.sidebarCaption, '当前通话');
+    ui.sidebar.setAttribute('aria-label', 'Current call');
+    ui.callList.setAttribute('aria-label', 'Authorized calls');
+    text(ui.sidebarTitle, 'View call'); text(ui.sidebarCaption, 'Current call');
     ui.callSearchField.hidden = true; ui.remoteAccess.hidden = false; ui.sourceDetails.hidden = true;
-    text(ui.sourceLabel, '服务器记录 · 只读');
-    text(ui.emptyNote, '查看不会加入通话。请仅向需要查看的人分享 Session。');
-    text(ui.emptyAction, '输入 Session');
-    text(ui.stateNote, '状态以最近一次刷新为准');
+    text(ui.sourceLabel, 'Server records · Read only');
+    text(ui.emptyNote, 'Viewing does not join the call. Share the Session only with intended viewers.');
+    text(ui.emptyAction, 'Enter Session');
+    text(ui.stateNote, 'State at the last refresh');
     ui.viewLinkForm.addEventListener('submit', (event) => {
       event.preventDefault();
       const raw = ui.viewLinkInput.value; ui.viewLinkInput.value = '';

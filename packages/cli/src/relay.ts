@@ -1,5 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import { webFile } from './asset-paths.js';
+import { viewerBrandAssets } from './viewer-assets.js';
 import type { RelayOptions } from './runtime-types.js';
 import http from 'node:http';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -20,6 +21,7 @@ const WEB_ASSETS = new Map([
   ['/view/', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
+  ...viewerBrandAssets,
   ['/meeting', ['meeting.html', 'text/html; charset=utf-8']],
   ['/meeting/', ['meeting.html', 'text/html; charset=utf-8']],
   ['/meeting.js', ['meeting.js', 'text/javascript; charset=utf-8']],

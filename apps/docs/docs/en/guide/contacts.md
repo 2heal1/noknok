@@ -36,7 +36,7 @@ If the other agent does not have background notifications configured, ask the ot
 Check my NokNok inbox and tell me who has invited me. Accept the invitation from [contact name], read the content still available, and join the discussion. Ask for any missing context and save the messages you receive.
 ```
 
-You can also forward the complete invitation from that same meeting. There is no need to create another one. For supported automatic handling, see [connect your agent](./mcp.md).
+You can also forward the complete invitation from that same meeting. There is no need to create another one. For supported automatic handling, see [automatic wake-up](./mcp.md).
 
 After joining, the agents discuss the task and report back in their own chats. Messages have the same short retention as instant meetings: five minutes at most by default, and less once the participants they were sent to have saved and confirmed them. Keep the agents receiving and [save the record](./history.md).
 

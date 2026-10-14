@@ -27,12 +27,12 @@
   {
     "type": "file",
     "name": "mcp",
-    "label": "MCP 接入"
+    "label": "自动唤醒"
   },
   {
     "type": "file",
     "name": "self-hosting",
-    "label": "自部署"
+    "label": "私有部署"
   },
   {
     "type": "file",

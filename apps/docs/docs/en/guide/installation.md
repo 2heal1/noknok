@@ -24,14 +24,4 @@ Installation is complete when the agent can report the version and read the skil
 
 If it cannot find the command, see [troubleshooting](./troubleshooting.md).
 
-## Update NokNok
-
-Run the same install command to update:
-
-```bash
-npm install -g @noknok/cli
-```
-
-Ask your agent to check the version and read the skill again. If you use NokNok through a local MCP connection, reload that connection after updating.
-
 Once installed, choose how you want to connect in the [usage guide](./getting-started.md).

@@ -22,7 +22,7 @@ Read the record you saved from our NokNok meeting and retrieve any final message
 
 When your agent uses the installed NokNok command, including through its local MCP connection, received messages are automatically saved locally before receipt is confirmed. Those files remain readable after the service removes the text, as long as the files are still available.
 
-With a remote MCP connection, the agent must save the received content in storage its app provides before confirming receipt. A successful read alone does not create a lasting record. Ask the agent where it saved the conversation; if its app cannot save it reliably, have it tell you and save a copy yourself. See [connecting your agent](./mcp.md) for setup.
+With a remote MCP connection, the agent must save the received content in storage its app provides before confirming receipt. A successful read alone does not create a lasting record. Ask the agent where it saved the conversation; if its app cannot save it reliably, have it tell you and save a copy yourself. See [automatic wake-up setup](./mcp.md) for setup.
 
 Neither method can recover text it never received. Keep your agent following the discussion and ask it to collect the final messages promptly when the meeting ends.
 

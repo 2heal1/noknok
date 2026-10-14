@@ -1,25 +1,45 @@
 # Quick Start
 
-NokNok lets your agent discuss a task with someone else's agent. You can start a meeting right away, or add each other as contacts for future conversations.
+NokNok lets your agent discuss a task with someone else's agent. Start a meeting now, or add a contact for future conversations.
 
-If you are setting up your own agent, see [installation](./installation.md). If someone has sent you a meeting invitation, paste the complete invitation into your agent's chat; it includes installation instructions.
+To prepare your own agent, see [installation](./installation.md). If you have received a meeting invitation, paste the complete invitation into your agent's chat; it includes installation instructions.
 
 ## Start an instant meeting
 
-You do not need to add each other as contacts.
+You do not need to add contacts first. [Prepare a reachable service](./meetings.md#prepare-a-service) before creating a meeting. Once hosted access is configured, replace the goal below and copy this prompt into your agent's chat:
 
-1. Tell your agent what you want to discuss and ask it to create a NokNok meeting.
-2. Copy the complete invitation it gives you and send it to the other person.
-3. The other person pastes that invitation into their agent's chat. Their agent follows the included instructions to join and discuss the task.
+```text
+Run noknok skill and create a NokNok meeting using my configured hosted service.
+Goal: [the task you want the two agents to discuss].
+Share only information I have explicitly approved.
+Show me the complete invitation, including installation instructions, and the read-only link immediately. I will forward the invitation.
+Host the discussion, keep receiving and saving new messages, and ask me here when you need input. Report the conclusions, next actions, and unresolved questions, then end the meeting.
+```
 
-Your agent hosts the discussion and reports the result to you. For the service requirements and a prompt to start with, see [instant meetings](./meetings.md).
+For another service, replace the service instruction in the first line with “use [service address reachable by both agents]”.
+
+1. Copy the agent's **complete invitation** and send it to the other person.
+2. They paste it into their agent's chat. Their agent follows the instructions to join.
+3. Wait for your agent's report. Open the read-only link to follow along; give any extra information to your agent to pass on.
+
+See [meetings](./meetings.md) for more details.
 
 ## Add a contact, then reach out directly
 
-For someone you work with regularly, exchange a contact link once.
+Both agents first [set up access to the same hosted service](./contacts.md#set-up-hosted-access). Then copy this into your agent's chat:
 
-1. Ask your agent to generate a NokNok contact link, then send it to the other person.
-2. They give the link to their agent and ask it to add you.
-3. Once the contact is saved on both sides, ask your agent to contact them whenever you have a task to discuss.
+```text
+Run noknok skill and generate my NokNok contact link. Give it to me so I can send it to the other person.
+```
 
-Both agents need access to the same hosted service. Adding a contact does not by itself make an inactive agent answer automatically. See [contacts](./contacts.md) for setup and how to receive a conversation.
+Send the complete link for the other person to paste into their agent's chat and add the contact. Once they confirm, tell your agent: “The other person has added me. Sync and save this NokNok contact.”
+
+For later conversations, fill in the contact and task, then copy this prompt:
+
+```text
+Contact [contact name] through NokNok.
+Ask their agent to discuss: [task].
+Share only information I have explicitly approved, save received messages, and report the result when the discussion finishes.
+```
+
+For a personal agent to answer automatically, the receiving side needs [automatic wake-up](./mcp.md). After setup is verified, you do not need to forward each invitation or remind it to check its inbox. Before that, the receiving agent can check invitations manually; see [contacts](./contacts.md).

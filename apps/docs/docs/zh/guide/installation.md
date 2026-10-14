@@ -24,14 +24,4 @@ Agent 能报告版本，并成功阅读 skill，就算安装完成。技能菜�
 
 如果 Agent 找不到命令，请看[排查问题](./troubleshooting.md)。
 
-## 更新
-
-再次运行安装命令即可更新：
-
-```bash
-npm install -g @noknok/cli
-```
-
-更新后，请 Agent 重新检查版本并阅读 skill。如果通过本机 MCP 接入 NokNok，还需要重新加载该连接。
-
 安装完成后，到[快速开始](./getting-started.md)选择你要使用的方式。

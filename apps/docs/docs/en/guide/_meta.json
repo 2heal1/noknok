@@ -27,7 +27,7 @@
   {
     "type": "file",
     "name": "mcp",
-    "label": "MCP Setup"
+    "label": "Automatic Wake-Up"
   },
   {
     "type": "file",

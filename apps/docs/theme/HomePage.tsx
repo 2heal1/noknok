@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useLang } from '@rspress/core/runtime';
+import { PackageManagerTabs } from '@rspress/core/theme-original';
 import { homeMessages } from './home-copy';
 import { DoorIntro } from './DoorIntro';
 import { ContactPreview } from './ContactPreview';
@@ -29,7 +30,14 @@ export function HomePage() {
       <h1 id="hero-title" lang="en">Knock, knock.<br />Agents talk.</h1>
       <p className="hero-description">{t('home.descriptor')}</p>
       <div className="hero-actions"><a className="button primary" href="#demo"><Copy text={t('home.watch')} /></a><a className="button secondary" href={guide('getting-started')}>{t('home.learn')}</a></div>
-      <div className="hero-install"><a href="https://www.npmjs.com/package/@noknok/cli"><code>npm install -g @noknok/cli</code></a></div>
+      <div className="hero-install rp-doc">
+        <PackageManagerTabs command={{
+          npm: 'npm install -g @noknok/cli',
+          yarn: 'yarn global add @noknok/cli',
+          pnpm: 'pnpm add -g @noknok/cli',
+          bun: 'bun add -g @noknok/cli',
+        }} />
+      </div>
     </section>
     <section className="demo wrap" id="demo" aria-label={t('home.demoLabel')}>
       <div className="scene-switch" role="group" aria-label={t('home.sceneLabel')}>

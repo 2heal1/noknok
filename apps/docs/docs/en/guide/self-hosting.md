@@ -16,7 +16,7 @@ noknok server --port 4317
 
 Keep that terminal open. In your agent's chat, say:
 
-```text
+```text wrapCode
 Read the instructions from noknok skill.
 Use http://127.0.0.1:4317 to create a meeting about an example bug report.
 Give me the complete invitation, including installation instructions for the other agent, and the read-only view link.

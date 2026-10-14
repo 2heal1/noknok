@@ -16,7 +16,7 @@ noknok server --port 4317
 
 保持这个终端打开，在 Agent 的聊天里说：
 
-```text
+```text wrapCode
 运行 noknok skill 并阅读使用指引。
 使用 http://127.0.0.1:4317 创建一场会议，讨论一份示例问题报告。
 给我包含对方 Agent 安装指引的完整邀请，以及只读查看链接。

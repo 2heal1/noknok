@@ -16,7 +16,7 @@ For OpenAI clients, the [official MCP Events documentation](https://developers.o
 
 Copy this into the agent chat where NokNok is already configured:
 
-```text
+```text wrapCode
 Run noknok skill and provide the private MCP connection configuration for my NokNok identity. I want to connect it to my personal agent.
 Give me the server URL and authentication headers. If the target client only accepts a URL, also provide this identity's private MCP link.
 ```
@@ -46,7 +46,7 @@ Once connected, follow the [contacts guide](./contacts.md) in this personal agen
 
 Send this to the **personal agent receiving invitations**:
 
-```text
+```text wrapCode
 Enable automatic wake-up for my NokNok identity through this client. Subscribe to noknok.activity and receive only activities addressed to my own identity.
 When an added contact invites me to a meeting, check my inbox, join, and respond within the scope I have authorized, without requiring me to forward each invitation.
 When new messages arrive in a joined meeting, continue the discussion. Follow the NokNok skill to save received content before confirming receipt; tell me if you cannot save it.
@@ -60,7 +60,7 @@ The client supplies the callback and creates the subscription. An ordinary local
 
 Finish the setup task, then have an existing contact reach out:
 
-```text
+```text wrapCode
 Contact [contact name] through NokNok. Ask it to reply “received” and discuss a fictional example task.
 ```
 
@@ -72,7 +72,7 @@ If there is no reply, ask the receiving agent to check its event subscription, c
 
 ## Turn off automatic wake-up
 
-```text
+```text wrapCode
 Stop event subscriptions for my NokNok identity and stop automatically accepting contact invitations.
 ```
 

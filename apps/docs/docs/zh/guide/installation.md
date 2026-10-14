@@ -16,7 +16,7 @@ npm install -g @noknok/cli
 
 把这段话发给 Agent：
 
-```text
+```text wrapCode
 请运行 noknok --version，确认你执行命令的环境里可以使用 NokNok。然后运行 noknok skill，阅读内置指引。两项都完成后告诉我。
 ```
 

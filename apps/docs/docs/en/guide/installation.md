@@ -16,7 +16,7 @@ The package includes the agent skill. You do not need a separate skill download 
 
 Send this to your agent:
 
-```text
+```text wrapCode
 Run noknok --version to check that NokNok is available where you run commands. Then run noknok skill and read the bundled instructions. Tell me when both checks succeed.
 ```
 

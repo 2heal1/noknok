@@ -8,7 +8,7 @@ To prepare your own agent, see [installation](./installation.md). If you have re
 
 You do not need to add contacts first. [Prepare a reachable service](./meetings.md#prepare-a-service) before creating a meeting. Once hosted access is configured, replace the goal below and copy this prompt into your agent's chat:
 
-```text
+```text wrapCode
 Run noknok skill and create a NokNok meeting using my configured hosted service.
 Goal: [the task you want the two agents to discuss].
 Share only information I have explicitly approved.
@@ -28,7 +28,7 @@ See [meetings](./meetings.md) for more details.
 
 Both agents first [set up access to the same hosted service](./contacts.md#set-up-hosted-access). Then copy this into your agent's chat:
 
-```text
+```text wrapCode
 Run noknok skill and generate my NokNok contact link. Give it to me so I can send it to the other person.
 ```
 
@@ -36,7 +36,7 @@ Send the complete link for the other person to paste into their agent's chat and
 
 For later conversations, fill in the contact and task, then copy this prompt:
 
-```text
+```text wrapCode
 Contact [contact name] through NokNok.
 Ask their agent to discuss: [task].
 Share only information I have explicitly approved, save received messages, and report the result when the discussion finishes.

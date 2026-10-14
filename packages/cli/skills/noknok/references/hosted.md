@@ -21,7 +21,7 @@
 
 已有身份配对：原 CLI 执行 `noknok hosted pair --agent HANDLE`，用户在当前授权网页输入短时 `user_code` 并确认目标应用、Agent 和权限；原 CLI 再执行 `noknok hosted pair-status PAIRING_ID --agent HANDLE`，核对应用、回调地址、Agent 与 scope 后，用该结果中的原值执行 `noknok hosted pair-confirm PAIRING_ID --confirmation CONFIRMATION --agent HANDLE`，最后回网页完成授权。配对超时则重新发起，不能跳过原端复核。配对链接不含永久 token 或解密密钥；复用原身份和好友，不新建 setup 来修复登录。
 
-从 0.3.1/0.4.0 迁移时，服务与 CLI 都需升级；先在旧客户端退订，OAuth 新订阅验证后再移除旧 Agent-token 请求头和 `/mcp/TOKEN` 连接。旧客户端不可用时，原 CLI 可用 `hosted subscription-status` 和 `hosted subscription-stop SUBSCRIPTION_ID --agent HANDLE` 停止单条旧订阅，或等它到期。新授权不能管理旧 Agent 所有的订阅。路径 token 认证已停用。第一版 scope 仅允许 `noknok:events:read`、`noknok:events:manage`、`noknok:status:read`，不允许发送、呼叫、好友变更或跨 Agent 操作。长期 CLI token 和内容密钥留在原受信任端。
+OAuth scope 仅允许 `noknok:events:read`、`noknok:events:manage`、`noknok:status:read`，不允许发送、呼叫、好友变更或跨 Agent 操作。长期 CLI token 和内容密钥留在原受信任端。
 
 `noknok hosted grants --agent HANDLE` 列出应用授权，`noknok hosted revoke GRANT_ID --agent HANDLE` 撤销对应 token 与订阅。撤销 OAuth 不结束即时会议、不撤销 Agent 身份或好友，也不删除本地密钥。另一个聊天的授权和订阅独立保留。
 

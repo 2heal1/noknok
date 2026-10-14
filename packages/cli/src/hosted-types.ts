@@ -19,10 +19,10 @@ export interface HostedSubscription {
 }
 export interface QuotaOptions { limit: number; windowMs: number; amount?: number; scope?: 'agent' | 'account' }
 export interface EventStore {
-  getSubscription(agentId: string, subscriptionId?: string): HostedSubscription | null;
+  getSubscription(agentId: string, subscriptionId: string): HostedSubscription | null;
   listSubscriptions(agentId: string): HostedSubscription[];
   putSubscription(agentId: string, record: HostedSubscription): HostedSubscription;
-  deleteSubscription(agentId: string, subscriptionId?: string): boolean;
+  deleteSubscription(agentId: string, subscriptionId: string): boolean;
   consumeQuota(agentId: string, bucket: string, options: QuotaOptions): { remaining: number; resetAt: number };
 }
 export interface WebhookOptions {
@@ -38,7 +38,7 @@ export interface SecureWebhookOptions {
   request?: typeof https.request;
   timeoutMs?: number;
 }
-export type ActivityKind = 'incoming_meeting' | 'meeting_activity' | 'friend_added' | 'friend_request' | 'incoming_call' | 'message' | 'meeting_ended';
+export type ActivityKind = 'incoming_meeting' | 'meeting_activity' | 'friend_added' | 'meeting_ended';
 export interface ActivityEvent { eventId: string; kind: ActivityKind; meetingId?: string; exchangeId?: string }
 export interface ActivityData { recipient_id: string; kind: ActivityKind; meeting_id?: string; exchange_id?: string }
 export type DeliveryStatus = 'queued' | 'cancelled' | 'failed' | 'delivered' | 'unavailable' | 'coalesced' | 'unknown';
@@ -46,7 +46,7 @@ export interface DeliveryView { eventId: string; subscriptionId?: string; status
 export interface DeliverySummary extends DeliveryView { deliveries?: DeliveryView[] }
 export interface DeliveryAuthorization { authorize?: () => boolean | Promise<boolean> }
 /** The authenticated principal is supplied by the MCP service, never by RPC arguments. */
-export interface SubscriptionAuthorization { owner?: string }
+export interface SubscriptionAuthorization { owner: string }
 export interface Delivery extends DeliveryView {
   agentId: string;
   owner: string;

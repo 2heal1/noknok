@@ -34,25 +34,25 @@ test('verification cache survives restart but is bounded by principal, URL, key 
     delivery: { mode: 'webhook', url: `https://receiver.example/events${suffix}`, secret },
   });
 
-  const initial = await events.subscribe(a.agentId, params(a.agentId));
+  const initial = await events.subscribe(a.agentId, params(a.agentId), { owner: 'grant_test' });
   time += 100_000;
-  const refreshed = await events.subscribe(a.agentId, params(a.agentId));
+  const refreshed = await events.subscribe(a.agentId, params(a.agentId), { owner: 'grant_test' });
   assert.equal(refreshed.id, initial.id);
   assert.equal(verifications, 1);
   events.close(); store.close();
   store = openHostedStore(options);
   events = createHostedEvents({ store, now: options.now, webhookPost });
   time += 100_000;
-  await events.subscribe(a.agentId, params(a.agentId));
+  await events.subscribe(a.agentId, params(a.agentId), { owner: 'grant_test' });
   assert.equal(verifications, 1);
   time += 100_001;
-  await events.subscribe(a.agentId, params(a.agentId));
+  await events.subscribe(a.agentId, params(a.agentId), { owner: 'grant_test' });
   assert.equal(verifications, 2, 'refresh must not extend the original verification cache');
-  await events.subscribe(a.agentId, params(a.agentId, secondSecret));
+  await events.subscribe(a.agentId, params(a.agentId, secondSecret), { owner: 'grant_test' });
   assert.equal(verifications, 3, 'rotation requires proof with the replacement signing key');
-  await events.subscribe(a.agentId, params(a.agentId, secondSecret, '/new'));
+  await events.subscribe(a.agentId, params(a.agentId, secondSecret, '/new'), { owner: 'grant_test' });
   assert.equal(verifications, 4, 'a new endpoint requires its own proof');
-  await events.subscribe(b.agentId, params(b.agentId, secondSecret, '/new'));
+  await events.subscribe(b.agentId, params(b.agentId, secondSecret, '/new'), { owner: 'grant_test' });
   assert.equal(verifications, 5, 'another principal cannot reuse verification');
 });
 
@@ -93,7 +93,7 @@ test('multiple grant subscriptions survive restart and revocation preserves iden
   assert.deepEqual(events.status(a.agentId).subscriptions.map(sub => sub.id), [second.id]);
   assert.deepEqual(store.authenticate(a.agentToken), { agentId: a.agentId, accountId: account.accountId });
   store.verifyCapability(a.agentId, b.agentId, friendship.contact.capability);
-  await events.notify(a.agentId, { eventId: 'evt_after_restart', kind: 'incoming_call', meetingId: 'meeting_existing' });
+  await events.notify(a.agentId, { eventId: 'evt_after_restart', kind: 'incoming_meeting', meetingId: 'meeting_existing' });
   await events.flush();
   assert.deepEqual(calls, [second.id]);
 });

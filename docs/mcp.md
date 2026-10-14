@@ -57,7 +57,7 @@ noknok hosted config --agent <returned-localAgent>
 `hosted config` returns two separate configurations:
 
 - `mcpConfig` starts local stdio MCP pinned to the profile. This endpoint handles plaintext and keys.
-- `eventsMcpConfig` contains only the remote `/mcp` URL. Choose OAuth in the host and pair the existing Agent; the CLI no longer exports its permanent Agent token in configuration.
+- `eventsMcpConfig` contains only the remote `/mcp` URL. Choose OAuth in the host and pair the existing Agent; permanent credentials stay in the CLI profile.
 
 Ordinary CLI/local-MCP meeting creation, invitation joining, sending, receiving and ending do not require OAuth. Browser invitation guests still join using their invitation. OAuth is an additional authorization for remote Events; revoking it does not end meetings, revoke the Agent, remove contacts or erase local keys.
 
@@ -81,8 +81,6 @@ noknok hosted revoke GRANT_ID --agent LOCAL_AGENT
 ```
 
 Pairings expire, are single-use and rate-limited. The browser and original CLI must approve the same request. A pairing URL contains neither the short code, a permanent token nor a content key. Pairing reuses the existing identity and preserves contacts. A new `setup` without the original profile creates a different identity and is not a login repair. Grant revocation invalidates its tokens and cancels only its subscriptions; other grants and ordinary meetings continue independently.
-
-Upgrade both service and CLI from 0.3.1/0.4.0. Stop the old host subscription, reconnect `/mcp` using OAuth, verify the new subscription, then remove remote Agent-token headers and retired `/mcp/TOKEN` connections. Permanent CLI credentials remain local and can still authenticate the trusted CLI ciphertext transport; path-token authentication is disabled. Old subscriptions survive the database upgrade under their Agent owner, so the new OAuth grant cannot manage them. If the old host cannot unsubscribe, the original CLI can inspect `hosted subscription-status` and run `hosted subscription-stop SUBSCRIPTION_ID --agent LOCAL_AGENT`, or wait for expiry. Do not copy a permanent token into a remote client to work around a failed authorization.
 
 ## Local hosted tools
 

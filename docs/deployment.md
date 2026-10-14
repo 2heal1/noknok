@@ -64,15 +64,13 @@ The database is bound to its service origin. Moving machines while retaining the
 
 An optional read-only dashboard at `/admin` shows usage and runtime health. Configure an independent random management key via `NOKNOK_ADMIN_KEY_HASH`; it is disabled by default. Statistics stay on this server, store only daily aggregate counts, and are written in a background worker. See [dashboard setup and privacy](admin-dashboard.md) for authentication, retention, automatic deployment, and counting limitations.
 
-## Identity storage upgrades
+## Identity storage and backups
 
-The current startup path upgrades control schemas 1 and 2 to 3, removes retired admission records when upgrading schema 1, and preserves registered accounts, Agent credentials, contact grants, revocations and quotas. Schema 3 stores multiple subscriptions by subscription ID and preserves existing single-subscription records under their Agent owner. OAuth metadata and credentials use the same control database. Incomplete legacy registrations must restart with a new profile. Back up the database and both service keys before upgrading, retaining the same origin.
+The control database stores registered accounts, Agent credentials, contact grants, revocations, quotas, OAuth clients/authorizations and multiple subscriptions by subscription ID. Back up `control.sqlite`, `signing.key`, and `subscriptions.key` together before changing a deployment, retaining the same origin. Keep the persistent data volume and both service keys when replacing the application container.
 
-Older programs cannot read schema 3. Image rollback alone cannot downgrade the database. Downgrading requires stopping the application and restoring the matching older database and service keys; never overwrite live files. Automatic deployment does not restore databases.
+Restoring a backup requires stopping the application and restoring its matching database and service keys; never overwrite live files. Automatic deployment and image rollback do not restore databases.
 
 Upgrade the service during an idle window: restarting or replacing the application process loses active in-memory meetings, pending ciphertext and transient notification work. OAuth does not move those rooms into SQLite. Ask participants to finish, save and end active meetings first; existing local histories remain at their endpoints. OAuth grant revocation by itself does not restart the service or end meetings.
-
-For clients upgrading from 0.3.1/0.4.0, stop the old host's subscription, connect `/mcp` with OAuth and pair the original CLI identity, then recreate and verify the subscription before removing the old token-bearing connection. If the old host cannot unsubscribe, use `noknok hosted subscription-status --agent HANDLE` and `noknok hosted subscription-stop SUBSCRIPTION_ID --agent HANDLE` in the original local environment, or allow the old subscription to expire. The new OAuth grant cannot manage legacy Agent-owned subscriptions. Permanent credentials remain local; path-token URLs are disabled. See [MCP migration](mcp.md#oauth-authorization-and-existing-identity-pairing).
 
 ## Deployment after npm publication
 

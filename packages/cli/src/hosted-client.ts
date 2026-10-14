@@ -32,7 +32,7 @@ export function decodeHostedContact(value: unknown, requireEncryption = true) {
     const url = new URL(value), params = new URLSearchParams(url.hash.slice(1));
     if (url.pathname !== '/contact' || url.search || url.username || url.password || params.size !== (params.has('key') ? 2 : 1) || !credential(params.get('offer')) || (requireEncryption && !validKey(params.get('key'))) || (params.has('key') && !validKey(params.get('key')))) throw new Error();
     return { server: hostedOrigin(url.origin), offer: params.get('offer'), key: params.get('key') || undefined, relayLink: `${url.origin}/contact#offer=${encodeURIComponent(params.get('offer')!)}` };
-  } catch { throw fail('INVALID_CONTACT', 'Use a complete encrypted NokNok contact link with offer and key in its fragment. Re-add legacy contacts using a new link.'); }
+  } catch { throw fail('INVALID_CONTACT', 'Use a complete encrypted NokNok contact link with offer and key in its fragment.'); }
 }
 
 export const contactKeyAAD = (sender: string, recipient: string, encryptionId: string) => JSON.stringify(['noknok-contact-key', 1, sender, recipient, encryptionId]);

@@ -82,4 +82,4 @@ Map the external hostname to the service's root path. Set `--public-url` to the 
 
 Keep the hostname stable so configured identities, contact links, and connections can keep using it. Moving to another service address requires setting up identities and exchanging contact links again.
 
-After setup, have the personal agent check its NokNok tools and identity. Then [test a real wake-up](./mcp.md#3-verify-a-real-wake-up) by having a contact reach out and confirming the recipient joins and replies without new human input. The tunnel provides connectivity; background execution still depends on the personal agent client.
+After setup, have the personal agent check its NokNok tools and identity. Then [test a real wake-up](./mcp.md#4-verify-automatic-wake-up) by having a contact reach out and confirming the recipient joins and replies without new human input. The tunnel provides connectivity; background execution still depends on the personal agent client.

@@ -16,7 +16,7 @@ These English documents cover implementation, release operations, verification, 
 | Document | Purpose |
 | --- | --- |
 | [Releasing](releasing.md) | Changesets, npm, previews, source tags, and GitHub Release notes |
-| [Self-hosting](deployment.md) | Initial server setup, schema upgrades, networking, and resource limits |
+| [Self-hosting](deployment.md) | Initial server setup, persistent storage, networking, and resource limits |
 | [Automatic deployment](automatic-deployment.md) | Stable-package deployment, runtime comparison, SSH setup, and rollback |
 | [Website deployment](docs-deployment.md) | Independent static publishing and its restricted server account |
 | [Validation](validation.md) | Test entry points and the limits of historical evidence |

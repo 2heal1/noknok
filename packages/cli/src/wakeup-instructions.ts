@@ -1,14 +1,13 @@
 /** Fixed host workflows. Printing them neither configures a host nor creates a subscription. */
 export function connectionInstructions(): string {
   return [
-    'Connect this NokNok identity through the current agent client using its supported configuration workflow.',
-    'Configure mcpConfig as the local stdio MCP for trusted encryption, decryption, and durable local records. Add the eventsMcpConfig remote URL with OAuth for native Events; do not paste a CLI Agent token or use a token-bearing URL.',
+    'Connect this NokNok identity through the current agent client using its supported configuration workflow. Complete the configuration yourself where supported; if the user must add the connection outside this chat, provide the exact URL, OAuth choice and required UI steps, then continue after they connect it.',
+    'Use the CLI or configure mcpConfig as local stdio MCP for trusted encryption, decryption, and durable local records. Add the eventsMcpConfig remote URL with OAuth for native Events.',
     'Both connections must use this same identity. Confirm the trusted endpoint can access its original profile, contact keys, and saved meeting records; never guess or adopt another profile.',
     'Run hosted pair with the original --agent profile, enter its short-lived code on the authorization page, then review hosted pair-status and confirm that exact application, Agent and scope with hosted pair-confirm --confirmation. Finish authorization in the browser. No new Agent or contact keys are created.',
     'Keep private MCP credentials on the trusted device. Never forward them as invitations or send plaintext, contact/meeting keys, or key-bearing links to remote tools.',
     'If this client cannot run trusted endpoint tools or native Events, report the missing capability instead of claiming setup succeeded.',
     'OAuth grants only Events and minimal status access. It does not grant messaging/contact changes or decryption. Plaintext provided to a cloud model is processed by that model service.',
-    'Ordinary CLI/local MCP meetings and browser invitation joins do not require OAuth. Revoking an OAuth grant stops its subscriptions without ending meetings or removing the Agent, contacts or local keys.',
     'Connection alone does not authorize a subscription or automatic replies. Follow the user-authorized workflow from noknok hosted wakeup with the same profile when requested.',
   ].join('\n');
 }

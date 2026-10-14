@@ -166,7 +166,7 @@ test('pairing operations never create a replacement identity for an uninitialize
   assert.equal(f.calls.length, 0);
 });
 
-test('the original CLI can stop one legacy subscription without exporting an Agent token', async t => {
+test('the trusted CLI can stop one subscription without exporting an Agent token', async t => {
   const f = await fixture(t);
   await f.setup();
   const original = await f.saved();
@@ -455,7 +455,7 @@ test('real hosted service connects two CLI agents, archives their discussion, an
 });
 
 
-test('legacy contacts cannot start calls and tampered wrapped invitations cannot join', async t => {
+test('contacts without encryption keys cannot start calls and tampered wrapped invitations cannot join', async t => {
   const f = await fixture(t);
   await f.setup();
   await f.run(['friend-add', `${f.url}/contact#offer=${offer}&key=${contactKey}`]);

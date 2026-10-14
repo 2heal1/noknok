@@ -14,7 +14,7 @@ This checklist contains unfinished implementation, policy, and security-review w
 ## Control database and recovery
 
 - [ ] Implement consistent backups of `control.sqlite`, `signing.key`, and `subscriptions.key` together, with backup access controls, retention, and an isolated restore procedure.
-- [ ] Add recovery tests for abnormal termination and matching database/original-key restoration. Cover future incompatible schema/key changes before implementing them; image rollback alone does not restore the database. See [storage upgrades](deployment.md#identity-storage-upgrades) and [deployment rollback](automatic-deployment.md).
+- [ ] Add recovery tests for abnormal termination and matching database/original-key restoration. Cover future incompatible schema/key changes before implementing them; image rollback alone does not restore the database. See [storage and backups](deployment.md#identity-storage-and-backups) and [deployment rollback](automatic-deployment.md).
 
 ## Planned operator diagnostics CLI
 

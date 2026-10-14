@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { CallbackError, callbackUrl, signingKey, webhookHeaders, createSecureWebhookPost } from './webhook.js';
 
 const DAY = 86_400_000;
-const KINDS = ['incoming_meeting', 'meeting_activity', 'friend_added', 'friend_request', 'incoming_call', 'message', 'meeting_ended'];
+const KINDS = ['incoming_meeting', 'meeting_activity', 'friend_added', 'meeting_ended'];
 const TRANSIENT = new Set(['timeout', 'dns_failed', 'network_failed', 'response_failed']);
 const same = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b)
   && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -43,7 +43,7 @@ export function createHostedEvents({ store: suppliedStore, webhookPost = createS
   let closed = false;
   let running = 0;
   let verifying = 0;
-  const isActive = (subscription: HostedSubscription | null | undefined): subscription is HostedSubscription => !!subscription && subscription.active !== false && Number.isFinite(subscription.expiresAt) && subscription.expiresAt > now();
+  const isActive = (subscription: HostedSubscription | null | undefined): subscription is HostedSubscription => !!subscription && subscription.active === true && Number.isFinite(subscription.expiresAt) && subscription.expiresAt > now();
   const subscription = (agentId: string, id: string) => store.getSubscription(agentId, id);
   const key = (agentId: string, subscriptionId: string, eventId: string) => `${agentId}:${subscriptionId}:${eventId}`;
   const allowed = (agentId: string, owner: string) => {
@@ -103,7 +103,7 @@ export function createHostedEvents({ store: suppliedStore, webhookPost = createS
     catch (error) { throw new HostedEventError(-32015, 'Invalid callback configuration.', { reason: error.reason }); }
     return 'sub_' + createHash('sha256').update(JSON.stringify([owner, params.delivery.url, eventName, { recipient_id: agentId }])).digest('hex').slice(0, 32);
   }
-  async function subscribe(agentId: string, params: SubscriptionArguments, { owner = agentId }: SubscriptionAuthorization = {}) {
+  async function subscribe(agentId: string, params: SubscriptionArguments, { owner }: SubscriptionAuthorization) {
     ensureOpen(); authorizeOwner(agentId, owner);
     const id = validateParams(agentId, params, true, owner);
     ensureCapacity(agentId, id);
@@ -161,7 +161,7 @@ export function createHostedEvents({ store: suppliedStore, webhookPost = createS
       if (pendingSubscriptions.get(id) === operation) pendingSubscriptions.delete(id);
     }
   }
-  function unsubscribe(agentId: string, params: SubscriptionArguments, { owner = agentId }: SubscriptionAuthorization = {}) {
+  function unsubscribe(agentId: string, params: SubscriptionArguments, { owner }: SubscriptionAuthorization) {
     ensureOpen(); authorizeOwner(agentId, owner);
     const id = validateParams(agentId, params, false, owner);
     const pending = pendingSubscriptions.get(id);
@@ -321,7 +321,7 @@ export function createHostedEvents({ store: suppliedStore, webhookPost = createS
         id: sub.id, active: !closed && isActive(sub) && allowed(agentId, sub.owner), refreshBefore: new Date(sub.expiresAt).toISOString(),
         ...(sub.disabledReason ? { reason: sub.disabledReason } : !allowed(agentId, sub.owner) ? { reason: 'authorization_revoked' } : {}) }));
       return { eventName, subscribed: subscriptions.some(sub => sub.active),
-        subscription: subscriptions[0] ?? null, subscriptions,
+        subscriptions,
         deliveries: [...deliveries.values()].filter(item => item.agentId === agentId && (owner === undefined || item.owner === owner)).map(publicDelivery),
         replaySupported: false, processingAcknowledged: false };
     },

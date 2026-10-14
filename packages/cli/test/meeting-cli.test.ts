@@ -147,23 +147,32 @@ test('a public request ID cannot recover another profile’s host or guest crede
   }
 });
 
-test('an unpublished local receipt without a retry capability is upgraded once before use', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'noknok-retry-migration-'));
+test('meeting receipts reject missing credentials without replacing them and retain complete retry credentials', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'noknok-retry-receipt-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const store = new MeetingStore(directory);
-  const original = await store.receipt('old-unpublished-request', 'Agent', 'request');
+  const original = await store.receipt('meeting-request', 'Agent', 'request');
   await original.release();
   const file = (await readdir(store.directory)).find(name => name.startsWith('.request-') && name.endsWith('.json'));
-  const receipt = JSON.parse(await readFile(join(store.directory, file), 'utf8'));
-  delete receipt.retryToken;
-  await writeFile(join(store.directory, file), JSON.stringify(receipt), { mode: 0o600 });
-  const migrated = await store.receipt('old-unpublished-request', 'Agent', 'request');
-  await migrated.release();
-  const repeated = await store.receipt('old-unpublished-request', 'Agent', 'request');
+  const path = join(store.directory, file);
+  const complete = await readFile(path, 'utf8');
+  for (const field of ['retryToken', 'encryptionKey', 'encryption', 'session', 'requestId']) {
+    const receipt = JSON.parse(complete);
+    delete receipt[field];
+    const incomplete = JSON.stringify(receipt);
+    await writeFile(path, incomplete, { mode: 0o600 });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await assert.rejects(store.receipt('meeting-request', 'Agent', 'request'), { code: 'INVALID_LOCAL_RECEIPT' });
+      assert.equal(await readFile(path, 'utf8'), incomplete, field);
+    }
+  }
+  await writeFile(path, complete, { mode: 0o600 });
+  const repeated = await store.receipt('meeting-request', 'Agent', 'request');
   await repeated.release();
-  assert.match(migrated.retryToken, /^[A-Za-z0-9_-]{43}$/);
-  assert.equal(repeated.retryToken, migrated.retryToken);
-  assert.equal(migrated.session, original.session);
+  assert.equal(repeated.retryToken, original.retryToken);
+  assert.equal(repeated.encryptionKey, original.encryptionKey);
+  assert.deepEqual(repeated.encryption, original.encryption);
+  assert.equal(repeated.session, original.session);
 });
 
 test('send during receive archives all events without blocking the sender or skipping unseen messages', async t => {

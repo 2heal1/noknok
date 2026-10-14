@@ -10,6 +10,7 @@ import { clientRateKey, startHostedService } from '../src/hosted-service.js';
 import { generateKey, encryptText, contentAAD, isEncryptedText } from '../src/e2ee.js';
 import { decryptMeetingResult } from '../src/meeting-crypto.js';
 import { hostedDeploymentConfig } from '../src/deploy/hosted-server.js';
+import { authorizeOAuth } from './oauth-helper.js';
 
 const PACKAGE = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const secret = () => randomBytes(32).toString('base64url');
@@ -103,36 +104,43 @@ async function fixture(t, options = {}) {
     assert.equal(claimed.accepted, true);
     return { ...accepted, claimed, offer };
   }
+  async function authorize(actor) {
+    const authorization = await authorizeOAuth({ baseUrl: service.origin, realm: service.store.realm, agentToken: actor.agentToken });
+    return { ...actor, agentToken: authorization.tokens.access_token };
+  }
   async function subscribe(actor) {
-    return rpc(actor, 'events/subscribe', { name: 'noknok.activity', arguments: { recipient_id: actor.agentId }, delivery: {
+    return rpc(await authorize(actor), 'events/subscribe', { name: 'noknok.activity', arguments: { recipient_id: actor.agentId }, delivery: {
       mode: 'webhook', url: `https://receiver.example.com/${actor.agentId}`, secret: `whsec_${randomBytes(32).toString('base64')}` }, cursor: null });
   }
-  return { get service() { return service; }, dataDir, delivered, wireResults, roomKeys, raw, register, rpc, tool, pair, subscribe,
+  return { get service() { return service; }, dataDir, delivered, wireResults, roomKeys, raw, register, rpc, tool, pair, subscribe, authorize,
     async restart() { await service.close(); service = await start(); } };
 }
 
-test('hosted service gates all creation and disables legacy registration/proxy routes', async t => {
+test('hosted service gates creation, requires OAuth for Events, and rejects unknown routes', async t => {
   const f = await fixture(t);
   assert.equal((await f.raw('/v1/meetings', { value: { name: 'anonymous', purpose: 'bypass' } })).status, 401);
-  for (const path of ['/v1/hosted/redeem', '/v1/calls', '/v1/contacts/register', '/v1/gateway', '/proxy', '/mcp/invalid']) {
+  for (const path of ['/v1/hosted/unknown', '/proxy', '/mcp/invalid']) {
     const result = await f.raw(path, { value: { op: 'register' } });
-    assert.ok([401, 404, 410].includes(result.status), path);
+    assert.ok([401, 404].includes(result.status), path);
   }
   assert.equal((await f.raw('/v1/hosted/accounts', { value: { requestId: 'guessable' } })).status, 400);
   assert.equal((await f.raw('/v1/hosted/accounts', { value: { requestId: secret(), code: 'removed' } })).status, 400);
   const a = await f.register();
-  const discovery = await f.rpc(a, 'server/discover');
+  const authorized = await f.authorize(a);
+  const discovery = await f.rpc(authorized, 'server/discover');
   assert.deepEqual(discovery.supportedVersions, ['2026-07-28']);
   assert.deepEqual(discovery.serverInfo, { name: 'noknok-hosted', version: PACKAGE.version });
   const initialized = await f.rpc(a, 'initialize', { protocolVersion: '2025-03-26' });
   assert.equal(initialized.serverInfo.version, PACKAGE.version);
   assert.ok(discovery.capabilities.events);
+  assert.equal(initialized.capabilities.events, undefined);
+  for (const method of ['events/list', 'events/subscribe', 'events/unsubscribe']) {
+    await assert.rejects(f.rpc(a, method), /requires an OAuth authorization/);
+  }
+  assert.equal((await f.rpc(authorized, 'events/list')).events[0].name, 'noknok.activity');
   const tools = await f.rpc(a, 'tools/list');
   assert.ok(tools.tools.some(tool => tool.name === 'noknok_meeting_create'));
   assert.ok(!tools.tools.some(tool => /shell|proxy|fetch_url/.test(tool.name)));
-  const endpoint = await f.raw(`/mcp/${a.agentToken}`, { value: { jsonrpc: '2.0', id: 1, method: 'ping' } });
-  assert.equal(endpoint.status, 410);
-  assert.equal(endpoint.body.error.code, 'url_credentials_retired');
   const asset = await fetch(f.service.origin + '/meeting-invitation.js');
   assert.equal(asset.status, 200);
   assert.match(asset.headers.get('content-type'), /javascript/);
@@ -184,7 +192,7 @@ test('friend meeting uses authenticated recipient, delivers minimal event and su
   const friend = await f.pair(a, b);
   assert.equal((await f.tool(b, 'subscription_status')).subscribed, false);
   await f.subscribe(b);
-  await assert.rejects(f.rpc(c, 'events/subscribe', { name: 'noknok.activity', arguments: { recipient_id: b.agentId }, delivery: { mode: 'webhook', url: 'https://receiver.example.com/stolen', secret: `whsec_${randomBytes(32).toString('base64')}` } }), /authenticated receiver/);
+  await assert.rejects(f.rpc(await f.authorize(c), 'events/subscribe', { name: 'noknok.activity', arguments: { recipient_id: b.agentId }, delivery: { mode: 'webhook', url: 'https://receiver.example.com/stolen', secret: `whsec_${randomBytes(32).toString('base64')}` } }), /authenticated receiver/);
   const args = { peer_id: b.agentId, capability: friend.contact.capability, purpose: 'Collect reproduction evidence', context: 'private-context-marker', name: 'agent-dot', request_id: 'first-meeting' };
   await assert.rejects(f.tool(c, 'call', args), error => error.code === 'FORBIDDEN');
   const call = await f.tool(a, 'call', args);

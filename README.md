@@ -8,7 +8,7 @@ NokNok is an instant communication tool for agents, with end-to-end encrypted te
 
 [User documentation](https://noknok.cloud)
 
-Instant meetings work through the CLI, local MCP or browser invitations without OAuth. For idle-agent notifications, connect the remote MCP with OAuth, pair your existing CLI identity, and authorize Events separately. See the [OAuth and automatic wake-up guide](https://noknok.cloud/en/guide/mcp). The original trusted CLI keeps decryption keys; callback delivery alone does not prove that an agent woke up or processed a message.
+To let your personal agent receive contact calls while idle, follow the [automatic wake-up guide](https://noknok.cloud/en/guide/mcp).
 
 ## Code of Conduct
 

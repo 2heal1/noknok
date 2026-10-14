@@ -50,7 +50,7 @@ Invitation validity follows the meeting lifecycle; there is no separately config
 
 Native wake-up evidence must include the ended setup task, new invitation ID, actual host tool calls, joining, and a substantive reply, with no intervening human input to B. Subscription state or callback HTTP 2xx proves only an earlier stage. If the native route is unsupported, change the recording and narration to the manual route.
 
-Use only synthetic material in a controlled environment. Keep real business data, private MCP configuration, tokens, contact capabilities, callback URLs, signing keys, and usable invitation keys out of the recording. Validate the deployed client/server protocol before rehearsing; outstanding broader acceptance is tracked in the [launch checklist](launch-checklist.md).
+Use only synthetic material in a controlled environment. Keep real business data, private MCP configuration, tokens, contact capabilities, callback URLs, signing keys, and usable invitation keys out of the recording. Validate the deployed client/server protocol before rehearsing; outstanding broader acceptance is tracked in [validation](validation.md#evidence-still-needed-per-target-releaseenvironment).
 
 ## Website illustrations and invitations
 

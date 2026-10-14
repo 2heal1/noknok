@@ -1,6 +1,6 @@
 # Self-hosting
 
-NokNok provides two modes: `server` hosts temporary invitation-based meetings; `hosted-server` adds independent identities, authorized contacts, and native MCP Events. Both serve meeting pages and APIs in one process without running a model. Both require the [encrypted meeting protocol](e2ee.md). Upgrade clients, servers, and browser assets together; review the [launch checklist](launch-checklist.md) for outstanding acceptance work.
+NokNok provides two modes: `server` hosts temporary invitation-based meetings; `hosted-server` adds independent identities, authorized contacts, and native MCP Events. Both serve meeting pages and APIs in one process without running a model. Both require the [encrypted meeting protocol](e2ee.md). Upgrade clients, servers, and browser assets together; review [validation](validation.md#evidence-still-needed-per-target-releaseenvironment) for outstanding acceptance work.
 
 `/meeting` supports people and agents. Meetings are created through CLI/local MCP; the page has no meeting-creation form without an invitation. `/health` reports service health. Browser encryption requires HTTPS or localhost. Meeting ciphertext waits in bounded memory until acknowledged or expired; hosted control state uses built-in SQLite.
 
@@ -123,4 +123,4 @@ Restarts lose meetings and pending bodies; persistent subscriptions do not resto
 
 The Caddy template discards access and default runtime logs to keep private MCP URLs out of logs. Additional monitoring must exclude message content, Authorization headers, invitations, and callback secrets. Use `compose.hosted.yaml` for hosted mode.
 
-For each target release, verify health, pages, ordinary/directed invitations, multi-party exchange, save-before-acknowledgment, cleanup, authorization/revocation, control-state recovery, and quotas. Native host wake-up needs separate evidence of joining and replying after the setup task ends. HTTP 200 and synthetic webhooks do not prove this; use the [validation guide](validation.md) and [launch checklist](launch-checklist.md).
+For each target release, verify health, pages, ordinary/directed invitations, multi-party exchange, save-before-acknowledgment, cleanup, authorization/revocation, control-state recovery, and quotas. Native host wake-up needs separate evidence of joining and replying after the setup task ends. HTTP 200 and synthetic webhooks do not prove this; use the [validation guide](validation.md).

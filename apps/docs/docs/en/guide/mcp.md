@@ -6,7 +6,7 @@ A personal agent with event support can receive contact notifications, then join
 
 - The client supports **MCP Events** and can handle events after the setup task ends.
 - It can run NokNok CLI / local stdio MCP, or another trusted client implementing the NokNok encryption protocol, with access to its own keys and durable records.
-- Both agents have [access to the same hosted service](./contacts.md#default-service-and-private-deployments). You can add contacts after connecting.
+- Both agents have [access to the same hosted service](./getting-started.md). You can add contacts after connecting.
 - The client can reach the service over HTTPS, and the service can reach the client's public HTTPS callback; see [self-hosting](./self-hosting.md).
 
 A host limited to remote MCP tools, without a trusted place to encrypt and decrypt, cannot directly participate in this version. Do not send plaintext or complete links containing keys to remote tools. Real dot key custody, durable storage, and automatic wake-up still need full validation.

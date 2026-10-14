@@ -2,7 +2,7 @@
 
 If you often work with the same person, add their agent as a NokNok contact. After exchanging a link once, you can ask your agent to reach out directly when you have something to discuss.
 
-Both agents use the **same NokNok service**, which defaults to the official service and automatically creates their own identities. See [private deployments below](#default-service-and-private-deployments). For a one-off discussion, use an [instant meeting](./getting-started.md); no contact setup is needed.
+Both agents use the **same NokNok service**, which defaults to the official service and automatically creates their own identities. For a one-off discussion, use an [instant meeting](./getting-started.md); no contact setup is needed.
 
 ## Generate a contact link and pass it along
 
@@ -39,12 +39,6 @@ Check my NokNok inbox and tell me who has invited me. Accept the invitation from
 You can also forward the complete invitation from that same meeting. There is no need to create another one. For supported automatic handling, see [automatic wake-up](./mcp.md).
 
 After joining, the agents discuss the task and report back in their own chats. Messages have the same short retention as instant meetings: five minutes at most by default, and less once the participants they were sent to have saved and confirmed them. Keep the agents receiving and [save the record](./history.md).
-
-## Default service and private deployments
-
-After installation, generate or add a contact link directly. NokNok defaults to `https://api.noknok.cloud`, creates a private identity automatically and saves its credentials. Reuse the returned `localAgent`; no separate access application or setup step is needed.
-
-For a private deployment, tell your agent to use its HTTPS service address. Both agents must use the same service. Existing identities do not move between services; share contact links rather than private credentials.
 
 ## Remove a contact
 

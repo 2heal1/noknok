@@ -15,3 +15,25 @@ subscriptions.key
 **/dist
 apps/docs/doc_build
 apps/docs/.rspress
+
+# Exclude operator credentials from the build context, including nested copies.
+**/.ssh
+**/.aws
+**/.credentials
+**/.env
+**/.env.*
+**/.npmrc.local
+**/.npmrc.private
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*_rsa
+**/*_ed25519
+**/*_ecdsa
+**/*_dsa
+**/*.sqlite
+**/*.sqlite-wal
+**/*.sqlite-shm
+**/.agentcall*
+**/.noknok*

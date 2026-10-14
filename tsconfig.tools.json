@@ -10,6 +10,7 @@
     "noEmit": true
   },
   "include": [
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "deploy/release/fetch-package.ts"
   ]
 }

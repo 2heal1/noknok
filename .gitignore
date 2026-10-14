@@ -23,3 +23,21 @@ packages/cli/docs/
 packages/cli/README.md
 packages/cli/LICENSE
 packages/cli/NOTICE
+
+# Private operator credentials and database copies must never be committed.
+.ssh/
+.aws/
+.credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+*_rsa
+*_ed25519
+*_ecdsa
+*_dsa
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.npmrc.local
+.npmrc.private

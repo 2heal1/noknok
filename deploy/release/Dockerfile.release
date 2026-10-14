@@ -1,0 +1,21 @@
+FROM node:24-alpine AS package
+ARG NOKNOK_VERSION
+WORKDIR /release
+COPY fetch-package.ts ./fetch-package.ts
+RUN node fetch-package.ts "$NOKNOK_VERSION" \
+    && npm install --offline --ignore-scripts --omit=dev --no-audit --no-fund --package-lock=false --prefix /release/installed /release/package.tgz \
+    && node -e 'const p=require("/release/installed/node_modules/@noknok/cli/package.json"); if(p.name!=="@noknok/cli"||p.version!==process.argv[1])process.exit(1)' "$NOKNOK_VERSION" \
+    && node -e 'const {execFileSync}=require("node:child_process"); const p=JSON.parse(execFileSync(process.execPath,["/release/installed/node_modules/@noknok/cli/dist/bin/noknok.js","--version"],{encoding:"utf8"})); if(p.name!=="@noknok/cli"||p.version!==process.argv[1])process.exit(1)' "$NOKNOK_VERSION"
+
+FROM node:24-alpine
+ARG NOKNOK_VERSION
+LABEL cloud.noknok.version=$NOKNOK_VERSION
+WORKDIR /app
+COPY --from=package --chown=node:node /release/installed/node_modules/@noknok/cli/ ./
+COPY --from=package --chown=node:node /release/receipt.json ./release-receipt.json
+RUN mkdir /data && chown node:node /data
+USER node
+EXPOSE 4317
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=6 CMD node -e "fetch('http://127.0.0.1:4317/health').then(async r=>{const d=await r.json();process.exit(r.ok&&d.mode==='hosted'&&d.transcriptStorage==='participant'&&d.deliveryStorage==='pending_memory'?0:1)}).catch(()=>process.exit(1))"
+ENTRYPOINT ["node", "dist/bin/noknok.js"]
+CMD ["hosted-server", "--host", "0.0.0.0"]

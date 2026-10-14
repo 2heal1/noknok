@@ -48,15 +48,7 @@ docker compose -f deploy/compose.hosted.yaml up -d --build
 
 将示例域名换成实际域名。配置使用 Node.js 24 镜像和 Caddy 自动 HTTPS；应用端口不直接发布，只由 Caddy 转发。应用的 `/data` 持久卷保存 SQLite 与服务密钥，Caddy 的独立卷保存证书。应用以非 root 用户运行，根文件系统只读，并限制内存、进程和日志容量。2026-10-14 已在 `https://api.noknok.cloud` 完成容器构建、Caddy 配置校验、公网 HTTPS 证书校验、合成回调及应用容器重建验证；具体环境与验证边界见 [验收记录](validation.md)。证书自动续期、真实 dot 接入和容量压测尚未验证，本次结果不代表可以开放真实用户内测。
 
-本次受限测试实例的源码入口为 `/opt/noknok/current`，在 2026-10-14 指向发布目录 `releases/7c36941`；域名配置文件为 `/opt/noknok/deployment.env`，Compose 项目名固定为 `noknok`。例如，查看当前实例状态：
-
-```sh
-docker compose -p noknok \
-  --env-file /opt/noknok/deployment.env \
-  -f /opt/noknok/current/deploy/compose.hosted.yaml ps
-```
-
-后续运维应继续使用同一个项目名、环境文件与 Compose 文件，以使用同一组持久卷。文件权限、容器重建和控制状态恢复应按验收记录分别核对；不要将重建等同于备份恢复。SSH 私钥保留在管理端，不上传至服务或构建上下文。
+采用源码部署时应固定 Compose 项目名和环境文件，避免误用另一组持久卷。采用自动发布部署时，使用下文的独立部署控制器；实例地址、SSH 路径和私有配置应放在运营者自己的运维仓库或受限配置中。SSH 私钥不进入应用源码、服务器或构建上下文。
 
 SQLite 初始化已实现，服务首次启动自动建库，无需额外采购数据库。正式部署使用独立数据目录；数据库与两份原始服务密钥须配套备份。自动备份、恢复演练和 schema 升级工具尚未完成，不能把已有重启测试当成运维恢复验收。
 
@@ -72,21 +64,13 @@ docker compose -f deploy/compose.hosted.yaml exec noknok node dist/bin/noknok.js
 docker compose -f deploy/compose.hosted.yaml exec noknok node dist/bin/noknok.js revoke-agent --data-dir /data --public-url "https://${NOKNOK_DOMAIN}" --agent-id AGENT_ID
 ```
 
-以上生成码和撤销命令对应前文的通用模板，依赖当前 shell 已导出 `NOKNOK_DOMAIN`。操作本次受限实例时，须使用固定项目名、环境文件与 Compose 文件；以下命令直接使用容器内已经配置的 `NOKNOK_DATA_DIR` 和 `NOKNOK_PUBLIC_URL`，避免访问另一套卷或依赖当前 shell 的域名变量：
-
-```sh
-docker compose -p noknok \
-  --env-file /opt/noknok/deployment.env \
-  -f /opt/noknok/current/deploy/compose.hosted.yaml \
-  exec noknok node dist/bin/noknok.js beta-code --output-file /data/code.txt
-
-docker compose -p noknok \
-  --env-file /opt/noknok/deployment.env \
-  -f /opt/noknok/current/deploy/compose.hosted.yaml \
-  exec noknok node dist/bin/noknok.js revoke-agent --agent-id AGENT_ID
-```
+以上命令对应源码部署模板，依赖当前 shell 已导出 `NOKNOK_DOMAIN`。自动发布部署的当前 Compose 快照应从管理员部署状态读取，不要复用历史源码路径；见[自动部署](automatic-deployment.md)。
 
 `NOKNOK_PUBLIC_URL` 和 `NOKNOK_DATA_DIR` 是托管入口的环境变量。`NOKNOK_DELIVERY_TTL_SECONDS` 控制待确认正文的期限，默认 300 秒，可配置为 1～3600 秒；Compose 模板会传入该变量，未设置时使用默认值。这不延长会议本身的寿命。数据目录绑定服务 origin；迁移域名不能只改环境变量并继续使用旧身份。保留原 origin 可迁移机器；切换服务空间应重新建立身份和授权。
+
+## npm 发布后的自动部署
+
+维护者合入版本 PR 后，Release 工作流先发布并验证稳定 npm 版本，再运行独立的 `deploy` job。部署机只接受 `deploy X.Y.Z`，从固定 npm registry 校验、安装该精确版本；健康检查失败恢复上一镜像。预览版不会部署，GitHub 环境凭据与应用源码分开保存。首次接管和环境配置见[自动部署操作说明](automatic-deployment.md)。
 
 ## 默认托管限额
 

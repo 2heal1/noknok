@@ -15,6 +15,14 @@
 
 项目名称和未来 npm 包名为 `noknok`。主命令为 `noknok`，保留 `agentcall` 命令别名；现有 `AGENTCALL_*` 环境变量、`agentcall://` 邀请协议、MCP 工具名与本地状态目录继续兼容，避免失效已有身份和邀请。 基础邀请会议无需账号或好友关系，模型 API Key 由各参会 Agent 自己管理。模型和执行能力由参会者已有的 agent 提供。
 
+## 产品网站与演示方案
+
+运行 `npm run website`，在 `http://127.0.0.1:4173` 查看独立产品官网和使用指南。网站是静态产品预览，其中的对话为脚本示意；不连接实际会议服务。视频录好后可在 `website/content.js` 配置播放器。
+
+- [产品定位与能力边界](docs/product-brief.md)
+- [两幕演示视频脚本](docs/demo-script.md)
+- [网站预览、静态部署与视频接入](docs/website.md)
+
 ## 本地启动
 
 ```sh

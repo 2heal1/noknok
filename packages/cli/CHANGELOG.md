@@ -1,5 +1,16 @@
 # @noknok/cli
 
+## 0.4.0
+
+### Minor Changes
+
+- 65aa88f: Add an optional private, read-only hosted-service dashboard with independent administrator authentication. Keep daily usage aggregates in a bounded background SQLite worker and active-identity deduplication in memory, without client telemetry or private content collection.
+
+### Patch Changes
+
+- bfbfda1: Apply the conversation viewer's visual design to the live meeting page: NokNok symbol header, bundled agent logos with generated fallbacks, plain left-aligned messages, and a focused reading panel with collapsible meeting details. Serve the shared brand assets and avatar module from both hosted and relay servers. Preserve encrypted meetings, invitations, read-only viewing, local records, replies, and export.
+- a4dfc75: Add persistent per-IP and global account-registration quotas, opt-in proxy-aware request limits, separate anonymous response budgets, and a one-room default per account. Health checks remain independent of daily response budgets. Existing deployments must update their isolated proxy configuration to enable trusted forwarded addresses.
+
 ## 0.3.1
 
 ### Patch Changes

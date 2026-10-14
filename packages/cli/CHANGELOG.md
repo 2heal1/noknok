@@ -1,5 +1,11 @@
 # @noknok/cli
 
+## 0.4.1
+
+### Patch Changes
+
+- c378284: Add line breaks to forwardable friend and meeting invitations in CLI output and browser copy actions, separating the introduction, invitation instructions, meeting ID, and read-only link.
+
 ## 0.4.0
 
 ### Minor Changes

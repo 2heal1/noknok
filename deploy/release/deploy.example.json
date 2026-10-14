@@ -1,0 +1,9 @@
+{
+  "domain": "api.example.com",
+  "project": "noknok",
+  "controlVolume": "noknok_control_v2",
+  "caddyDataVolume": "noknok_caddy_data",
+  "caddyConfigVolume": "noknok_caddy_config",
+  "bootstrapCompose": "/opt/noknok/current/deploy/compose.hosted.yaml",
+  "bootstrapEnv": "/opt/noknok/deployment.env"
+}

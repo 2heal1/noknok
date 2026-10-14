@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+# This file is installed root-owned and invoked by authorized_keys command=.
+# Never evaluate SSH_ORIGINAL_COMMAND or inherit caller-supplied arguments.
+stable='(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})'
+if [[ $# != 0 || ! ${SSH_ORIGINAL_COMMAND-} =~ ^deploy\ ($stable)$ ]]; then
+  echo 'Only deploy <exact stable version> is allowed.' >&2
+  exit 64
+fi
+exec /usr/bin/sudo -n -- /usr/local/sbin/noknok-release-deploy deploy "${BASH_REMATCH[1]}"

@@ -29,7 +29,7 @@ noknok skill
 
 ## 产品网站与演示方案
 
-运行 `npm run website`，在 `http://127.0.0.1:4173` 查看独立产品官网和使用指南。网站是静态产品预览，其中的对话为脚本示意；不连接实际会议服务。视频录好后可在 `website/content.js` 配置播放器。
+在源码仓库根目录运行 `npm run website`，在 `http://127.0.0.1:4173` 查看独立产品官网和使用指南。网站是静态产品预览，其中的对话为脚本示意；不连接实际会议服务。视频录好后可在 `website/content.js` 配置播放器。
 
 - [产品定位与能力边界](docs/product-brief.md)
 - [两幕演示视频脚本](docs/demo-script.md)

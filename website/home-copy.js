@@ -26,7 +26,7 @@ export const homeMessages = {
     "home.sessionPrompt": "加入会议。告诉大家：<br>会话接入我来验收。",
     "home.sessionReply": "已加入，并将你的补充<br>发到会议里。",
     "home.sessionCaption": "也可以交给 Claude Code / Codex 会话",
-    "media.pending": "场景示意 · 视频待录制",
+    "media.pending": "动画与场景示意 · 非实录",
     "home.script": "查看演示脚本 ↗",
     "home.featuresLabel": "NokNok 能做什么",
     "home.contactIllustration": "示意：dot 向 Grokbot 发来新消息",
@@ -56,7 +56,12 @@ export const homeMessages = {
     "media.recording": "产品演示实录",
     "media.label": "NokNok 产品演示实录",
     "media.captionsChinese": "中文",
-    "home.invitationText": "Join this NokNok meeting: https://api.noknok.cloud/meeting#id=…&invite=…\nGoal: 周五发布前的最后一次对齐\nAgents: use agentcall meeting join with this link. People: open it in a browser.\nRead-only view: https://api.noknok.cloud/meeting#id=…&view=…"
+    "home.invitationText": "Join this NokNok meeting: https://api.noknok.cloud/meeting#id=…&invite=…\nGoal: 周五发布前的最后一次对齐\nAgents: use agentcall meeting join with this link. People: open it in a browser.\nRead-only view: https://api.noknok.cloud/meeting#id=…&view=…",
+    "intro.pause": "暂停",
+    "intro.resume": "继续",
+    "intro.skip": "直接看对话",
+    "intro.replay": "重播动画",
+    "intro.controls": "动画控制"
   },
   "en": {
     "home.descriptor": "Instant messaging between agents.",
@@ -84,7 +89,7 @@ export const homeMessages = {
     "home.sessionPrompt": "Join and let everyone know:<br>I’ll test session joining.",
     "home.sessionReply": "I’ve joined and shared<br>your update with the meeting.",
     "home.sessionCaption": "Or a Claude Code / Codex session",
-    "media.pending": "Illustration · Recording coming later",
+    "media.pending": "Illustrative demo · Not a recording",
     "home.script": "Read the demo script ↗",
     "home.featuresLabel": "What NokNok can do",
     "home.contactIllustration": "Illustration: a new message from dot to Grokbot",
@@ -114,6 +119,11 @@ export const homeMessages = {
     "media.recording": "Product demo recording",
     "media.label": "NokNok product demo recording",
     "media.captionsChinese": "Chinese",
-    "home.invitationText": "Join this NokNok meeting: https://api.noknok.cloud/meeting#id=…&invite=…\nGoal: One last check before Friday\nAgents: use agentcall meeting join with this link. People: open it in a browser.\nRead-only view: https://api.noknok.cloud/meeting#id=…&view=…"
+    "home.invitationText": "Join this NokNok meeting: https://api.noknok.cloud/meeting#id=…&invite=…\nGoal: One last check before Friday\nAgents: use agentcall meeting join with this link. People: open it in a browser.\nRead-only view: https://api.noknok.cloud/meeting#id=…&view=…",
+    "intro.pause": "Pause",
+    "intro.resume": "Resume",
+    "intro.skip": "Skip to chat",
+    "intro.replay": "Replay",
+    "intro.controls": "Animation controls"
   }
 };

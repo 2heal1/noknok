@@ -1,0 +1,143 @@
+/* Add after styles.css. All timeline variables belong to .demo-stage. */
+.demo-stage {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.door-intro {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  visibility: hidden;
+  background: var(--panel, #f1f0ec);
+  opacity: var(--intro-opacity, 1);
+}
+
+.intro-running .door-intro {
+  visibility: visible;
+}
+
+.intro-complete .door-intro {
+  visibility: hidden;
+}
+
+.door-camera {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: clamp(200px, 35vw, 250px);
+  aspect-ratio: 360 / 336;
+  /* The zoom converges on the clear space inside the frame, not the knob. */
+  transform-origin: 41.6667% 63.6905%;
+  transform: translate(calc(-50% + var(--camera-x, 0px)), calc(-50% + var(--camera-y, 0px))) scale(var(--camera-scale, 1));
+}
+
+.door-symbol {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 9px 6px rgb(37 40 35 / 6%));
+}
+
+.door-leaf {
+  transform-box: view-box;
+  transform-origin: 101px 229px;
+  transform: rotate(var(--door-shake, 0deg)) perspective(650px) rotateY(var(--door-angle, 0deg));
+  backface-visibility: hidden;
+}
+
+.door-knock-marks {
+  transform-box: view-box;
+  transform-origin: 249px 97px;
+  transform: scale(var(--knock-scale, 1));
+  opacity: var(--knock-opacity, 1);
+}
+
+.knock-wave {
+  --wave-scale: var(--wave-0-scale, .8);
+  --wave-alpha: var(--wave-0-opacity, 0);
+  transform-box: view-box;
+  transform-origin: 249px 97px;
+  transform: scale(var(--wave-scale));
+  opacity: var(--wave-alpha);
+}
+
+.knock-wave-two {
+  --wave-scale: var(--wave-1-scale, .8);
+  --wave-alpha: var(--wave-1-opacity, 0);
+}
+.knock-wave-three {
+  --wave-scale: var(--wave-2-scale, .8);
+  --wave-alpha: var(--wave-2-opacity, 0);
+}
+
+/* Opacity preserves the original chat's height throughout the introduction. */
+.intro-running #contact-preview {
+  opacity: var(--chat-opacity, 0);
+  transform: scale(var(--chat-scale, .97));
+  transform-origin: 50% 50%;
+}
+
+.intro-running .door-camera,
+.intro-running .door-intro,
+.intro-running #contact-preview {
+  will-change: transform, opacity;
+}
+
+.intro-controls {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgb(37 40 35 / 9%);
+  border-radius: 999px;
+  background: var(--panel, #f1f0ec);
+}
+
+.intro-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 28px;
+  padding: 4px 11px;
+  border: 0;
+  border-radius: 999px;
+  color: #55594f;
+  background: transparent;
+  font: 11px/1.5 var(--font, sans-serif);
+  cursor: pointer;
+}
+
+.intro-controls button:hover { background: rgb(37 40 35 / 6%); }
+.intro-controls button:focus-visible { outline: 2px solid #252823; outline-offset: 3px; }
+.intro-controls [data-intro-action="replay"] { display: none; }
+.intro-complete .intro-controls [data-intro-action="pause"],
+.intro-complete .intro-controls [data-intro-action="skip"] { display: none; }
+.intro-complete .intro-controls [data-intro-action="replay"] { display: inline-flex; }
+
+@media (max-width: 700px) {
+  .intro-enabled .story-preview { padding-bottom: 54px; }
+  .door-camera { width: clamp(180px, 56vw, 230px); }
+  .intro-controls { right: 12px; bottom: 10px; }
+}
+
+@media (max-width: 420px) {
+  .intro-controls { right: 8px; bottom: 7px; padding: 2px; gap: 2px; }
+  .intro-controls button { min-width: 40px; min-height: 26px; padding: 3px 9px; font-size: 10px; }
+}
+
+/* Defensive fallback: a script failure must never leave the chat invisible. */
+@media (prefers-reduced-motion: reduce) {
+  .door-intro,
+  .intro-controls { display: none; }
+  .intro-running #contact-preview { opacity: 1; transform: none; }
+}

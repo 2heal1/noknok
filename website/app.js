@@ -1,5 +1,6 @@
 import { siteMedia } from './content.js';
 import { t } from './i18n.js';
+import { createDoorIntro } from './intro.js';
 
 // Illustrative scripts, never connected to a live meeting service.
 const scenes = {
@@ -29,6 +30,7 @@ const mediaLabel = document.querySelector('#media-label');
 let video;
 let mediaFailed = false;
 let currentScene = 'contact';
+let doorIntro;
 const requestedScene = new URLSearchParams(location.search).get('scene');
 
 function renderScene(scene) {
@@ -45,6 +47,7 @@ function renderScene(scene) {
     button.setAttribute('aria-pressed', String(button.dataset.scene === scene));
   });
   updateSceneCopy();
+  doorIntro?.setActive(scene === 'contact');
 }
 
 function updateSceneCopy() {
@@ -75,6 +78,7 @@ function updateSceneCopy() {
     const track = video.querySelector('track');
     if (track) track.label = t('media.captionsChinese');
   }
+  doorIntro?.refresh();
 }
 
 function showRecording() {
@@ -84,6 +88,7 @@ function showRecording() {
   recordingButton.setAttribute('aria-pressed', 'true');
   document.querySelectorAll('[data-scene]').forEach(button => button.setAttribute('aria-pressed', 'false'));
   mediaLabel.textContent = t('media.recording');
+  doorIntro?.setActive(false);
 }
 
 function configureVideo() {
@@ -122,6 +127,10 @@ if (preview) {
   renderScene(requestedScene === 'meeting' ? 'meeting' : 'contact');
   document.querySelectorAll('[data-scene]').forEach(button => button.addEventListener('click', () => renderScene(button.dataset.scene)));
   configureVideo();
+  doorIntro = createDoorIntro(document.querySelector('.demo-stage'), {
+    active: !preview.hidden && currentScene === 'contact',
+    translate: t,
+  });
 }
 
 let copyStatusKey;

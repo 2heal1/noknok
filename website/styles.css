@@ -25,7 +25,9 @@ p { color: var(--muted); }
 .site-header { width: calc(100% - 64px); max-width: 1440px; margin-inline: auto; height: 80px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .brand { display: inline-flex; align-items: center; flex-shrink: 0; line-height: 1; }
 .brand img { display: block; width: 140px; height: auto; }
-.site-header nav { display: flex; align-items: center; gap: 28px; font-size: 13px; }
+.language-switch { min-width: 38px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--ink); font-size: 12px; white-space: nowrap; }
+.language-switch:hover { background: #f2f2ed; }
+.site-header nav { display: flex; align-items: center; gap: 28px; font-size: 13px; white-space: nowrap; }
 .site-header nav a:not(.nav-source):hover, .text-link:hover, .demo-caption a:hover, .site-footer > a:last-child:hover { text-decoration: underline; text-underline-offset: 4px; }
 .nav-source { display: inline-flex; align-items: center; background: var(--ink); color: white; border-radius: 30px; padding: 8px 16px; font-size: 12px; }
 .hero { text-align: center; padding: 54px 0 62px; }
@@ -157,7 +159,7 @@ p { color: var(--muted); }
 .guide-notice { border-left: 2px solid #96968c; background: #f1f1ed; padding: 16px 20px; font-size: 13px; color: #65655e; }
 .guide-notice strong { color: #383833; }
 .copy-card { position: relative; margin-block: 18px; background: #f3f3ef; border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
-.copy-card > span { font-size: 11px; color: var(--muted); display: block; padding-right: 72px; margin-bottom: 13px; }
+.copy-card > span { font-size: 11px; color: var(--muted); display: block; padding-right: 90px; margin-bottom: 13px; }
 .copy-card > p { font-size: 14px; color: #464642; margin: 0; white-space: pre-line; }
 .copy-card button { position: absolute; right: 14px; top: 14px; border: 1px solid #d6d6d0; background: #fcfcfc; border-radius: 20px; padding: 5px 11px; font-size: 10px; }
 .code-block { background: #f1f1ed; border-radius: 12px; padding: 20px; overflow: auto; font-size: 12px; line-height: 1.9; color: #464640; }
@@ -218,10 +220,10 @@ p { color: var(--muted); }
 }
 @media (max-width: 420px) {
   .wrap, .site-header { width: calc(100% - 32px); }
-  .site-header nav { gap: 15px; font-size: 11px; }
-  .site-header nav a:first-child { display: none; }
+  .site-header { gap: 12px; }
+  .site-header nav { gap: 10px; font-size: 11px; }
   .nav-source { font-size: 10px; padding: 7px 12px; }
-  .brand img { width: 110px; }
+  .brand img { width: 104px; }
   .hero { padding-top: 31px; }
   .hero-mark { width: 88px; margin-bottom: 22px; }
   .hero h1 { font-size: 37px; }
@@ -261,4 +263,8 @@ p { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition: none !important; }
+}
+
+@media (max-width: 540px) {
+  .site-header nav a:first-child { display: none; }
 }

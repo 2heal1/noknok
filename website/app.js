@@ -1,17 +1,18 @@
 import { siteMedia } from './content.js';
+import { t } from './i18n.js';
 
 // Illustrative scripts, never connected to a live meeting service.
 const scenes = {
   contact: {
-    title: '和 B 的 Grokbot 聊聊',
+    title: 'story.contact.title',
     messages: [
-      ['d', 'dot', '邀请说明整理好了吗？'],
-      ['g', 'Grokbot', '草稿好了，会话接入还待验收。'],
-      ['d', 'dot', '会议结束后，还能用邀请加入吗？'],
-      ['g', 'Grokbot', '不能。结束后的 10 分钟只保留记录。'],
+      ['d', 'dot', 'story.contact.ask'],
+      ['g', 'Grokbot', 'story.contact.reply'],
+      ['d', 'dot', 'story.contact.followup'],
+      ['g', 'Grokbot', 'story.contact.answer'],
     ],
   },
-  meeting: { title: '一个链接，一起聊。', messages: [] },
+  meeting: { title: 'home.inviteTitle', messages: [] },
 };
 
 function make(tag, text, className) {
@@ -43,17 +44,28 @@ function renderScene(scene) {
   document.querySelectorAll('[data-scene]').forEach(button => {
     button.setAttribute('aria-pressed', String(button.dataset.scene === scene));
   });
-  document.querySelector('#story-title').textContent = scenes[scene].title;
-  document.querySelector('#story-messages').replaceChildren(...scenes[scene].messages.map(([avatar, name, content]) => {
+  updateSceneCopy();
+}
+
+function updateSceneCopy() {
+  document.querySelector('#story-title').textContent = t(scenes[currentScene].title);
+  document.querySelector('#story-messages').replaceChildren(...scenes[currentScene].messages.map(([avatar, name, content]) => {
     const row = make('div', undefined, `story-message ${avatar === 'd' ? 'from-dot' : avatar === 'g' ? 'from-grok' : 'from-session'}`);
     const mark = make('span', avatar, 'message-avatar');
     mark.setAttribute('aria-hidden', 'true');
     const body = make('div', undefined, 'message-body');
-    body.append(make('strong', name), make('p', content));
+    body.append(make('strong', name), make('p', t(content)));
     row.append(mark, body);
     return row;
   }));
-  mediaLabel.textContent = mediaFailed ? '视频暂时无法加载 · 以下为场景示意' : siteMedia.src ? '场景示意 · 非实录' : '场景示意 · 视频待录制';
+  mediaLabel.textContent = !preview.hidden
+    ? t(mediaFailed ? 'media.failed' : siteMedia.src ? 'media.illustration' : 'media.pending')
+    : t('media.recording');
+  if (video) {
+    video.setAttribute('aria-label', t('media.label'));
+    const track = video.querySelector('track');
+    if (track) track.label = t('media.captionsChinese');
+  }
 }
 
 function showRecording() {
@@ -62,7 +74,7 @@ function showRecording() {
   recording.hidden = false;
   recordingButton.setAttribute('aria-pressed', 'true');
   document.querySelectorAll('[data-scene]').forEach(button => button.setAttribute('aria-pressed', 'false'));
-  mediaLabel.textContent = '产品演示实录';
+  mediaLabel.textContent = t('media.recording');
 }
 
 function configureVideo() {
@@ -71,13 +83,13 @@ function configureVideo() {
   video.controls = true;
   video.playsInline = true;
   video.preload = 'metadata';
-  video.setAttribute('aria-label', 'NokNok 产品演示实录');
+  video.setAttribute('aria-label', t('media.label'));
   if (siteMedia.poster) video.poster = siteMedia.poster;
   if (siteMedia.captions) {
     const track = make('track');
     track.kind = 'captions';
     track.srclang = 'zh-CN';
-    track.label = '中文';
+    track.label = t('media.captionsChinese');
     track.src = siteMedia.captions;
     track.default = true;
     video.append(track);
@@ -103,19 +115,27 @@ if (preview) {
   configureVideo();
 }
 
+let copyStatusKey;
+window.addEventListener('noknok:languagechange', () => {
+  if (preview) updateSceneCopy();
+  if (copyStatusKey) document.querySelector('#copy-status').textContent = t(copyStatusKey);
+});
+
 // Guide prompt cards: native clipboard, with a selectable manual fallback.
 document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', async () => {
   const text = document.getElementById(button.dataset.copy);
   const status = document.querySelector('#copy-status');
   try {
     await navigator.clipboard.writeText(text.textContent.trim());
-    status.textContent = '提示词已复制，可以粘贴到你的 Agent 会话。';
+    copyStatusKey = 'shared.copySuccess';
+    status.textContent = t(copyStatusKey);
   } catch {
     const selection = window.getSelection();
     const range = document.createRange();
     range.selectNodeContents(text);
     selection.removeAllRanges();
     selection.addRange(range);
-    status.textContent = '浏览器未允许自动复制。已选中文本，请使用系统复制操作。';
+    copyStatusKey = 'shared.copyFallback';
+    status.textContent = t(copyStatusKey);
   }
 }));

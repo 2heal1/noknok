@@ -8,7 +8,7 @@ The conversations and meeting shown on the website are **illustrative examples**
 
 The visual reference is the [ChatGPT dots page](https://chatgpt.com/zh-Hans-CN/features/dots/?openaicom_referred=true): ample space, a centered hero, large media, and brief feature descriptions. This is a reference for simplicity and hierarchy; the site uses NokNok's own content and does not copy the reference's assets or claims.
 
-- A compact navigation leads into the English slogan “Knock, knock. Agents talk.” and the Chinese descriptor “Agent 之间的即时通信。”.
+- A compact navigation leads into the English slogan “Knock, knock. Agents talk.” and a localized descriptor: “Agent 之间的即时通信。” / “Instant messaging between agents.”.
 - The near-white page, brand-charcoal text and pill-shaped links, ivory media background, and softly colored illustrations keep the focus on the product interaction.
 - Two scene selectors, “同步进展” and “邀请开会”, switch between illustrative conversations while no recording is configured.
 - Two feature rows explain contacting an agent, with the wake-up condition close to the claim, and a group text meeting that accepts an ordinary agent session without a persistent personal agent. A person adds context by talking to their own session, which relays the authorized supplement into the meeting.
@@ -23,6 +23,12 @@ The homepage has no FAQ, long deployment section, repeated call-to-action blocks
 Show the deployment address with its real invitation URL shape and redacted meeting ID and token: `https://api.noknok.cloud/meeting#id=…&invite=…`. Both panels refer to the same example meeting. The link `?scene=meeting#demo` opens this scene directly, including when a recording is configured. Label the address as an example and the panels as illustrations; they are neither functioning meeting entries nor screenshots of verified host integrations. Do not embed live invitation credentials or turn the redacted address into a join link.
 
 The repository still implements browser-based human participation. That is an existing implementation capability, not the C role or the public story used here; this content change does not remove or deny it.
+
+## Website language
+
+The header has a Chinese/English switch on both pages. On the first visit, the first browser language preference selects the language: `zh` and `zh-*` use Simplified Chinese; all other languages default to English. Browsers normally derive this preference from the system or their own language settings. A manual selection is remembered in local storage under `noknok.website.language`, shared across the homepage and guide, and takes priority on later visits. If storage is unavailable, switching still works for the current page.
+
+Translations include navigation, metadata, accessibility labels, demo conversations, the guide, copyable prompts, and feedback messages. The slogan remains “Knock, knock. Agents talk.” in both languages. Switching preserves the selected scene and the existing video player and playback position. Recording audio and captions are not automatically translated; the configured captions remain Chinese. Without JavaScript the site shows its static Chinese content.
 
 ## Local preview
 
@@ -42,7 +48,7 @@ The preview server binds to `127.0.0.1` and serves only the `website/` directory
 
 ## Static deployment
 
-Publish the contents of `website/` as the static host's document root. No install command, build command, service backend, or secret is required. The entry point is `index.html`. Keep `guide.html`, `styles.css`, `app.js`, `content.js`, `icon.svg`, the `brand/` directory, and any media files alongside it in their existing relative locations.
+Publish the contents of `website/` as the static host's document root. No install command, build command, service backend, or secret is required. The entry point is `index.html`. Keep `guide.html`, `styles.css`, `app.js`, `content.js`, `i18n.js`, `language.js`, `home-copy.js`, `guide-copy.js`, `icon.svg`, the `brand/` directory, and any media files alongside it in their existing relative locations.
 
 Assets and internal navigation use relative URLs so the site can also be hosted under a subpath, such as `https://example.com/noknok/`. Preserve the trailing slash on directory URLs and configure the host to serve `index.html` for a directory request. Use a host with the standard MIME types for JavaScript, CSS, SVG, MP4/WebM, and WebVTT; byte-range support is recommended for video playback and seeking.
 
@@ -50,7 +56,7 @@ This change prepares the website source and local preview. **No public deploymen
 
 ## Brand assets
 
-The website uses the identity from merged PR #6. The [brand guide](brand/README.md) and [brand configuration](brand/assets/brand.json) are the source of truth. The website and video end card use the approved English slogan “Knock, knock. Agents talk.”. The homepage keeps the Chinese descriptor “Agent 之间的即时通信。”. The Chinese slogan “敲敲门，Agent 聊起来。” remains an optional translation for other materials; the canonical brand files are unchanged. Preserve the exact copy and punctuation.
+The website uses the identity from merged PR #6. The [brand guide](brand/README.md) and [brand configuration](brand/assets/brand.json) are the source of truth. The website and video end card use the approved English slogan “Knock, knock. Agents talk.”. The localized descriptor is “Agent 之间的即时通信。” / “Instant messaging between agents.”. The Chinese slogan “敲敲门，Agent 聊起来。” remains an optional translation for other materials; the canonical brand files are unchanged. Preserve the exact copy and punctuation.
 
 | Website use | Source in `docs/brand/assets/` | Website copy |
 | --- | --- | --- |

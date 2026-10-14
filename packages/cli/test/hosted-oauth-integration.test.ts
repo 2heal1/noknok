@@ -18,14 +18,21 @@ async function fixture(t) {
   const port = reservation.address().port;
   await new Promise(resolve => reservation.close(resolve));
   const deliveries = [];
-  const start = () => startHostedService({ dataDir: join(directory, 'service'), port, publicUrl: `http://127.0.0.1:${port}`,
-    eventOptions: { workerIntervalMs: 60_000 }, webhookPost: async (url, options) => {
-      assert.equal(await options.beforeSend?.(), true);
-      const payload = JSON.parse(options.body);
-      if (payload.type === 'verification') return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
-      deliveries.push({ url, headers: options.headers, payload });
-      return { status: 200, body: '{}' };
-    } });
+  const start = async () => {
+    const instance = await startHostedService({ dataDir: join(directory, 'service'), port, publicUrl: `http://127.0.0.1:${port}`,
+      eventOptions: { workerIntervalMs: 60_000 }, webhookPost: async (url, options) => {
+        assert.equal(await options.beforeSend?.(), true);
+        const payload = JSON.parse(options.body);
+        if (payload.type === 'verification') return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+        deliveries.push({ url, headers: options.headers, payload });
+        return { status: 200, body: '{}' };
+      } });
+    // Keep the OAuth resource origin stable across restarts, but never let the
+    // shared fetch pool reuse sockets closed by the previous server. Cover CLI
+    // and OAuth-helper traffic as well as the direct RPC requests below.
+    instance.server.prependListener('request', (_req, res) => res.setHeader('Connection', 'close'));
+    return instance;
+  };
   let service = await start();
   t.after(async () => { await service.close(); await rm(directory, { recursive: true, force: true }); });
   const agent = name => async (...args) => {

@@ -15,6 +15,7 @@ import { createMeetings } from './meetings.js';
 import { openHostedStore } from './hosted-store.js';
 import { createHostedEvents } from './hosted-events.js';
 import { createHostedOAuth } from './hosted-oauth.js';
+import { startMcpDiagnostic, writeMcpDiagnostic, type McpDiagnostic, type McpDiagnosticSink } from './mcp-diagnostics.js';
 import { HOSTED_TOOLS } from './hosted-contract.js';
 import { RpcError, validateArguments } from './mcp-stdio.js';
 import { decodeMeetingLink } from './meeting-client.js';
@@ -105,6 +106,7 @@ export interface HostedServiceOptions {
   maxDailyEgressBytes?: number; maxAccountDailyEgressBytes?: number;
   maxDailyPublicEgressBytes?: number; trustProxy?: boolean;
   webhookPost?: WebhookPost; eventOptions?: Omit<EventsOptions, 'store'>; store?: HostedStore;
+  diagnostic?: McpDiagnosticSink;
 }
 interface JoinedMeeting {
   events?: unknown[]; event?: unknown; deliveryReceipts?: import('./runtime-types.js').DeliveryReceipt[];
@@ -135,7 +137,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
   idleTtlMs, meetingTtlMs = 7_200_000, retentionMs = 600_000, deliveryTtlMs = 300_000, maxEvents = 500,
   maxDailyEgressBytes = 512 * 1024 * 1024, maxAccountDailyEgressBytes = 50 * 1024 * 1024,
   maxDailyPublicEgressBytes = 64 * 1024 * 1024, trustProxy = false,
-  adminKeyHash, webhookPost, eventOptions = {}, store: suppliedStore }: HostedServiceOptions = {}) {
+  adminKeyHash, webhookPost, eventOptions = {}, store: suppliedStore, diagnostic = writeMcpDiagnostic }: HostedServiceOptions = {}) {
   if (typeof trustProxy !== 'boolean') throw new TypeError('trustProxy must be a boolean.');
   if (!Number.isSafeInteger(maxDailyPublicEgressBytes) || maxDailyPublicEgressBytes < 1) throw new TypeError('maxDailyPublicEgressBytes must be positive.');
   if (!dataDir && !suppliedStore) throw new TypeError('A persistent dataDir is required.');
@@ -438,7 +440,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
     return meetingRequest(actor, 'POST', `/v1/meetings/${args.meeting_id}/${suffix}`, input, credential);
   }
 
-  async function rpc(actor, input) {
+  async function rpc(actor, input, trace?: McpDiagnostic) {
     if (input.jsonrpc !== '2.0' || typeof input.method !== 'string' || (input.id !== undefined && input.id !== null && typeof input.id !== 'string' && !Number.isFinite(input.id))) throw new RpcError(-32600, 'Invalid JSON-RPC request.');
     if (input.params !== undefined && !object(input.params)) throw new RpcError(-32602, 'params must be an object.');
     const params = input.params || {};
@@ -452,7 +454,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
     if (input.method === 'tools/list') return { tools: actor.grantId ? HOSTED_TOOLS.filter(tool => actor.scopes.includes(OAUTH_TOOL_SCOPES.get(tool.name)))
       .map(tool => ({ ...tool, annotations: { readOnlyHint: true }, securitySchemes: [{ type: 'oauth2', scopes: [OAUTH_TOOL_SCOPES.get(tool.name)] }] })) : HOSTED_TOOLS };
     if (input.method === 'events/list') { requireScope(actor, 'noknok:events:read'); return events.list(actor.agentId); }
-    if (input.method === 'events/subscribe') { requireScope(actor, 'noknok:events:manage'); return events.subscribe(actor.agentId, params, { owner: actor.grantId }); }
+    if (input.method === 'events/subscribe') { requireScope(actor, 'noknok:events:manage'); return events.subscribe(actor.agentId, params, { owner: actor.grantId, report: trace?.subscription }); }
     if (input.method === 'events/unsubscribe') { requireScope(actor, 'noknok:events:manage'); return events.unsubscribe(actor.agentId, params, { owner: actor.grantId }); }
     if (input.method === 'tools/call') {
       try {
@@ -464,6 +466,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
         const value = await callTool(actor, params); return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, isError: false }; }
       catch (error) {
         if (error instanceof RpcError) throw error;
+        trace?.failed(error);
         metrics?.record('businessErrors');
         const value = { error: { code: typeof error.code === 'string' ? error.code : 'operation_failed', message: error.status ? error.message : 'Operation failed.' } };
         return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, isError: true };
@@ -479,6 +482,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
       maxMeetings, maxTotalBytes, maxAccounts }, metrics: usage ? { ...usage, days: usage.days.slice(-30) } : undefined };
   } });
   const server = http.createServer(async (req, res) => {
+    const trace = /^\/mcp(?:\?|$)/.test(req.url ?? '') ? startMcpDiagnostic(req, res, realm, diagnostic) : undefined;
     let actorKey, adminRequest = false, measured = false, latencySample = false, responseBytes = 0;
     const requestStarted = metrics ? performance.now() : 0;
     if (metrics) res.once('finish', () => {
@@ -507,21 +511,24 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
         try { store.consumeQuota(actorKey, 'mcp_egress_bytes', { limit: maxAccountDailyEgressBytes, windowMs: DAY, scope: 'account', amount: bytes }); }
         catch {
           if (res.headersSent) { res.destroy(); return res; }
+          trace?.stage('response_budget'); trace?.failed({ code: 'account_egress_limit' });
           originalHead(429, HEADERS);
-          return originalEnd(JSON.stringify({ error: { code: 'account_egress_limit', message: 'Daily account response budget reached.' } }));
+          return originalEnd(JSON.stringify({ error: { code: 'account_egress_limit', message: 'Daily account response budget reached.', ...(trace ? { requestId: trace.requestId } : {}) } }));
         }
       }
       try { if (bytes && responseBudget) store.consumeServiceQuota(responseBudget, { limit: responseBudget === 'egress_bytes' ? maxDailyEgressBytes : responseBudget === 'admin_egress_bytes' ? 64 * 1024 * 1024 : maxDailyPublicEgressBytes, windowMs: DAY, amount: bytes }); }
       catch {
         if (res.headersSent) { res.destroy(); return res; }
+        trace?.stage('response_budget'); trace?.failed({ code: responseBudget === 'egress_bytes' ? 'service_egress_limit' : 'public_egress_limit' });
         originalHead(429, HEADERS);
-        return originalEnd(JSON.stringify({ error: { code: responseBudget === 'egress_bytes' ? 'service_egress_limit' : responseBudget === 'admin_egress_bytes' ? 'admin_egress_limit' : 'public_egress_limit', message: 'Daily response budget reached.' } }));
+        return originalEnd(JSON.stringify({ error: { code: responseBudget === 'egress_bytes' ? 'service_egress_limit' : responseBudget === 'admin_egress_bytes' ? 'admin_egress_limit' : 'public_egress_limit', message: 'Daily response budget reached.', ...(trace ? { requestId: trace.requestId } : {}) } }));
       }
       if (pendingHead) Reflect.apply(originalHead, res, pendingHead);
       return originalEnd(data, ...rest);
     };
     inflight++;
     try {
+      trace?.stage('admission');
       if (closing) throw failure(503, 'closing', 'Service is stopping.');
       if (inflight > 64) throw failure(429, 'concurrency_limit', 'Too many concurrent requests.');
       const clientKey = clientRateKey(req, trustProxy);
@@ -534,6 +541,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
       measured = url.pathname.startsWith('/v1/') || url.pathname === '/mcp' || url.pathname.startsWith('/mcp/');
       latencySample = measured && !(req.method === 'GET' && url.pathname.endsWith('/events'));
       const hosted = url.pathname.startsWith('/v1/hosted') || url.pathname.startsWith('/mcp');
+      trace?.stage('origin');
       if (req.headers.origin !== undefined && (hosted || req.headers.origin !== realm)) throw failure(403, 'origin_denied', 'Origin not allowed.');
       cleanup();
       if (req.method === 'GET' && url.pathname === '/health') {
@@ -558,29 +566,41 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
         return send(res, 200, store.registerAgent(bearer(req), { requestId: input.requestId }));
       }
       if (url.pathname === '/mcp') {
+        trace?.stage('authentication');
         const actor = authenticateMcp(bearer(req)); actorKey = actor.agentId;
+        trace?.authenticated(actor);
         if (url.search || req.method !== 'POST') { res.setHeader('Allow', 'POST'); throw failure(405, 'post_required', 'Use POST without query parameters.'); }
         responseBudget = 'egress_bytes';
         limit(`agent:${actorKey}`, 240);
         activeRequests.set(actorKey, (activeRequests.get(actorKey) || 0) + 1);
         if (activeRequests.get(actorKey) > 12) throw failure(429, 'agent_concurrency', 'Too many concurrent requests for this agent.');
+        trace?.stage('request_body');
         const input = await body(req);
+        trace?.parsed(input, actor.agentId);
         if (closing) throw failure(503, 'closing', 'Service is stopping.');
         // Credentials may have been revoked while a slow request was uploading.
+        trace?.stage('authentication');
         authenticateMcp(bearer(req));
+        trace?.stage('dispatch');
         if (input.id === undefined) {
           if (input.jsonrpc !== '2.0' || !['notifications/initialized', 'notifications/cancelled'].includes(input.method)) throw failure(400, 'invalid_notification', 'Unsupported notification.');
           return send(res, 202);
         }
-        try { return send(res, 200, { jsonrpc: '2.0', id: input.id, result: await rpc(actor, input) }); }
-        catch (error) { return send(res, 200, { jsonrpc: '2.0', id: input.id ?? null, error: { code: error instanceof RpcError || typeof error.code === 'number' ? error.code : error.status === 403 ? -32001 : -32603,
-          message: error instanceof RpcError || typeof error.code === 'number' || error.status === 403 ? error.message : 'MCP operation failed.', ...(error.data ? { data: error.data } : {}) } }); }
+        try { return send(res, 200, { jsonrpc: '2.0', id: input.id, result: await rpc(actor, input, trace) }); }
+        catch (error) {
+          const code = error instanceof RpcError || typeof error.code === 'number' ? error.code : error.status === 403 ? -32001 : -32603;
+          trace?.failed(error, code);
+          return send(res, 200, { jsonrpc: '2.0', id: input.id ?? null, error: { code,
+            message: error instanceof RpcError || typeof error.code === 'number' || error.status === 403 ? error.message : 'MCP operation failed.',
+            data: { ...(object(error.data) ? error.data : {}), ...(trace ? { requestId: trace.requestId } : {}) } } });
+        }
       }
       if (await meetings.handle(req, res, url)) return;
       throw failure(404, 'not_found', 'Route not found.');
     } catch (error) {
+      trace?.failed(error);
       if (error.status === 401 && req.url === '/mcp') res.setHeader('WWW-Authenticate', `Bearer resource_metadata="${realm}/.well-known/oauth-protected-resource/mcp"`);
-      send(res, Number.isInteger(error.status) ? error.status : 500, { error: { code: error.status ? error.code : 'internal_error', message: error.status ? error.message : 'Service error.' } });
+      send(res, Number.isInteger(error.status) ? error.status : 500, { error: { code: error.status ? error.code : 'internal_error', message: error.status ? error.message : 'Service error.', ...(trace ? { requestId: trace.requestId } : {}) } });
     } finally {
       if (!req.readableEnded) req.resume();
       inflight--;

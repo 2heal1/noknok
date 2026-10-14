@@ -45,8 +45,19 @@ export type DeliveryStatus = 'queued' | 'cancelled' | 'failed' | 'delivered' | '
 export interface DeliveryView { eventId: string; subscriptionId?: string; status: DeliveryStatus; attempts?: number; reason?: string }
 export interface DeliverySummary extends DeliveryView { deliveries?: DeliveryView[] }
 export interface DeliveryAuthorization { authorize?: () => boolean | Promise<boolean> }
+export type SubscriptionVerificationFailure = 'invalid_url' | 'invalid_secret' | 'payload_too_large'
+  | 'cancelled' | 'timeout' | 'dns_failed' | 'address_not_public' | 'network_failed'
+  | 'response_failed' | 'response_too_large' | 'challenge_failed' | 'internal_error';
+export type SubscriptionDiagnostic =
+  | { stage: 'verification_started' | 'verification_cached' | 'subscription_stored' | 'subscription_store_failed' }
+  | { stage: 'callback_response'; httpStatus: number }
+  | { stage: 'verification_failed'; reason: SubscriptionVerificationFailure };
 /** The authenticated principal is supplied by the MCP service, never by RPC arguments. */
-export interface SubscriptionAuthorization { owner: string }
+export interface SubscriptionAuthorization {
+  owner: string;
+  /** Internal, synchronous diagnostics. Never receives callback credentials or identifiers. */
+  report?: (event: SubscriptionDiagnostic) => void;
+}
 export interface Delivery extends DeliveryView {
   agentId: string;
   owner: string;
@@ -85,10 +96,12 @@ export interface EventsOptions {
   dailyNotificationLimit?: number;
 }
 export interface SubscriptionArguments {
+  _meta?: Record<string, unknown>;
   name: string;
   arguments: { recipient_id: string };
   delivery: { mode: 'webhook'; url: string; secret: string };
   cursor?: null;
+  maxAgeMs?: number;
   ttlMs?: number | null;
 }
 export interface LocalHostedContact {

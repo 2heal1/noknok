@@ -130,10 +130,30 @@ Report connected, subscribed, delivered and processed separately. `noknok_subscr
 
 Acceptance testing must end the setup task, call from another identity, and observe the recipient start a task, decrypt with its original profile, join, and reply substantively without new human input. Mock-client tests cannot establish native-host wake-up. Actual dot and big p validation remains pending until that evidence is recorded.
 
+### Diagnosing subscription failures
+
+`hosted wakeup` prints instructions; it does not create a subscription. If OAuth is connected but `subscribed` is false, check whether the host discovered `noknok.activity` and attempted `events/subscribe`. Rescan the plugin after changing its event definitions. Before retrying a failed task creation, inspect the host's task list and NokNok subscription status to avoid duplicates.
+
+The hosted `/mcp` endpoint writes JSON diagnostics to stderr with `component: "noknok.mcp"`. Correlate request, response and subscription records by their generated `requestId` and UTC timestamp. The response also supplies `X-Request-ID`; JSON-RPC errors include `data.requestId`. Records identify the method, processing stage, HTTP/RPC error code, categorized reason and limited parameter-presence information. They exclude credentials, headers/cookies, URLs/query strings, Agent/grant/subscription IDs, signing secrets, payloads and message content. An HTTP 200 response can still contain a JSON-RPC error; inspect the RPC outcome too.
+
+For example, Beijing time 2026-10-14 22:26:40–22:27:25 corresponds to UTC 14:26:40–14:27:25. Include the final second by querying until 14:27:26Z:
+
+```sh
+docker compose -f deploy/compose.hosted.yaml logs --since 2026-10-14T14:26:40Z --until 2026-10-14T14:27:26Z noknok
+```
+
+Use the deployed Compose configuration and service name. If those are unavailable, identify the application container and use:
+
+```sh
+docker logs --since 2026-10-14T14:26:40Z --until 2026-10-14T14:27:26Z <noknok-container-id>
+```
+
+Check stages before callback verification as well as verification and persistence outcomes. A rejected request may never create a subscription. Diagnostics are best-effort: a blocked log pipe drops records until it drains, and a failed pipe stops logging without stopping the service. Missing logs cannot establish that the host sent no request: verify the deployed version, container, time range and log retention first. The supplied deployment templates use Docker's `local` logging driver with rotation limits; retention is controlled by deployment configuration. Caddy access logs remain disabled. These diagnostics help locate failures; successful synthetic tests do not prove ChatGPT or dot subscriptions work.
+
 ## Transport and trust
 
 The service sees identities, names, membership, routes, sizes, and timing. It issues contact grants; endpoints generate contact keys. Shared meeting keys do not provide independent participant signatures or forward secrecy. Local plaintext history, hosts/model providers, key distribution, and browser-script publication remain trust boundaries; see [E2EE](e2ee.md). HTTPS protects credentials and metadata.
 
-Callback validation checks every DNS address, rejects private/local/non-public addresses, pins the connection IP while retaining TLS hostname verification, and follows no redirects. Transient failures have bounded retries; `410` disables the current callback and `413` is not retried. Consumers deduplicate event IDs. Events have no historical replay; `cursor` is `null`. The bounded pending metadata list is a recovery aid only within the current process and retention window.
+Callback validation checks every DNS address, rejects private/local/non-public addresses, pins the connection IP while retaining TLS hostname verification, and follows no redirects. Transient failures have bounded retries; `410` disables the current callback and `413` is not retried. Consumers deduplicate event IDs. Events have no historical replay; `cursor` is `null` and `maxAgeMs` does not enable replay. Subscription requests accept standard MCP `_meta`. The bounded pending metadata list is a recovery aid only within the current process and retention window.
 
 A source implementation does not prove that a deployed package or actual host has been upgraded. See [validation](validation.md#evidence-still-needed-per-target-releaseenvironment) for acceptance requirements and the [user guide](../apps/docs/docs/en/guide/mcp.md) for host-facing instructions.

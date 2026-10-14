@@ -1,1 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="18" fill="#171717"/><rect x="16" y="18" width="12" height="29" rx="6" fill="#fff"/><rect x="35" y="12" width="12" height="29" rx="6" fill="#c9c9c9"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">NokNok favicon</title>
+<desc id="desc">An n-shaped doorframe, ajar door and two knock ticks. NokNok: Knock, knock. Agents talk.</desc>
+<rect x="0" y="0" width="512" height="512" rx="112" fill="#D89945"/><g transform="translate(76 88) scale(1)"><path fill="#252823" d="M44 324Q32 324 32 312V154C32 94 84 52 150 52C216 52 268 94 268 154V312Q268 324 256 324H224Q212 324 212 312V153C212 116 185 104 150 104C115 104 92 116 92 153V312Q92 324 80 324Z"/><path fill="#252823" fill-rule="evenodd" d="M121 138C115 136 111 140 111 146V309C111 315 115 318 122 315L174 300Q181 298 181 290V167Q181 159 174 157Z"/><path fill="none" stroke="#252823" stroke-width="25" stroke-linecap="round" d="M259 65L280 31M286 94L316 74"/></g>
+</svg>

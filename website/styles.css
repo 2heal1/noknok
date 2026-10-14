@@ -1,9 +1,9 @@
 :root {
   --paper: #fcfcfc;
-  --ink: #171717;
+  --ink: #252823;
   --muted: #696969;
   --line: #dededb;
-  --panel: #f1f0ec;
+  --panel: #f7f3ea;
   --peach: #f2ddd0;
   --sage: #e5ebdd;
   --font: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -23,20 +23,13 @@ p { color: var(--muted); }
 .skip-link { position: fixed; left: 16px; top: 12px; padding: 10px 18px; background: var(--ink); color: white; border-radius: 8px; transform: translateY(-160%); z-index: 20; }
 .skip-link:focus { transform: none; }
 .site-header { width: calc(100% - 64px); max-width: 1440px; margin-inline: auto; height: 80px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
-.brand { display: inline-flex; align-items: center; gap: 8px; font-size: 25px; font-weight: 650; letter-spacing: -1.2px; line-height: 1; }
-.brand-symbol { display: inline-flex; align-items: center; width: 27px; height: 27px; gap: 4px; transform: rotate(-16deg); }
-.brand-symbol i { width: 9px; height: 20px; border-radius: 6px; background: var(--ink); }
-.brand-symbol i + i { transform: translateY(-5px); background: #93938c; }
-.brand-period { display: none; }
+.brand { display: inline-flex; align-items: center; flex-shrink: 0; line-height: 1; }
+.brand img { display: block; width: 140px; height: auto; }
 .site-header nav { display: flex; align-items: center; gap: 28px; font-size: 13px; }
 .site-header nav a:not(.nav-source):hover, .text-link:hover, .demo-caption a:hover, .site-footer > a:last-child:hover { text-decoration: underline; text-underline-offset: 4px; }
 .nav-source { display: inline-flex; align-items: center; background: var(--ink); color: white; border-radius: 30px; padding: 8px 16px; font-size: 12px; }
 .hero { text-align: center; padding: 54px 0 62px; }
-.hero-symbol { position: relative; width: 102px; height: 76px; margin: 0 auto 34px; }
-.hero-symbol > span { position: absolute; width: 52px; height: 46px; border-radius: 17px; background: #d7decf; left: 9px; top: 4px; transform: rotate(-9deg); }
-.hero-symbol > span::after { content: ''; position: absolute; left: 9px; bottom: -5px; border-width: 7px 6px 0 0; border-style: solid; border-color: #d7decf transparent transparent transparent; }
-.hero-symbol > span + span { background: #22251f; left: 44px; top: 28px; transform: rotate(9deg); }
-.hero-symbol > span + span::after { border-top-color: #22251f; }
+.hero-mark { display: block; width: 112px; height: auto; margin: 0 auto 28px; }
 .hero h1 { font-size: clamp(42px, 4.4vw, 64px); line-height: 1.22; letter-spacing: -.055em; font-weight: 550; }
 .hero-description { font-size: 21px; margin-top: 23px; }
 .hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 28px; }
@@ -100,7 +93,7 @@ p { color: var(--muted); }
 .ownership > p { font-size: 15px; margin-top: 17px; }
 .ownership > .ownership-note { margin-top: 21px; font-size: 11px; }
 .site-footer { margin-top: 100px; min-height: 95px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-top: 1px solid #e7e7e3; }
-.site-footer .brand { font-size: 21px; }
+.site-footer .brand img { width: 94px; }
 .site-footer p, .site-footer > a:last-child, .site-footer > span, .site-footer > div { font-size: 11px; color: var(--muted); }
 .site-footer > div { display: flex; gap: 22px; }
 
@@ -149,9 +142,9 @@ p { color: var(--muted); }
   .wrap { width: calc(100% - 40px); }
   .site-header { width: calc(100% - 40px); height: 72px; gap: 18px; }
   .site-header nav { gap: 20px; font-size: 12px; }
-  .brand { font-size: 23px; gap: 6px; }
+  .brand img { width: 124px; }
   .hero { padding: 42px 0 45px; }
-  .hero-symbol { margin-bottom: 27px; transform: scale(.85); }
+  .hero-mark { width: 100px; margin-bottom: 25px; }
   .hero h1 { font-size: 43px; line-height: 1.27; }
   .hero-description { font-size: 18px; margin-top: 21px; }
   .hero-actions { margin-top: 24px; }
@@ -186,10 +179,9 @@ p { color: var(--muted); }
   .site-header nav { gap: 15px; font-size: 11px; }
   .site-header nav a:first-child { display: none; }
   .nav-source { font-size: 10px; padding: 7px 12px; }
-  .brand { font-size: 22px; }
-  .brand-symbol { transform: rotate(-16deg) scale(.85); width: 23px; }
+  .brand img { width: 110px; }
   .hero { padding-top: 31px; }
-  .hero-symbol { margin-bottom: 18px; }
+  .hero-mark { width: 88px; margin-bottom: 22px; }
   .hero h1 { font-size: 37px; }
   .hero-description { font-size: 16px; }
   .button { padding: 10px 18px; font-size: 12px; }

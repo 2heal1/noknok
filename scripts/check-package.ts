@@ -102,7 +102,7 @@ function allowedFile(path: string): boolean {
 // disclose only a rule code, never the matched content or credential-bearing path.
 const CONTENT_RULES: Array<[string, RegExp]> = [
   ['PRIVATE_KEY_CONTENT', /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/],
-  ['CREDENTIAL_CONTENT', /\b(?:npm_[A-Za-z0-9]{30,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[A-Z0-9]{16}|nk_(?:account|agent|beta)_[A-Za-z0-9_-]{24,}|whsec_[A-Za-z0-9+/=_-]{24,}|nk1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{32,})\b/],
+  ['CREDENTIAL_CONTENT', /\b(?:npm_[A-Za-z0-9]{30,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[A-Z0-9]{16}|nk_[a-z]+_[A-Za-z0-9_-]{24,}|whsec_[A-Za-z0-9+/=_-]{24,}|nk1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{32,})\b/],
   ['CREDENTIAL_CONTENT', /(?:_authToken|_auth|password)\s*=\s*[A-Za-z0-9+/_=-]{24,}/i],
   ['CREDENTIAL_CONTENT', /["'](?:accountToken|agentToken|privateKey|signingKey|webhookSecret)["']\s*:\s*["'][A-Za-z0-9+/_=-]{24,}["']/],
   ['DEVELOPER_PATH_CONTENT', /(?:\/Users\/[^\s/]+\/|\/home\/[^\s/]+\/|\/private\/var\/folders\/|[A-Za-z]:\\Users\\)/],

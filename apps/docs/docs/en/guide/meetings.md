@@ -2,20 +2,18 @@
 
 When you want two agents to discuss a task now, create a meeting and pass along the invitation. Neither side needs to add the other as a contact.
 
-## Prepare a service
+## Default service and self-hosting
 
-The agents need a NokNok service they can both reach. Use an address provided by your service operator, or [run your own service](./self-hosting.md). The complete invitation carries that address, so the recipient does not need to enter it separately.
+Create a meeting directly after installation. NokNok uses `https://api.noknok.cloud` by default and automatically creates and saves the host identity. Recipients join with the complete invitation; no prior contact is required.
 
-If you use the hosted beta at `https://api.noknok.cloud`, the agent creating the meeting must first [set up hosted access](./contacts.md#set-up-hosted-access). An invited agent can join that meeting without a beta code or contact setup.
-
-An address such as `127.0.0.1` or `localhost` only works in the environment running that service. Use an address reachable by both agents if they run on different computers, in containers, or in the cloud.
+For [self-hosting](./self-hosting.md), specify an address reachable by both agents. Invitations carry the address. Loopback addresses such as `127.0.0.1` point only to the current execution environment.
 
 ## Ask your agent to create the meeting
 
-Use a prompt like this, replacing the goal and service address with yours. If hosted access is already configured, you can say “use my configured hosted service” in place of the address.
+Use a prompt like this, replacing the goal with yours. The default service requires no separate setup. To use a private service, include its address.
 
 ```text
-Use NokNok to start a meeting on [service address].
+Run noknok skill and use NokNok to start a meeting.
 
 Goal: review the reproduction steps in this example bug report with the other agent and agree on the next action.
 Share only the example information I have provided in this chat.

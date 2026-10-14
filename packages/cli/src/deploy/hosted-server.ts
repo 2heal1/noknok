@@ -11,7 +11,7 @@ export function hostedDeploymentConfig(env: NodeJS.ProcessEnv = process.env): Ho
   return {
     dataDir: env.NOKNOK_DATA_DIR, publicUrl: env.NOKNOK_PUBLIC_URL,
     port: integer(env, 'PORT', 4317, 65535),
-    maxAccounts: integer(env, 'NOKNOK_MAX_ACCOUNTS', 10, 1000),
+    maxAccounts: integer(env, 'NOKNOK_MAX_ACCOUNTS', 1000, 10000),
     maxAgentsPerAccount: integer(env, 'NOKNOK_MAX_AGENTS_PER_ACCOUNT', 2, 10),
     maxMeetings: integer(env, 'NOKNOK_MAX_MEETINGS', 5, 100),
     maxOwnerMeetings: integer(env, 'NOKNOK_MAX_OWNER_MEETINGS', 2, 10),

@@ -16,52 +16,66 @@ function setup(t, options = {}) {
   t.after(() => { try { store.close(); } finally { rmSync(dataDir, { recursive: true, force: true }); } });
   return { dataDir, get store() { return store; }, advance(ms) { now += ms; }, args,
     restart() { store.close(); store = openHostedStore(args); return store; },
-    agent() { const { code } = store.mintCode(); const account = store.redeem(code, secret()); return { ...account, ...store.registerAgent(account.accountToken, { requestId: secret() }) }; } };
+    agent() { const account = store.registerAccount(secret()); return { ...account, ...store.registerAgent(account.accountToken, { requestId: secret() }) }; } };
 }
 function rejectsCode(fn, code) { assert.throws(fn, (error) => error.code === code); }
 
-test('beta redemption and registration are bounded, idempotent and recoverable after restart', (t) => {
+test('public registration is bounded, private, idempotent and recoverable after restart', (t) => {
   const env = setup(t, { maxAccounts: 2, maxAgentsPerAccount: 1 });
-  const { code } = env.store.mintCode({ uses: 2 });
   const requestId = secret();
-  const a = env.store.redeem(code, requestId);
-  assert.deepEqual(env.store.redeem(code, requestId), a);
+  const a = env.store.registerAccount(requestId);
+  assert.deepEqual(env.store.registerAccount(requestId), a);
   const registrationSecret = secret();
   const agent = env.store.registerAgent(a.accountToken, { requestId: registrationSecret });
   rejectsCode(() => env.store.registerAgent(a.accountToken, { requestId: secret() }), 'AGENT_CAPACITY');
-  rejectsCode(() => env.store.redeem(code, 'guessable'), 'INVALID_ARGUMENT');
-  const b = env.store.redeem(code, secret());
+  rejectsCode(() => env.store.registerAccount('guessable'), 'INVALID_ARGUMENT');
+  const b = env.store.registerAccount(secret());
   assert.notEqual(a.accountId, b.accountId);
-  rejectsCode(() => env.store.redeem(code, secret()), 'INVALID_BETA_CODE');
-  const extra = env.store.mintCode().code;
-  rejectsCode(() => env.store.redeem(extra, secret()), 'ACCOUNT_CAPACITY');
+  rejectsCode(() => env.store.registerAccount(secret()), 'ACCOUNT_CAPACITY');
   env.restart();
-  assert.deepEqual(env.store.redeem(code, requestId), a);
+  assert.deepEqual(env.store.registerAccount(requestId), a);
   assert.deepEqual(env.store.registerAgent(a.accountToken, { requestId: registrationSecret }), agent);
   assert.deepEqual(env.store.authenticate(agent.agentToken), { agentId: agent.agentId, accountId: a.accountId });
   rejectsCode(() => env.store.authenticate(a.accountToken), 'UNAUTHENTICATED');
 });
 
-test('beta code single use is enforced across independent SQLite connections', (t) => {
+test('independent SQLite connections recover the same account without creating duplicates', (t) => {
   const env = setup(t);
   const second = openHostedStore(env.args);
   try {
-    const { code } = env.store.mintCode();
-    env.store.redeem(code, secret());
-    rejectsCode(() => second.redeem(code, secret()), 'INVALID_BETA_CODE');
+    const requestId = secret();
+    assert.deepEqual(env.store.registerAccount(requestId), second.registerAccount(requestId));
+    assert.equal(second.db.prepare('SELECT COUNT(*) AS n FROM accounts').get().n, 1);
   } finally { second.close(); }
 });
 
-test('expired codes cannot create identities, while valid redeemed account remains usable', (t) => {
+test('schema upgrade removes admission records while preserving identities, contacts, revocations and quotas', t => {
   const env = setup(t);
-  const used = env.store.mintCode({ expiresInMs: 1000 });
-  const requestId = secret(), account = env.store.redeem(used.code, requestId);
-  const unused = env.store.mintCode({ expiresInMs: 1000 });
-  env.advance(1001);
-  env.store.cleanup();
-  rejectsCode(() => env.store.redeem(unused.code, secret()), 'INVALID_BETA_CODE');
-  assert.deepEqual(env.store.redeem(used.code, requestId), account);
-  assert.ok(env.store.registerAgent(account.accountToken, { requestId: secret() }).agentToken);
+  const a = env.agent(), b = env.agent(), c = env.agent();
+  const exchange = env.store.acceptOffer(a.agentId, env.store.issueOffer(b.agentId));
+  env.store.revokeAgent(c.agentId);
+  env.store.db.prepare('INSERT INTO quotas(owner,bucket,window_start,expires_at,count) VALUES (?,?,?,?,?)').run(a.accountId, 'create', 0, 1_900_000_000_000, 7);
+  env.store.db.exec(`PRAGMA foreign_keys=OFF;
+    BEGIN IMMEDIATE;
+    CREATE TABLE accounts_old (id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, code_hash TEXT NOT NULL, request_hash TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, UNIQUE(code_hash,request_hash));
+    INSERT INTO accounts_old SELECT id,token_hash,'retired-admission',request_hash,active FROM accounts;
+    DROP TABLE accounts;
+    ALTER TABLE accounts_old RENAME TO accounts;
+    CREATE TABLE codes (hash TEXT PRIMARY KEY, remaining INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+    INSERT INTO codes VALUES ('retired-admission',1,1900000000000);
+    UPDATE meta SET value='1' WHERE name='schema_version';
+    COMMIT;
+    PRAGMA foreign_keys=ON;`);
+  env.restart();
+  assert.deepEqual(env.store.authenticate(a.agentToken), { agentId: a.agentId, accountId: a.accountId });
+  assert.equal(env.store.isAgentActive(c.agentId), false);
+  rejectsCode(() => env.store.authenticate(c.agentToken), 'UNAUTHENTICATED');
+  env.store.verifyCapability(a.agentId, b.agentId, exchange.contact.capability);
+  assert.equal(env.store.db.prepare('SELECT count FROM quotas WHERE owner=?').get(a.accountId).count, 7);
+  assert.equal(env.store.db.prepare("SELECT value FROM meta WHERE name='schema_version'").get().value, '2');
+  assert.equal(env.store.db.prepare("SELECT name FROM sqlite_master WHERE name='codes'").get(), undefined);
+  assert.deepEqual(env.store.db.prepare('PRAGMA foreign_key_check').all(), []);
+  assert.ok(env.store.registerAgent(a.accountToken, { requestId: secret() }).agentId);
 });
 
 test('contact exchange binds both directions and cannot be stolen or forged by C', (t) => {
@@ -168,17 +182,17 @@ test('subscriptions persist encrypted, switch atomically, cannot cross identity 
 
 test('stored control fields omit plaintext bearer credentials and use restrictive file permissions', (t) => {
   const env = setup(t);
-  const { code } = env.store.mintCode(), requestId = secret();
-  const a = env.store.redeem(code, requestId), r = secret();
+  const requestId = secret();
+  const a = env.store.registerAccount(requestId), r = secret();
   const agent = env.store.registerAgent(a.accountToken, { requestId: r });
   assert.equal(statSync(env.dataDir).mode & 0o777, 0o700);
   for (const name of readdirSync(env.dataDir)) assert.equal(statSync(join(env.dataDir, name)).mode & 0o777, 0o600);
   const databaseBytes = readFileSync(join(env.dataDir, 'control.sqlite'));
-  for (const value of [code, requestId, r, a.accountToken, agent.agentToken]) assert.equal(databaseBytes.includes(Buffer.from(value)), false);
+  for (const value of [requestId, r, a.accountToken, agent.agentToken]) assert.equal(databaseBytes.includes(Buffer.from(value)), false);
   const raw = new DatabaseSync(join(env.dataDir, 'control.sqlite'));
   try {
     const tables = raw.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((row) => row.name);
-    assert.deepEqual(tables.sort(), ['accounts', 'agents', 'codes', 'meta', 'offer_claims', 'quotas', 'revocations', 'subscriptions']);
+    assert.deepEqual(tables.sort(), ['accounts', 'agents', 'meta', 'offer_claims', 'quotas', 'revocations', 'subscriptions']);
   } finally { raw.close(); }
 });
 

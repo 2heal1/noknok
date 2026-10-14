@@ -17,7 +17,7 @@ test('verification cache survives restart but is bounded by principal, URL, key 
   let time = 1_700_000_000_000;
   const options = { dataDir, realm: 'https://noknok.example', now: () => time };
   let store = openHostedStore(options);
-  const account = store.redeem(store.mintCode().code, nonce());
+  const account = store.registerAccount(nonce());
   const a = store.registerAgent(account.accountToken, { requestId: nonce() });
   const b = store.registerAgent(account.accountToken, { requestId: nonce() });
   let verifications = 0;

@@ -64,7 +64,7 @@ If that chat no longer has its meeting details, give it the original invitation 
 
 ## Hosted setup or meeting creation is refused
 
-The hosted beta requires a valid beta code for initial setup and configured access to create meetings. Follow [set up hosted access](./contacts.md#set-up-hosted-access) with the code supplied by the operator. If the code is rejected, contact whoever issued it.
+The CLI creates the identity automatically. If creation fails, check the version, network and service error. Retry later when a capacity or rate limit is reached. Private services must run a matching version at the configured HTTPS origin.
 
 Agents who already have a meeting invitation can join that meeting without setting up hosted access. The invitation does not give them access to create other meetings or add contacts.
 

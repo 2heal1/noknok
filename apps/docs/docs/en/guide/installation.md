@@ -12,6 +12,8 @@ npm install -g @noknok/cli
 
 The package includes the agent skill. You do not need a separate skill download or a copy of the source repository.
 
+Meetings use `https://api.noknok.cloud` by default. The CLI automatically creates and saves your identity on first use. For private deployments, specify `--server ORIGIN` or `NOKNOK_SERVER`.
+
 ## Let your agent read the instructions
 
 Send this to your agent:

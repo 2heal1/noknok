@@ -68,7 +68,7 @@ export interface HostedStoreOptions {
 }
 interface StoreRow {
   id: string; value: string; active: number; n: number; account_id: string;
-  remaining: number; expires_at: number; claimant: string; accepted_at: number;
+  expires_at: number; claimant: string; accepted_at: number;
   window_start: number; count: number; encrypted: string;
 }
 interface SignedCapability {
@@ -85,7 +85,7 @@ export class HostedStore {
   signingKey: Buffer;
   encryptionKey: Buffer;
   db: DatabaseSync;
-  constructor({ dataDir, realm, maxAccounts = 10, maxAgentsPerAccount = 2, now = Date.now }: HostedStoreOptions = {}) {
+  constructor({ dataDir, realm, maxAccounts = 1000, maxAgentsPerAccount = 2, now = Date.now }: HostedStoreOptions = {}) {
     this.realm = canonicalRealm(text(realm, 'realm', 4096));
     this.maxAccounts = boundedInteger(maxAccounts, 'maxAccounts', 1, 10_000);
     this.maxAgentsPerAccount = boundedInteger(maxAgentsPerAccount, 'maxAgentsPerAccount', 1, 100);
@@ -107,8 +107,7 @@ export class HostedStore {
     try {
       this.db.exec(`PRAGMA journal_mode=DELETE; PRAGMA secure_delete=ON; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
         CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS codes (hash TEXT PRIMARY KEY, remaining INTEGER NOT NULL, expires_at INTEGER NOT NULL);
-        CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, code_hash TEXT NOT NULL, request_hash TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, UNIQUE(code_hash, request_hash));
+        CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, request_hash TEXT NOT NULL UNIQUE, active INTEGER NOT NULL DEFAULT 1);
         CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id), token_hash TEXT NOT NULL UNIQUE, request_hash TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, UNIQUE(account_id, request_hash));
         CREATE TABLE IF NOT EXISTS offer_claims (id TEXT PRIMARY KEY, claimant TEXT NOT NULL REFERENCES agents(id), accepted_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS revocations (id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
@@ -116,14 +115,38 @@ export class HostedStore {
         CREATE TABLE IF NOT EXISTS subscriptions (agent_id TEXT PRIMARY KEY REFERENCES agents(id), subscription_id TEXT NOT NULL, encrypted TEXT NOT NULL, expires_at INTEGER NOT NULL);
       `);
       this._transaction(() => {
-        for (const [name, value] of [['realm', this.realm], ['signing_key', digest(this.signingKey)], ['subscription_key', digest(this.encryptionKey)], ['schema_version', '1']]) {
+        for (const [name, value] of [['realm', this.realm], ['signing_key', digest(this.signingKey)], ['subscription_key', digest(this.encryptionKey)]]) {
           const saved = this._row('SELECT value FROM meta WHERE name=?', name);
           if (saved && saved.value !== value) fail(500, 'STORE_CONFIGURATION_MISMATCH', 'Control store realm, schema, or keys do not match the saved configuration');
           this.db.prepare('INSERT OR IGNORE INTO meta(name,value) VALUES (?,?)').run(name, value);
         }
       });
+      this.upgradeSchema();
       this.cleanup();
     } catch (error) { this.db.close(); throw error; }
+  }
+  private upgradeSchema() {
+    const version = this._row('SELECT value FROM meta WHERE name=?', 'schema_version')?.value;
+    if (version && !['1', '2'].includes(version)) fail(500, 'STORE_CONFIGURATION_MISMATCH', 'Unsupported control store schema');
+    if (version === '1') {
+      // Preserve existing identities and their keys while removing admission data.
+      // Rebuild without renaming the old table so agents' foreign keys stay valid.
+      this.db.exec('PRAGMA foreign_keys=OFF');
+      try {
+        this._transaction(() => {
+          this.db.exec(`CREATE TABLE accounts_next (id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, request_hash TEXT NOT NULL UNIQUE, active INTEGER NOT NULL DEFAULT 1);
+            INSERT INTO accounts_next SELECT id,token_hash,'previous:' || code_hash || ':' || request_hash,active FROM accounts;
+            DROP TABLE accounts;
+            ALTER TABLE accounts_next RENAME TO accounts;
+            DROP TABLE IF EXISTS codes;
+          `);
+          if (this.db.prepare('PRAGMA foreign_key_check').all().length) fail(500, 'INVALID_STORE', 'Identity schema upgrade failed its reference check');
+          this.db.prepare('UPDATE meta SET value=? WHERE name=?').run('2', 'schema_version');
+        });
+      } finally { this.db.exec('PRAGMA foreign_keys=ON'); }
+    } else {
+      this.db.prepare('INSERT OR IGNORE INTO meta(name,value) VALUES (?,?)').run('schema_version', '2');
+    }
   }
   private _row(sql: string, ...values: SQLInputValue[]): StoreRow | undefined {
     return this.db.prepare(sql).get(...values) as StoreRow | undefined;
@@ -161,32 +184,19 @@ export class HostedStore {
     if (!row) fail(401, 'UNAUTHENTICATED', 'Invalid agent credential');
     return { agentId: row.id, accountId: row.account_id };
   }
-  mintCode({ uses = 1, expiresInMs = 7 * DAY } = {}) {
-    boundedInteger(uses, 'uses', 1, this.maxAccounts);
-    boundedInteger(expiresInMs, 'expiresInMs', 1_000, 365 * DAY);
-    this.cleanup();
-    if (this._requiredRow('SELECT COUNT(*) n FROM codes').n >= 1000) fail(429, 'CODE_CAPACITY', 'Too many unexpired beta codes');
-    const code = `nk_beta_${randomBytes(24).toString('base64url')}`;
-    const expiresAt = this.now() + expiresInMs;
-    this.db.prepare('INSERT INTO codes(hash,remaining,expires_at) VALUES (?,?,?)').run(digest(code), uses, expiresAt);
-    return { code, uses, expiresAt };
-  }
-  redeem(code, requestId) {
-    text(code, 'code', 256); retrySecret(requestId);
-    const codeHash = digest(code), requestHash = digest(requestId);
+  registerAccount(requestId: string) {
+    retrySecret(requestId);
+    const requestHash = digest(requestId);
     return this._transaction(() => {
-      const previous = this._row('SELECT id,active FROM accounts WHERE code_hash=? AND request_hash=?', codeHash, requestHash);
+      const previous = this._row('SELECT id,active FROM accounts WHERE request_hash=?', requestHash);
       if (previous) {
         if (!previous.active) fail(403, 'ACCOUNT_REVOKED', 'Account has been revoked');
         return { accountId: previous.id, accountToken: this._credential('account', previous.id, requestId) };
       }
-      const invitation = this._row('SELECT remaining,expires_at FROM codes WHERE hash=?', codeHash);
-      if (!invitation || invitation.remaining < 1 || invitation.expires_at <= this.now()) fail(403, 'INVALID_BETA_CODE', 'Beta code is invalid, expired, or exhausted');
       if (this._requiredRow('SELECT COUNT(*) n FROM accounts').n >= this.maxAccounts) fail(429, 'ACCOUNT_CAPACITY', 'The service account limit has been reached');
       const accountId = opaqueId('account');
       const accountToken = this._credential('account', accountId, requestId);
-      this.db.prepare('UPDATE codes SET remaining=remaining-1 WHERE hash=? AND remaining>0').run(codeHash);
-      this.db.prepare('INSERT INTO accounts(id,token_hash,code_hash,request_hash) VALUES (?,?,?,?)').run(accountId, digest(accountToken), codeHash, requestHash);
+      this.db.prepare('INSERT INTO accounts(id,token_hash,request_hash) VALUES (?,?,?)').run(accountId, digest(accountToken), requestHash);
       return { accountId, accountToken };
     });
   }
@@ -349,6 +359,6 @@ export class HostedStore {
   }
   cleanup() {
     const now = this.now();
-    for (const table of ['codes', 'offer_claims', 'revocations', 'quotas', 'subscriptions']) this.db.prepare(`DELETE FROM ${table} WHERE expires_at<=?`).run(now);
+    for (const table of ['offer_claims', 'revocations', 'quotas', 'subscriptions']) this.db.prepare(`DELETE FROM ${table} WHERE expires_at<=?`).run(now);
   }
 }

@@ -46,12 +46,11 @@ async function fixture(t, options = {}) {
     return { status: response.status, body };
   }
   async function register() {
-    const { code } = service.store.mintCode();
-    const redeemed = await raw('/v1/hosted/redeem', { value: { code, requestId: secret() } });
-    assert.equal(redeemed.status, 200);
-    const registered = await raw('/v1/hosted/agents', { token: redeemed.body.accountToken, value: { requestId: secret() } });
+    const account = await raw('/v1/hosted/accounts', { value: { requestId: secret() } });
+    assert.equal(account.status, 200);
+    const registered = await raw('/v1/hosted/agents', { token: account.body.accountToken, value: { requestId: secret() } });
     assert.equal(registered.status, 200);
-    return { ...registered.body, ...redeemed.body };
+    return { ...registered.body, ...account.body };
   }
   async function rpc(actor, method, params = {}) {
     const result = await raw('/mcp', { token: actor.agentToken, value: { jsonrpc: '2.0', id: randomUUID(), method, params } });
@@ -115,11 +114,12 @@ async function fixture(t, options = {}) {
 test('hosted service gates all creation and disables legacy registration/proxy routes', async t => {
   const f = await fixture(t);
   assert.equal((await f.raw('/v1/meetings', { value: { name: 'anonymous', purpose: 'bypass' } })).status, 401);
-  for (const path of ['/v1/calls', '/v1/contacts/register', '/v1/gateway', '/proxy', '/mcp/invalid']) {
+  for (const path of ['/v1/hosted/redeem', '/v1/calls', '/v1/contacts/register', '/v1/gateway', '/proxy', '/mcp/invalid']) {
     const result = await f.raw(path, { value: { op: 'register' } });
     assert.ok([401, 404].includes(result.status), path);
   }
-  assert.equal((await f.raw('/v1/hosted/redeem', { value: { code: 'invalid', requestId: secret() } })).status, 403);
+  assert.equal((await f.raw('/v1/hosted/accounts', { value: { requestId: 'guessable' } })).status, 400);
+  assert.equal((await f.raw('/v1/hosted/accounts', { value: { requestId: secret(), code: 'removed' } })).status, 400);
   const a = await f.register();
   const discovery = await f.rpc(a, 'server/discover');
   assert.deepEqual(discovery.supportedVersions, ['2026-07-28']);
@@ -136,6 +136,19 @@ test('hosted service gates all creation and disables legacy registration/proxy r
   assert.equal(asset.status, 200);
   assert.match(asset.headers.get('content-type'), /javascript/);
   assert.match(await asset.text(), /export function meetingInvitationText/);
+});
+
+test('public registration keeps account ownership and a bounded registration rate', async t => {
+  const f = await fixture(t);
+  const requestId = secret();
+  const first = await f.raw('/v1/hosted/accounts', { value: { requestId } });
+  const retry = await f.raw('/v1/hosted/accounts', { value: { requestId } });
+  assert.deepEqual(retry.body, first.body);
+  const unauthenticated = await f.raw('/v1/hosted/agents', { value: { requestId: secret() } });
+  assert.equal(unauthenticated.status, 401);
+  for (let i = 0; i < 28; i++) assert.equal((await f.raw('/v1/hosted/accounts', { value: { requestId: secret() } })).status, 200);
+  assert.equal((await f.raw('/v1/hosted/accounts', { value: { requestId: secret() } })).status, 429);
+  assert.equal(f.service.store.db.prepare('SELECT COUNT(*) AS n FROM accounts').get().n, 29);
 });
 
 test('friend meeting uses authenticated recipient, delivers minimal event and supports agents plus a human', async t => {
@@ -241,6 +254,9 @@ test('owner and global budgets apply to MCP and direct REST; purge removes cache
 
 test('low-resource deployment defaults are bounded and reject unsafe environment values', () => {
   const config = hostedDeploymentConfig({});
+  assert.equal(config.maxAccounts, 1000);
+  assert.equal(hostedDeploymentConfig({ NOKNOK_MAX_ACCOUNTS: '2000' }).maxAccounts, 2000);
+  assert.throws(() => hostedDeploymentConfig({ NOKNOK_MAX_ACCOUNTS: '10001' }));
   assert.equal(config.maxMeetings, 5); assert.equal(config.maxParticipants, 8);
   assert.equal(config.maxTotalBytes, 8 * 1024 * 1024);
   assert.equal(config.deliveryTtlMs, 300_000);

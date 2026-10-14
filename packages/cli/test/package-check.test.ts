@@ -95,7 +95,7 @@ test('allowed text paths still reject accidentally embedded keys, live-format cr
     ['PRIVATE_KEY_CONTENT', '-----BEGIN OPENSSH PRIVATE KEY-----\ntest-only\n'],
     ['CREDENTIAL_CONTENT', `npm_${'a'.repeat(36)}`],
     ['CREDENTIAL_CONTENT', `nk_agent_${'a'.repeat(43)}`],
-    ['CREDENTIAL_CONTENT', `nk_beta_${'a'.repeat(32)}`],
+    ['CREDENTIAL_CONTENT', `nk_retired_${'a'.repeat(32)}`],
     ['CREDENTIAL_CONTENT', `whsec_${'a'.repeat(43)}=`],
     ['CREDENTIAL_CONTENT', `nk1.${'a'.repeat(24)}.${'a'.repeat(43)}`],
     ['CREDENTIAL_CONTENT', `{"accountToken":"${'a'.repeat(32)}"}`],

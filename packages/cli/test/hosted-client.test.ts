@@ -22,9 +22,7 @@ const issuedCapability = 'issued_abcdefghijklmnopqrstuvwxyz0123456789';
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'noknok-hosted-client-'));
   const stateDir = join(directory, 'agent');
-  const codePath = join(directory, 'code');
-  await writeFile(codePath, 'beta-test-code', { mode: 0o600 });
-  const calls = [], mutations = { dropRedeem: 0, dropRegister: 0, claim: false, redirect: false, invitations: [] };
+  const calls = [], mutations = { dropAccount: 0, dropRegister: 0, claim: false, redirect: false, invitations: [] };
   const meetingId = randomUUID(), participantId = randomUUID(), participantToken = 'participant_abcdefghijklmnopqrstuvwxyz012345';
   let url, encryptedMeeting;
   const room = () => ({ meeting: { id: meetingId, ...encryptedMeeting, state: 'active', participants: [], createdAt: new Date().toISOString() },
@@ -36,9 +34,10 @@ async function fixture(t) {
     const body = input ? JSON.parse(input) : undefined;
     calls.push({ path: req.url, body, authorization: req.headers.authorization });
     const send = value => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(value)); };
+    if (req.url === '/health') return send({ ok: true, mode: 'hosted' });
     if (mutations.redirect) { res.writeHead(302, { location: `${url}/unexpected` }); res.end(); return; }
-    if (req.url === '/v1/hosted/redeem') {
-      if (mutations.dropRedeem-- > 0) { req.socket.destroy(); return; }
+    if (req.url === '/v1/hosted/accounts') {
+      if (mutations.dropAccount-- > 0) { req.socket.destroy(); return; }
       return send({ accountId: 'account-a', accountToken });
     }
     if (req.url === '/v1/hosted/agents') {
@@ -72,9 +71,9 @@ async function fixture(t) {
     await main(['hosted', ...args, '--state-dir', stateDir], { emit: value => { result = value; } });
     return result;
   };
-  const setup = () => run(['setup', '--server', url, '--code-file', codePath, '--product', 'dot']);
+  const setup = () => run(['setup', '--server', url, '--product', 'dot']);
   const saved = async () => JSON.parse(await readFile(join(stateDir, 'hosted.json'), 'utf8'));
-  return { directory, stateDir, codePath, url, calls, mutations, run, setup, saved, room };
+  return { directory, stateDir, url, calls, mutations, run, setup, saved, room };
 }
 
 test('hosted setup saves scoped credentials privately and does not disclose them in ordinary results', async t => {
@@ -87,9 +86,9 @@ test('hosted setup saves scoped credentials privately and does not disclose them
   const saved = await f.saved();
   assert.equal(saved.accountToken, accountToken);
   assert.equal(saved.agentToken, agentToken);
-  assert.match(saved.redeemRequestId, /^[A-Za-z0-9_-]{43}$/);
+  assert.match(saved.accountRequestId, /^[A-Za-z0-9_-]{43}$/);
   assert.match(saved.agentRequestId, /^[A-Za-z0-9_-]{43}$/);
-  assert.notEqual(saved.agentRequestId, saved.redeemRequestId);
+  assert.notEqual(saved.agentRequestId, saved.accountRequestId);
   assert.equal((await stat(join(f.stateDir, 'hosted.json'))).mode & 0o777, 0o600);
   assert.equal(f.calls[1].authorization, `Bearer ${accountToken}`);
   const before = f.calls.length;
@@ -105,14 +104,69 @@ test('hosted setup saves scoped credentials privately and does not disclose them
   assert.equal(config.eventsMcpConfig.mcpServers.noknok_events.headers.Authorization, `Bearer ${agentToken}`);
 });
 
-test('setup resumes lost redemption and agent-registration replies using secrets saved before sending', async t => {
+test('default service creates a meeting and contact identity without setup or sending credentials elsewhere', async t => {
   const f = await fixture(t);
-  f.mutations.dropRedeem = 2;
+  const originalFetch = globalThis.fetch;
+  const oldServer = process.env.NOKNOK_SERVER;
+  const oldHome = process.env.NOKNOK_HOME;
+  const oldAgent = process.env.NOKNOK_AGENT;
+  process.env.NOKNOK_HOME = join(f.directory, 'managed-home');
+  delete process.env.NOKNOK_AGENT;
+  delete process.env.NOKNOK_SERVER;
+  const requests = [];
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    requests.push({ url: url.href, authorization: init?.headers?.Authorization });
+    assert.equal(url.origin, 'https://api.noknok.cloud');
+    const response = await originalFetch(f.url + url.pathname + url.search, init);
+    const body = (await response.text()).replaceAll(f.url, url.origin);
+    return new Response(body, { status: response.status, headers: { 'content-type': 'application/json' } });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    if (oldServer === undefined) delete process.env.NOKNOK_SERVER;
+    else process.env.NOKNOK_SERVER = oldServer;
+    if (oldHome === undefined) delete process.env.NOKNOK_HOME;
+    else process.env.NOKNOK_HOME = oldHome;
+    if (oldAgent === undefined) delete process.env.NOKNOK_AGENT;
+    else process.env.NOKNOK_AGENT = oldAgent;
+  });
+  let meeting;
+  await main(['meeting', 'create', '--purpose', 'Collect reproduction steps', '--product', 'dot'], { emit: result => { meeting = result; } });
+  assert.match(meeting.session, /^am_/);
+  assert.match(meeting.localAgent, /^ap_/);
+  assert.match(meeting.invitationText, /https:\/\/api\.noknok\.cloud\/meeting#/);
+  const saved = JSON.parse(await readFile(join(process.env.NOKNOK_HOME, 'profiles', meeting.localAgent, 'hosted.json'), 'utf8'));
+  assert.equal(saved.server, 'https://api.noknok.cloud');
+  assert.equal(saved.name, 'agent-dot');
+  assert.equal(f.calls.filter(call => call.path === '/v1/hosted/accounts').length, 1);
+  assert.equal(f.calls.find(call => call.path === '/v1/hosted/accounts').authorization, undefined);
+  assert.equal(f.calls.find(call => call.path === '/v1/hosted/agents').authorization, `Bearer ${accountToken}`);
+  const before = requests.length;
+  await assert.rejects(main(['meeting', 'create', '--agent', meeting.localAgent, '--server', 'https://other.example', '--purpose', 'Wrong service'], { emit() {} }), { code: 'SERVER_MISMATCH' });
+  assert.equal(requests.length, before);
+  assert.ok(requests.length > 3);
+});
+
+test('first contact generation and addition enroll independent identities without setup', async t => {
+  const a = await fixture(t), b = await fixture(t);
+  await a.run(['friend-link', '--server', a.url, '--product', 'codex']);
+  const result = await b.run(['friend-add', `${b.url}/contact#offer=${offer}&key=${contactKey}`, '--product', 'doubaowork']);
+  assert.equal(result.added, true);
+  assert.equal((await a.saved()).name, 'agent-codex');
+  assert.equal((await b.saved()).name, 'agent-doubaowork');
+  assert.equal(a.calls.filter(call => call.path === '/mcp').length, 1);
+  assert.equal(b.calls.filter(call => call.path === '/mcp').length, 1);
+});
+
+test('setup resumes lost account and agent-registration replies using secrets saved before sending', async t => {
+  const f = await fixture(t);
+  f.mutations.dropAccount = 2;
   await assert.rejects(f.setup(), error => error.code === 'CONNECTION_FAILED' && error.requestId === undefined);
   const pending = await f.saved();
   assert.equal(pending.accountToken, undefined);
   assert.equal(f.calls.length, 2);
-  for (const call of f.calls) assert.equal(call.body.requestId, pending.redeemRequestId);
+  for (const call of f.calls) assert.equal(call.body.requestId, pending.accountRequestId);
   f.mutations.dropRegister = 2;
   await assert.rejects(f.setup(), { code: 'CONNECTION_FAILED' });
   const registered = await f.saved();
@@ -229,16 +283,14 @@ test('real hosted service connects two CLI agents, archives their discussion, an
   await new Promise(resolve => reservation.close(resolve));
   const server = await startHostedService({ port, publicUrl: `http://127.0.0.1:${port}`, dataDir: join(directory, 'service') });
   t.after(async () => { await server.close(); await rm(directory, { recursive: true, force: true }); });
-  const codeFile = join(directory, 'beta-code');
-  await writeFile(codeFile, server.store.mintCode({ uses: 2 }).code, { mode: 0o600 });
   const agent = stateDir => async (...args) => {
     let value;
     await main([...args, '--state-dir', join(directory, stateDir)], { emit: result => { value = result; } });
     return value;
   };
   const a = agent('a'), b = agent('b');
-  const setupA = await a('hosted', 'setup', '--server', server.url, '--code-file', codeFile, '--product', 'codex');
-  const setupB = await b('hosted', 'setup', '--server', server.url, '--code-file', codeFile, '--product', 'doubaowork');
+  const setupA = await a('hosted', 'setup', '--server', server.url, '--product', 'codex');
+  const setupB = await b('hosted', 'setup', '--server', server.url, '--product', 'doubaowork');
   assert.notEqual(setupA.agentId, setupB.agentId);
   const meeting = await a('hosted', 'create', '--purpose', 'Join without an account or contacts');
   const guest = await agent('guest')('meeting', 'join', invitationJoinLink(meeting));

@@ -91,7 +91,7 @@ class MeetingResponse extends EventEmitter {
 
 /** Independent hosted adapter. It never dispatches to a laptop or arbitrary upstream. */
 export async function startHostedService({ dataDir, publicUrl, port = 4317, host = '127.0.0.1',
-  maxAccounts = 10, maxAgentsPerAccount = 2, maxMeetings = 5, maxOwnerMeetings = 2,
+  maxAccounts = 1000, maxAgentsPerAccount = 2, maxMeetings = 5, maxOwnerMeetings = 2,
   maxParticipants = 8, maxRoomBytes = 2 * 1024 * 1024, maxTotalBytes = 8 * 1024 * 1024,
   meetingTtlMs = 7_200_000, retentionMs = 600_000, deliveryTtlMs = 300_000, maxEvents = 500,
   maxDailyEgressBytes = 512 * 1024 * 1024, maxAccountDailyEgressBytes = 50 * 1024 * 1024,
@@ -413,9 +413,9 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
         return res.end(await readFile(webFile(file)));
       }
       if (hosted && (url.search || req.method !== 'POST')) throw failure(405, 'post_required', 'Use POST without query parameters.');
-      if (url.pathname === '/v1/hosted/redeem') {
-        limit('redeem', 30); const input = await body(req); requireFields(input, ['code', 'requestId']);
-        return send(res, 200, store.redeem(input.code, input.requestId));
+      if (url.pathname === '/v1/hosted/accounts') {
+        limit('account_registration', 30); const input = await body(req); requireFields(input, ['requestId']);
+        return send(res, 200, store.registerAccount(input.requestId));
       }
       if (url.pathname === '/v1/hosted/agents') {
         limit('registration', 30); const input = await body(req); requireFields(input, ['requestId']);

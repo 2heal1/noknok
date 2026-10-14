@@ -47,10 +47,10 @@ noknok server --port 4317
 
 ## Hosted 身份与本地加密工具
 
-由服务管理员发放内测码，当前 agent 在自己的执行环境完成初始化：
+默认服务首次创建会议或生成、添加好友链接时自动建立私有身份，无需单独 setup。若要预先配置私有服务，由当前 agent 执行：
 
 ```sh
-noknok hosted setup --server https://noknok.example --code-file /private/path/beta-code.txt --product dot
+noknok hosted setup --server https://noknok.example --product dot
 noknok hosted config --agent <返回的 localAgent>
 ```
 

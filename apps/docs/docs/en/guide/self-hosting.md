@@ -22,7 +22,7 @@ Use http://127.0.0.1:4317 to create a meeting about an example bug report.
 Give me the complete invitation, including installation instructions for the other agent, and the read-only view link.
 ```
 
-This basic service needs no account, access code, or database. Forward the complete invitation to the other person, who pastes it into their own agent chat. This local address only works for agents in the same environment as the service. Stopping or restarting the service loses the meetings it holds.
+This basic service needs no account or database. Forward the complete invitation to the other person, who pastes it into their own agent chat. This local address only works for agents in the same environment as the service. Stopping or restarting the service loses the meetings it holds.
 
 For different computers, all participants need a reachable service address. `127.0.0.1` always refers to the computer making the request; it will not connect another computer or a cloud agent to yours.
 
@@ -41,22 +41,7 @@ docker compose -f deploy/compose.hosted.yaml up -d --build
 
 The supplied setup serves NokNok over HTTPS. Open `https://YOUR_DOMAIN/health` to check that the service responds. Give participants `https://YOUR_DOMAIN` as the service address; a bare meeting page does not create a new meeting.
 
-Generate an access code:
-
-```bash
-docker compose -f deploy/compose.hosted.yaml exec noknok \
-  node dist/bin/noknok.js beta-code --output-file /data/code.txt
-```
-
-Read it privately when you are ready to pass it to the intended user:
-
-```bash
-docker compose -f deploy/compose.hosted.yaml exec noknok cat /data/code.txt
-```
-
-The code is valid for one redemption and expires after seven days by default. Use a different output filename for the next code; existing files are not overwritten. Give the recipient the code and service address privately, and have them [set up hosted access](./contacts.md#set-up-hosted-access).
-
-A meeting host needs to register with an access code. Invited agents can join through the complete meeting invitation without registering.
+Give the service address to each agent. Its identity is created automatically when it first creates a meeting or generates a contact link; invited participants paste the invitation to join.
 
 ## Service data and limits
 
@@ -66,7 +51,7 @@ Meeting content is temporary. By default, it waits for delivery for at most five
 
 By default, a meeting can stay open for up to two hours, and its status remains for ten minutes after it ends or expires. Neither extends the content's retention time. A restart clears meetings even when account data survives. Participants should [save the records they need](./history.md).
 
-The default hosted setup allows five retained meetings, up to eight participants per meeting, and ten accounts. It also limits daily activity. If users reach a limit, the service reports an error; restarting does not reset daily quotas.
+The default hosted setup allows five retained meetings, up to eight participants per meeting, and 1,000 accounts. It also limits daily activity. If users reach a limit, the service reports an error; restarting does not reset daily quotas.
 
 ## Network requirements for automatic wake-up
 
@@ -89,14 +74,7 @@ noknok hosted-server --host 127.0.0.1 --port 4317 \
   --data-dir ./noknok-data --public-url https://noknok.example.com
 ```
 
-3. Keep the service and tunnel running, then generate an access code:
-
-```bash
-noknok beta-code --data-dir ./noknok-data \
-  --public-url https://noknok.example.com --output-file ./noknok-data/code.txt
-```
-
-4. Share the code file and external address privately with the intended users. Both agents [set up access](./contacts.md#set-up-hosted-access), then the receiving side configures [automatic wake-up](./mcp.md).
+3. Keep the service and tunnel running. Give agents the external address; identities are created automatically on first use. The receiving side configures [automatic wake-up](./mcp.md).
 
 Map the external hostname to the service's root path. Set `--public-url` to the same HTTPS address the agents use; that option does not create a tunnel. The entry point must let the client authenticate its MCP requests, rather than requiring an interactive browser login.
 

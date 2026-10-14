@@ -9,6 +9,7 @@ import { api, fail, normalizeServer } from './client.js';
 import { MeetingStore, decodeMeetingLink, acknowledgeMeeting, archivedMeetingResult } from './meeting-client.js';
 import { meetingInvitationText } from '../web/meeting-invitation.js';
 import { generateKey, validKey, encryptText, decryptText, contentAAD } from './e2ee.js';
+import { DEFAULT_HOSTED_SERVER } from './service-config.js';
 
 const secret = () => randomBytes(32).toString('base64url');
 const credential = value => typeof value === 'string' && /^[A-Za-z0-9_.~-]{16,16384}$/.test(value);
@@ -87,6 +88,15 @@ class HostedStore {
   }
 }
 
+export async function selectedMeetingService(options: CliOptions, signal?: AbortSignal) {
+  const store = new HostedStore(options['state-dir']);
+  return store.locked(async state => {
+    const configured = options.server || process.env.NOKNOK_SERVER;
+    if (state && configured && normalizeServer(configured) !== state.server) throw fail('SERVER_MISMATCH', 'This profile belongs to another service. Use a separate profile; no credentials were sent.');
+    return normalizeServer(configured || state?.server || DEFAULT_HOSTED_SERVER);
+  }, signal);
+}
+
 export async function hostedTool(server: string, token: string, name: string, args: Record<string, unknown> = {}, { signal }: { signal?: AbortSignal } = {}) {
   const id = randomUUID();
   const response = await api(server, '/mcp', { method: 'POST', token, signal,
@@ -140,23 +150,23 @@ async function archiveMeeting(store, state, result, pending, signal) {
 export async function hostedCommand(command: string, args: string[], options: CliOptions, { signal, textInput }: CommandContext = {}) {
   const argumentCount = ['friend-add', 'friend-remove', 'call', 'accept'].includes(command) ? 1 : 0;
   if (args.length !== argumentCount) throw fail('INVALID_ARGUMENT', `Expected ${argumentCount} argument(s) after hosted ${command}.`);
+  if (['create', 'call'].includes(command) && !options.purpose?.trim()) throw fail('INVALID_ARGUMENT', 'Provide --purpose with the meeting goal.');
   const store = new HostedStore(options['state-dir']);
   const decoded = command === 'friend-add' ? decodeHostedContact(args[0]) : undefined;
   return store.locked(async (state, save) => {
-    if (command === 'setup') {
-      const server = hostedOrigin(options.server || process.env.NOKNOK_SERVER || state?.server || 'http://127.0.0.1:4317');
-      const name = nameFrom(options);
+    const configured = options.server || process.env.NOKNOK_SERVER;
+    if (state && configured && hostedOrigin(configured) !== state.server) throw fail('SERVER_MISMATCH', 'This profile belongs to another service. Use a separate profile; no credentials were sent.');
+    if (command === 'setup' || !state?.agentToken) {
+      const server = hostedOrigin(options.server || process.env.NOKNOK_SERVER || state?.server || decoded?.server || DEFAULT_HOSTED_SERVER);
+      const name = state?.name || nameFrom(options);
+      if (decoded && decoded.server !== server) throw fail('SERVER_MISMATCH', 'The contact link belongs to another service. No credentials were sent.');
       if (state && state.server !== server) throw fail('SERVER_MISMATCH', 'This profile is already bound to another service. Use a new hosted setup profile for another service.');
       if (!state) {
-        if (!options['code-file']) throw fail('INVALID_ARGUMENT', 'Provide --code-file with a file containing your beta code.');
-        state = { v: 1, server, name, contacts: {}, offers: [], redeemRequestId: secret(), agentRequestId: secret(), createdAt: new Date().toISOString() };
+        state = { v: 1, server, name, contacts: {}, offers: [], accountRequestId: secret(), agentRequestId: secret(), createdAt: new Date().toISOString() };
         await save(state);
       }
       if (!state.accountToken) {
-        if (!options['code-file']) throw fail('INVALID_ARGUMENT', 'Provide the original --code-file to resume beta redemption.');
-        const code = (await readFile(options['code-file'], 'utf8')).trim();
-        if (!code || code.length > 4096) throw fail('INVALID_ARGUMENT', 'The beta-code file is empty or too large.');
-        const result = await api(server, '/v1/hosted/redeem', { method: 'POST', body: { code, requestId: state.redeemRequestId }, signal });
+        const result = await api(server, '/v1/hosted/accounts', { method: 'POST', body: { requestId: state.accountRequestId }, signal });
         if (!identifier(result.accountId) || !credential(result.accountToken)) throw fail('INVALID_RESPONSE', 'Hosted service returned an invalid account credential.');
         state.accountId = result.accountId; state.accountToken = result.accountToken;
         await save(state);
@@ -167,10 +177,10 @@ export async function hostedCommand(command: string, args: string[], options: Cl
         state.agentId = result.agentId; state.agentToken = result.agentToken;
         await save(state);
       }
-      return { agentId: state.agentId, accountId: state.accountId, server: state.server, name: state.name,
+      if (command === 'setup') return { agentId: state.agentId, accountId: state.accountId, server: state.server, name: state.name,
         next: 'Keep this localAgent handle. Use hosted friend-link or hosted friend-add with --agent. Adding a friend does not start a wait loop or activate background wakeup. Use hosted config to obtain private MCP connection settings.' };
     }
-    if (!state?.agentToken) throw fail('HOSTED_SETUP_REQUIRED', 'Run hosted setup first, or resume setup with this same --agent profile.');
+    if (!state?.agentToken) throw fail('HOSTED_SETUP_REQUIRED', 'Resume identity registration using this same --agent profile.');
     if (decoded && decoded.server !== state.server) throw fail('SERVER_MISMATCH', 'The contact link belongs to another service. No credentials were sent. Set up a separate profile for that service.');
     const profile = state; const token = state.agentToken;
     const tool = (name: string, parameters: Record<string, unknown> = {}) => hostedTool(profile.server, token, name, parameters, { signal });

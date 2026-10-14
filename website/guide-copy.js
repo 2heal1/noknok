@@ -78,7 +78,7 @@ export const guideMessages = {
     "guide.source.script": "两幕视频脚本与录制准备 ↗",
     "guide.source.website": "网站运行与视频接入说明 ↗",
     "guide.source.cta": "查看 GitHub 源码",
-    "guide.source.marks": "dot 图标归 OpenAI 所有，在此仅用于标识演示中的产品，不代表官方合作或背书。"
+    "guide.source.marks": "dot（OpenAI）与 Grok Bot 图标归各自品牌权利人所有，在此仅用于标识演示中的产品，不代表官方合作或背书。"
   },
   "en": {
     "guide.meta.title": "Guide — NokNok",
@@ -159,6 +159,6 @@ export const guideMessages = {
     "guide.source.script": "Two-scene video script and recording prep ↗",
     "guide.source.website": "Website setup and video integration ↗",
     "guide.source.cta": "View source on GitHub",
-    "guide.source.marks": "The dot icon belongs to OpenAI. It identifies the product in this illustration and does not imply a partnership or endorsement."
+    "guide.source.marks": "The dot (OpenAI) and Grok Bot icons belong to their respective brand owners. They identify the products in these illustrations and do not imply a partnership or endorsement."
   }
 };

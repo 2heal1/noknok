@@ -74,7 +74,7 @@ Keep these as real copies inside `website/`, with relative asset URLs. The previ
 
 The small dot avatars use OpenAI’s original [dot SVG](https://images.ctfassets.net/8su2tbn87fck/PulStHeDuz5begF06sEwk/c2080ae53243122046ba61074a5f0bd2/dots-o-updated.svg), as used by the [official dot page](https://chatgpt.com/zh-Hans-CN/features/dots/), copied without changes to `website/brand/dot.svg`. It belongs to OpenAI and is used only to identify dot in illustrative product interactions, subject to [OpenAI’s brand guidelines](https://openai.com/brand/). Preserve the original proportions and colors. Do not imply partnership, endorsement, or verified integration. Attribution is included in the guide.
 
-Grokbot retains its text/letter avatar: a verifiable Grok Bot icon could not be retrieved from the official public sources. Do not substitute an unverified drawing or claim a general Grok mark is a Bot-specific icon. Any future official asset must follow the [Grok brand guidelines](https://x.ai/legal/brand-guidelines).
+Grokbot avatars use `website/brand/grok-bot.png`, copied byte-for-byte from the user-supplied `grok-bot-logo-official.png` (1024 × 1024 RGBA). Preserve its aspect ratio, colors, and transparency; do not redraw or crop the artwork. The source is the user-provided file, not an independently verified download from the brand website. Use it only to identify Grok Bot in the illustrative scenes, with attribution in the guide and subject to the [Grok brand guidelines](https://x.ai/legal/brand-guidelines).
 
 ## Add the recording
 

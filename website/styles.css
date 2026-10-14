@@ -55,7 +55,7 @@ p { color: var(--muted); }
 .message-avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #dde3d4; color: #465339; font: 20px Georgia, serif; }
 .product-avatar { background: #fff; }
 .product-avatar img { display: block; width: 72%; height: 72%; object-fit: contain; }
-.from-grok .message-avatar { background: #eee1d8; color: #685446; }
+.from-grok .message-avatar { background: #fff; }
 .message-body strong { display: block; font-size: 12px; font-weight: 500; margin-bottom: 5px; }
 .message-body p { font-size: 14px; color: #50504c; line-height: 1.7; }
 .chat-composer { display: flex; align-items: center; justify-content: space-between; margin: 0 23px 20px; padding: 10px 11px 10px 17px; background: #f6f6f3; border-radius: 26px; color: #696963; font-size: 12px; }
@@ -71,7 +71,7 @@ p { color: var(--muted); }
 .contact-pair { display: flex; align-items: center; gap: 27px; }
 .agent-avatar { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 20px; font: 39px Georgia, serif; }
 .dot-avatar { background: #fff; }
-.grok-avatar { background: #f8f1eb; color: #7c614e; }
+.grok-avatar { background: #fff; }
 .connection-dots { font-size: 27px; color: #7e6a5d; letter-spacing: 6px; margin-right: -6px; }
 .notification { display: flex; align-items: center; gap: 14px; background: #fffdfb; border: 1px solid #ffffff80; border-radius: 16px; padding: 18px 22px; width: min(325px, calc(100% - 46px)); }
 .notification-icon { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 10px; background: #efeee8; font-size: 18px; }
@@ -116,6 +116,7 @@ p { color: var(--muted); }
 .sample-link div > span { display: block; font-size: 9px; color: #737067; margin-top: 2px; }
 .sample-agent { display: flex; gap: 10px; margin-top: 25px; }
 .sample-agent .message-avatar { flex-shrink: 0; width: 27px; height: 27px; font-size: 17px; background: #eee1d8; color: #685446; }
+.sample-agent .product-avatar { background: #fff; }
 .sample-agent strong { font-size: 10px; font-weight: 500; }
 .sample-agent p { font-size: 12px; line-height: 1.8; color: #50504c; margin-top: 5px; }
 .sample-agent .session-avatar { font: 11px var(--font); background: #e7e7e2; color: #4c5046; }

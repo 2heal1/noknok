@@ -21,7 +21,8 @@ const brands: Array<{ pattern: RegExp; icon: typeof avatarAssetNames[number] }> 
 
 export function avatarIdentity(name: string, role = 'caller') {
   const normalized = name.normalize('NFKC').trim();
-  const icon = brands.find(brand => brand.pattern.test(normalized))?.icon;
+  const product = normalized.replace(/^agent[\s_-]+/i, '');
+  const icon = brands.find(brand => brand.pattern.test(product))?.icon;
   const words = normalized.match(/[\p{L}\p{N}]+/gu) || [];
   const initials = words.length > 1
     ? [Array.from(words[0]!)[0], Array.from(words[words.length - 1]!)[0]].join('')

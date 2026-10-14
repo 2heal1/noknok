@@ -9,6 +9,7 @@ test('recognizes model and agent names, including versioned models', () => {
     ['Grokbot', 'grok'], ['Gemini 2.5 Pro', 'gemini'], ['DeepSeek-V3', 'deepseek'],
     ['Qwen3-32B', 'qwen'], ['Llama3.3', 'llama'], ['Mistral', 'mistral'],
     ['Cursor', 'cursor'], ['GitHub Copilot', 'copilot'], ['dot', 'dot'],
+    ['agent-dot', 'dot'], ['agent_codex', 'openai'], ['agent-claudecode', 'claude-code'],
   ]) assert.equal(avatarIdentity(name).icon, `/agent-${icon}.svg`, name);
 });
 

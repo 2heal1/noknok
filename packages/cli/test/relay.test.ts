@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { viewerBrandAssets } from '../src/viewer-assets.js';
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import http from 'node:http';
@@ -688,7 +689,7 @@ test('viewer redaction covers usable invitation links containing URL punctuation
 
 test('relay serves only fixed viewer assets with restrictive browser headers', async t => {
   const f = await fixture(t);
-  for (const [path, type] of [['/view', 'text/html'], ['/view/', 'text/html'], ['/app.js', 'text/javascript'], ['/styles.css', 'text/css']]) {
+  for (const [path, type] of [['/view', 'text/html'], ['/view/', 'text/html'], ['/app.js', 'text/javascript'], ['/styles.css', 'text/css'], ...viewerBrandAssets.map(([path, [, type]]) => [path, type])]) {
     const response = await fetch(f.url + path);
     assert.equal(response.status, 200);
     assert.ok(response.headers.get('content-type').startsWith(type));

@@ -88,7 +88,8 @@ export function readPackageArchive(archive: Buffer) {
 }
 
 function allowedFile(path: string): boolean {
-  if (['package.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'LICENSE.md', 'NOTICE', 'dist/runtime-fingerprint.json'].includes(path)) return true;
+  if (['package.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'LICENSE.md', 'NOTICE',
+    'dist/runtime-fingerprint.json', 'dist/web/THIRD_PARTY_NOTICES.txt'].includes(path)) return true;
   if (path.split('/').some(part => part.startsWith('.'))) return false;
   if (/^dist\/(?:bin|src|poc)\/[a-zA-Z0-9_/-]+\.js$/.test(path)) return true;
   if (/^dist\/web\/[a-zA-Z0-9_/-]+\.(?:js|css|html|svg)$/.test(path)) return true;

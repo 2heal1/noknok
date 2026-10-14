@@ -54,18 +54,11 @@
 .noknok-home .demo-stage { border-radius: 32px; background: var(--panel); overflow: hidden; }
 .noknok-home .story-preview { padding: 56px 65px; }
 .noknok-home .chat-window { width: min(620px, 100%); margin: auto; background: #fff; border: 1px solid #e5e4de; border-radius: 18px; box-shadow: 0 8px 30px #29251b06; overflow: hidden; }
-.noknok-home .chat-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 25px; border-bottom: 1px solid #efefeb; font-size: 14px; }
 .noknok-home .preview-label { color: var(--muted); font-size: 11px; flex-shrink: 0; }
-.noknok-home .story-messages { display: flex; flex-direction: column; gap: 25px; padding: 29px 30px; min-height: 330px; }
-.noknok-home .story-message { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; }
 .noknok-home .message-avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #dde3d4; color: #465339; font: 20px Georgia, serif; }
 .noknok-home .product-avatar { background: #fff; }
 .noknok-home .product-avatar img { display: block; width: 72%; height: 72%; object-fit: contain; }
 .noknok-home .from-grok .message-avatar { background: #fff; }
-.noknok-home .message-body strong { display: block; font-size: 12px; font-weight: 500; margin-bottom: 5px; }
-.noknok-home .message-body p { font-size: 14px; color: #50504c; line-height: 1.7; }
-.noknok-home .chat-composer { display: flex; align-items: center; justify-content: space-between; margin: 0 23px 20px; padding: 10px 11px 10px 17px; background: #f6f6f3; border-radius: 26px; color: #696963; font-size: 12px; }
-.noknok-home .send-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #deded7; color: #53534b; font-size: 19px; line-height: 1; }
 .noknok-home .demo-caption { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 15px; font-size: 11px; color: var(--muted); }
 .noknok-home .recording { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #151515; }
 .noknok-home .features { padding-block: 130px 115px; display: flex; flex-direction: column; gap: 48px; }
@@ -109,23 +102,8 @@
 .noknok-home .invitation-label { color: #6d665b; font-size: 10px; margin-bottom: 10px; }
 .noknok-home .invitation-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.8 'SFMono-Regular', Consolas, monospace; }
 .noknok-home .invitation-text code { font: inherit; }
-.noknok-home .invite-views { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 25px; }
-.noknok-home .invite-views figure { margin: 0; min-width: 0; }
-.noknok-home .invite-visual { background: white; border: 1px solid #e2dfd7; border-radius: 16px; overflow: hidden; min-height: 340px; }
-.noknok-home .visual-chrome { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 16px 19px; border-bottom: 1px solid #eeece7; color: var(--muted); font-size: 10px; }
-.noknok-home .visual-app { color: var(--ink); font-size: 12px; font-weight: 550; }
-.noknok-home .visual-body { padding: 23px 21px; }
-.noknok-home .sample-user { margin-left: auto; width: fit-content; padding: 12px 15px; border-radius: 14px 14px 3px 14px; background: #f1f0ec; color: #44463f; font-size: 12px; line-height: 1.8; }
-.noknok-home .sample-link { display: flex; align-items: center; gap: 10px; border: 1px solid #e5e1d7; padding: 11px 12px; border-radius: 10px; margin-top: 9px; margin-left: auto; width: fit-content; }
-.noknok-home .sample-link > span { color: #6d665b; font-size: 17px; }
-.noknok-home .sample-link strong { font-size: 10px; display: block; font-weight: 500; }
-.noknok-home .sample-link div > span { display: block; font-size: 9px; color: #737067; margin-top: 2px; }
-.noknok-home .sample-agent { display: flex; gap: 10px; margin-top: 25px; }
-.noknok-home .sample-agent .message-avatar { flex-shrink: 0; width: 27px; height: 27px; font-size: 17px; background: #eee1d8; color: #685446; }
-.noknok-home .sample-agent .product-avatar { background: #fff; }
-.noknok-home .sample-agent strong { font-size: 10px; font-weight: 500; }
-.noknok-home .sample-agent p { font-size: 12px; line-height: 1.8; color: #50504c; margin-top: 5px; }
-.noknok-home .invite-views figcaption { margin-top: 12px; text-align: center; font-size: 12px; }
+.noknok-home .meeting-preview { width: min(800px, 100%); margin-inline: auto; }
+.noknok-home .meeting-preview .contact-preview { margin-top: 24px; }
 .noknok-home .claude-avatar { background: #fff; }
 .noknok-home .session-message { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; background: #f3f5ee; }
 .noknok-home .session-message > span { display: grid; place-items: center; font-size: 10px; background: #e3e8da; color: #536146; width: 23px; height: 23px; border-radius: 50%; flex-shrink: 0; }
@@ -133,18 +111,15 @@
 .noknok-home .session-message p { color: #526046; font-size: 11px; }
 @media (max-width: 700px) {
 .noknok-home .story-preview.is-meeting { padding: 27px 22px; }
-.noknok-home .invite-views { grid-template-columns: 1fr; gap: 25px; }
 .noknok-home .invite-heading h2 { font-size: 22px; }
 .noknok-home .invitation-card { padding: 14px; }
 .noknok-home .invitation-text { font-size: 11px; }
-.noknok-home .invite-visual { height: auto; min-height: 335px; }
 }
 @media (max-width: 420px) {
 .noknok-home .story-preview.is-meeting { padding: 24px 15px; }
 .noknok-home .invite-heading { gap: 12px; margin-bottom: 18px; }
 .noknok-home .invite-heading h2 { font-size: 21px; }
 .noknok-home .invite-heading .preview-label { font-size: 9px; }
-.noknok-home .visual-body { padding: 20px 17px; }
 }
 
 @media (max-width: 1000px) {
@@ -166,8 +141,6 @@
 .noknok-home .scene-switch { margin-bottom: 17px; }
 .noknok-home .demo-stage { border-radius: 24px; }
 .noknok-home .story-preview { padding: 32px 24px; }
-.noknok-home .story-messages { padding: 25px; min-height: 332px; gap: 22px; }
-.noknok-home .chat-header { padding: 18px 23px; font-size: 12px; }
 .noknok-home .features { padding-block: 80px; gap: 56px; }
 .noknok-home .feature-row, .noknok-home .feature-row.reverse { grid-template-columns: 1fr; gap: 22px; }
 .noknok-home .feature-row.reverse .feature-art { order: 0; }
@@ -196,14 +169,8 @@
 .noknok-home .scene-switch button { font-size: 12px; padding: 8px 16px; }
 .noknok-home .story-preview { padding: 22px 14px; }
 .noknok-home .chat-window { border-radius: 14px; }
-.noknok-home .chat-header { padding: 16px; font-size: 11px; gap: 9px; }
 .noknok-home .preview-label { font-size: 9px; }
-.noknok-home .story-messages { padding: 21px 17px; gap: 21px; min-height: 345px; }
-.noknok-home .story-message { grid-template-columns: 26px 1fr; gap: 10px; }
 .noknok-home .message-avatar { width: 26px; height: 26px; font-size: 17px; }
-.noknok-home .message-body strong { font-size: 10px; }
-.noknok-home .message-body p { font-size: 12px; }
-.noknok-home .chat-composer { margin: 0 13px 14px; padding-left: 14px; font-size: 10px; }
 .noknok-home .demo-caption { font-size: 9px; gap: 10px; }
 .noknok-home .feature-art { min-height: 295px; }
 .noknok-home .feature-copy h2 { font-size: 26px; }

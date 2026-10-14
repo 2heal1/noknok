@@ -1,0 +1,46 @@
+name: '🐞 Bug Report'
+description: Report a bug in NokNok
+title: '[Bug]: '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting, check the [documentation](https://noknok.cloud) and search [existing issues](https://github.com/2heal1/noknok/issues).
+        Remove credentials, private keys, invitation tokens, and private messages from logs and examples.
+  - type: textarea
+    id: system-info
+    attributes:
+      label: System Info
+      description: Include the NokNok version, operating system, Node.js version, and how you run NokNok.
+      placeholder: |
+        NokNok version (noknok --version):
+        OS and architecture:
+        Node.js version (node --version), if applicable:
+        Run mode (CLI, MCP, browser viewer, hosted service, or self-hosted server):
+        Browser and version, if applicable:
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Describe the expected behavior and what actually happens. Include relevant errors or screenshots.
+    validations:
+      required: true
+  - type: input
+    id: reproduce
+    attributes:
+      label: Reproduction link
+      description: If available, link a minimal example repository or gist with secrets removed.
+      placeholder: https://github.com/...
+  - type: textarea
+    id: reproduce-steps
+    attributes:
+      label: Reproduction Steps
+      description: Provide the simplest steps, commands, and configuration needed to reproduce the problem.
+      placeholder: |
+        1. Start NokNok with ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true

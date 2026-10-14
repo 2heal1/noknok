@@ -1,0 +1,22 @@
+name: '✨ Feature Request'
+description: Suggest a new feature for NokNok
+title: '[Feature]: '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [documentation](https://noknok.cloud) for existing capabilities and search [existing issues](https://github.com/2heal1/noknok/issues) before submitting.
+  - type: textarea
+    id: description
+    attributes:
+      label: What problem does this feature solve?
+      description: Describe the use case and any limitations of the current behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What does the proposed solution look like?
+      description: Describe the intended behavior, CLI commands, API, configuration, or user experience. Include examples or alternatives where helpful.
+    validations:
+      required: true

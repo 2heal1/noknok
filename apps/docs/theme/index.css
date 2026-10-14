@@ -42,7 +42,7 @@
 .noknok-home .button.primary:hover, .noknok-home .nav-source:hover { background: #353535; }
 .noknok-home .button.secondary { background: transparent; }
 .noknok-home .button.secondary:hover { background: #efefec; }
-.noknok-home .demo { max-width: 960px; }
+.noknok-home .demo { max-width: 960px; scroll-margin-top: 88px; }
 .noknok-home .scene-switch { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 7px; margin-bottom: 20px; }
 .noknok-home .scene-switch button { padding: 9px 20px; border: 0; background: transparent; border-radius: 28px; color: var(--muted); font-size: 13px; }
 .noknok-home .scene-switch button[aria-pressed="true"] { background: #ebebe7; color: var(--ink); }
@@ -56,7 +56,9 @@
 .noknok-home .product-avatar img { display: block; width: 72%; height: 72%; object-fit: contain; }
 .noknok-home .from-grok .message-avatar { background: #fff; }
 .noknok-home .demo-caption { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 15px; font-size: 11px; color: var(--muted); }
-.noknok-home .recording { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #151515; }
+.noknok-home .demo-video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: contain; background: var(--panel); }
+.noknok-home .demo-video:focus-visible { outline: 2px solid var(--ink); outline-offset: -4px; }
+.noknok-home .video-fallback { width: 100%; aspect-ratio: 16 / 9; padding: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center; }
 .noknok-home .features { padding-block: 130px 115px; display: flex; flex-direction: column; gap: 48px; }
 .noknok-home .feature-row { display: grid; grid-template-columns: 1.4fr .85fr; gap: 64px; align-items: center; }
 .noknok-home .feature-row.reverse { grid-template-columns: .85fr 1.4fr; }
@@ -167,7 +169,7 @@
 .noknok-home .chat-window { border-radius: 14px; }
 .noknok-home .preview-label { font-size: 9px; }
 .noknok-home .message-avatar { width: 26px; height: 26px; font-size: 17px; }
-.noknok-home .demo-caption { font-size: 9px; gap: 10px; }
+.noknok-home .demo-caption { font-size: 11px; gap: 10px; flex-wrap: wrap; }
 .noknok-home .feature-art { min-height: 295px; }
 .noknok-home .feature-copy h2 { font-size: 26px; }
 .noknok-home .feature-copy p { font-size: 14px; }

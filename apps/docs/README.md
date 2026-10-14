@@ -12,11 +12,15 @@ pnpm --filter @noknok/docs preview
 ```
 
 - `docs/zh/` and `docs/en/`: actual Markdown documentation, navigation, and sidebars.
-- `theme/HomePage.tsx`: the existing NokNok homepage rebuilt as a React component, including the door-knock introduction and the two interactive example scenes.
-- `theme/door-intro.ts`: typed animation controller, with pause/skip/replay, reduced-motion support, visibility handling, and lifecycle cleanup.
+- `theme/HomePage.tsx`: the NokNok homepage, with a video demo and links to the contact and meeting guides.
+- `theme/HomeVideo.tsx`: responsive native video player with playback controls, inline mobile playback, a localized error fallback, and a link in generated Markdown. `HOMEPAGE_VIDEO_URL` is the single place to update the video source.
 - `theme/home-copy.ts`: homepage translations. Examples are illustrations, not live connected agent sessions.
 - `docs/public/brand/`: the original approved product and agent artwork.
 - `doc_build/`: static output for a website host; excluded from Git and npm packages.
+
+The homepage currently uses the supplied external Module Federation video as a temporary preview. Before launching the NokNok film, replace `HOMEPAGE_VIDEO_URL` with its public URL from `noknok-media` and update the poster and caption as appropriate. The MP4 is streamed from that URL, not copied into the site build. Playback starts only when the visitor chooses to play; `preload="metadata"` requests metadata rather than eagerly loading the full video. The browser ultimately controls preloading.
+
+Rspress 2.0.23 does not export a video player component, so the homepage uses the browser's native `<video>` element without adding a player dependency. The original door animation and conversation illustration sources remain available for producing the film, but are no longer loaded on the homepage.
 
 The Chinese documentation is at `/guide/getting-started`; English is at `/en/guide/getting-started`. Rspress provides local search, code copying, page navigation, and language switching. No backend or visitor account is needed to serve the website.
 

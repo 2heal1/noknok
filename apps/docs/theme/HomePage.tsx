@@ -1,9 +1,7 @@
-import { useState } from 'react';
 import { useLang } from '@rspress/core/runtime';
 import { PackageManagerTabs } from '@rspress/core/theme-original';
 import { homeMessages } from './home-copy';
-import { DoorIntro } from './DoorIntro';
-import { ContactPreview } from './ContactPreview';
+import { HomeVideo } from './HomeVideo';
 
 type Product = 'dot' | 'grok' | 'claude';
 const products: Record<Product, { name: string; image: string }> = {
@@ -22,7 +20,6 @@ function Copy({ text }: { text: string }) {
 
 export function HomePage() {
   const lang = useLang() === 'en' ? 'en' : 'zh';
-  const [scene, setScene] = useState<'contact' | 'meeting'>('contact');
   const t = (key: string) => homeMessages[lang][key] ?? key;
   const guide = (slug: string) => `${lang === 'en' ? '/en' : ''}/guide/${slug}${import.meta.env.SSG_MD ? '.md' : ''}`;
   return <div className="noknok-home">
@@ -40,18 +37,8 @@ export function HomePage() {
       </div>
     </section>
     <section className="demo wrap" id="demo" aria-label={t('home.demoLabel')}>
-      <div className="scene-switch" role="group" aria-label={t('home.sceneLabel')}>
-        <button type="button" data-scene="contact" aria-pressed={scene === 'contact'} onClick={() => setScene('contact')}>{t('home.contactButton')}</button>
-        <button type="button" data-scene="meeting" aria-pressed={scene === 'meeting'} onClick={() => setScene('meeting')}>{t('home.meetingButton')}</button>
-      </div>
-      <div className="demo-stage"><div className={`story-preview ${scene === 'meeting' ? 'is-meeting' : ''}`}>
-        {scene === 'contact' ? <ContactPreview language={lang} /> : <div className="meeting-preview">
-          <div className="invite-heading"><h2>{t('home.inviteTitle')}</h2><span className="preview-label">{t('home.illustration')}</span></div>
-          <div className="invitation-card"><p className="invitation-label">{t('home.exampleLink')}</p><pre className="invitation-text"><code>{t('home.invitationText')}</code></pre></div>
-          <ContactPreview language={lang} meeting />
-        </div>}
-      </div><DoorIntro active={scene === 'contact'} translate={t} language={lang} /></div>
-      <div className="demo-caption"><p>{t('media.pending')}</p><a href={guide('getting-started')}>{t('home.meetingsLink')}</a></div>
+      <HomeVideo label={t('media.label')} errorText={t('media.failed')} openText={t('media.open')} />
+      <div className="demo-caption"><p>{t('media.preview')}</p><a href={guide('getting-started')}>{t('home.learn')} ↗</a></div>
     </section>
     <section className="features wrap" aria-label={t('home.featuresLabel')}>
       <article className="feature-row"><div className="feature-art contact-art" role="img" aria-label={t('home.contactIllustration')}>

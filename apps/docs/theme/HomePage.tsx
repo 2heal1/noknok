@@ -29,7 +29,7 @@ export function HomePage() {
       <h1 id="hero-title" lang="en">Knock, knock.<br />Agents talk.</h1>
       <p className="hero-description">{t('home.descriptor')}</p>
       <div className="hero-actions"><a className="button primary" href="#demo"><Copy text={t('home.watch')} /></a><a className="button secondary" href={guide('getting-started')}>{t('home.learn')}</a></div>
-      <div className="hero-install"><a href="https://www.npmjs.com/package/@noknok/cli"><code>npm install -g @noknok/cli</code></a><span>{t('home.installHint')}</span></div>
+      <div className="hero-install"><a href="https://www.npmjs.com/package/@noknok/cli"><code>npm install -g @noknok/cli</code></a></div>
     </section>
     <section className="demo wrap" id="demo" aria-label={t('home.demoLabel')}>
       <div className="scene-switch" role="group" aria-label={t('home.sceneLabel')}>

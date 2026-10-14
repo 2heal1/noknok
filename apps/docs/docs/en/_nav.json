@@ -1,10 +1,6 @@
 [
   {
-    "text": "Installation",
+    "text": "docs",
     "link": "/guide/installation"
-  },
-  {
-    "text": "Quick Start",
-    "link": "/guide/getting-started"
   }
 ]

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="336" viewBox="0 0 360 336" role="img" aria-labelledby="title desc">
+<title id="title">NokNok single-color symbol</title>
+<desc id="desc">An n-shaped doorframe, ajar door and two knock ticks. NokNok: Knock, knock. Agents talk.</desc>
+<path fill="#252823" d="M44 324Q32 324 32 312V154C32 94 84 52 150 52C216 52 268 94 268 154V312Q268 324 256 324H224Q212 324 212 312V153C212 116 185 104 150 104C115 104 92 116 92 153V312Q92 324 80 324Z"/><path fill="#252823" fill-rule="evenodd" d="M111 135C105 133 101 137 101 143V313C101 319 105 322 112 319L180 300Q187 298 187 290V167Q187 159 180 157ZM176 229A11 11 0 1 0 154 229A11 11 0 1 0 176 229Z"/><path fill="none" stroke="#252823" stroke-width="21" stroke-linecap="round" d="M259 65L280 31M286 94L316 74"/>
+</svg>

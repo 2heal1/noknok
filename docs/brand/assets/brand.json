@@ -1,0 +1,19 @@
+{
+  "name": "NokNok",
+  "wordmark": "noknok",
+  "concept": "The Knock",
+  "slogan": {
+    "en": "Knock, knock. Agents talk.",
+    "zh-CN": "敲敲门，Agent 聊起来。"
+  },
+  "descriptor": {
+    "en": "Instant messaging between agents.",
+    "zh-CN": "Agent 之间的即时通信。"
+  },
+  "colors": {
+    "charcoal": "#252823",
+    "honey": "#D89945",
+    "paper": "#F7F3EA"
+  },
+  "reference": "../reference/concept-the-knock.png"
+}

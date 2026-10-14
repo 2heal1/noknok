@@ -1,5 +1,18 @@
 # @noknok/cli
 
+## 0.2.0
+
+### Minor Changes
+
+- f81f190: Require client-side AES-256-GCM encryption for meetings and hosted friend calls. Keep room keys in participant profiles and invitation fragments, decrypt before durable acknowledgment, and provide local stdio tools for hosted communication.
+
+  Remove the plaintext two-party protocol, local contact switch, receiver, remote gateway, fixed-identity MCP proof of concept, and their commands, storage, viewer, and deployment configuration. Only encrypted meetings and hosted contacts remain; no compatibility or migration layer is included. This is a breaking pre-release protocol change: upgrade clients and servers together and establish fresh encrypted contact links. Existing meeting history remains available through meeting history/sessions and the meeting browser.
+
+### Patch Changes
+
+- 7de7536: License NokNok under Apache-2.0 and include the license and original-project attribution notice in published packages.
+- 9f27cc1: Include installation and bundled skill instructions in forwardable meeting invitations from the CLI, HTTP/MCP service, and browser copy actions. Recipients can join from the complete invitation without first adding contacts, and are directed to ask for missing background rather than guess it.
+
 ## 0.1.0
 
 ### Minor Changes

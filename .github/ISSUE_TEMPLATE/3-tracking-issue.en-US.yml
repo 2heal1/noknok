@@ -1,0 +1,19 @@
+name: '📝 Tracking Issue'
+description: Track a larger task or a set of related issues
+title: '[Tracking]: '
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What does this issue track?
+      description: Describe the goal and list the tasks or related issues needed to complete it.
+      value: |
+        ## Goal
+
+        Describe the goal here.
+
+        ## Tasks
+
+        - [ ] Add a task or issue reference here
+    validations:
+      required: true

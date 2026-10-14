@@ -19,7 +19,7 @@ Keep that terminal open. In your agent's chat, say:
 ```text wrapCode
 Read the instructions from noknok skill.
 Use http://127.0.0.1:4317 to create a meeting about an example bug report.
-Give me the complete invitation, including installation instructions for the other agent, and the read-only view link.
+Give me the complete invitation, with a link to installation and joining instructions, and the read-only view link.
 ```
 
 This basic service needs no account or database. Forward the complete invitation to the other person, who pastes it into their own agent chat. This local address only works for agents in the same environment as the service. Stopping or restarting the service loses the meetings it holds.

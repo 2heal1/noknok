@@ -1,5 +1,5 @@
 import type { MeetingRecord, ConversationEvent, MeetingLink } from './types.js';
-import { meetingInvitationText } from './meeting-invitation.js';
+import { meetingInvitationText, meetingJoinInstructions } from './meeting-invitation.js';
 import { validKey, contentAAD, decryptText, encryptText, isEncryptedText } from './e2ee.js';
 interface MeetingElements {
   'notice': HTMLElement;
@@ -271,6 +271,16 @@ export function parseMeetingLink(hash: string): MeetingLink | null {
   return token ? { id, mode, token, key, encryptionId } : null;
 }
 
+/** Invitations put the shared meeting ID in the path; secrets stay in the fragment. */
+export function parseMeetingLocation(pathname: string, hash: string): MeetingLink | null {
+  const inviteId = /^\/invite\/([a-f0-9-]+)$/.exec(pathname)?.[1];
+  if (!inviteId) return pathname === '/meeting' || pathname === '/meeting/' ? parseMeetingLink(hash) : null;
+  const params = new URLSearchParams(hash.replace(/^#/, ''));
+  if (params.has('id') || !params.has('invite') || params.has('view') || params.size !== 3) return null;
+  params.set('id', inviteId);
+  return parseMeetingLink(params.toString());
+}
+
 function encryptionFailure(): never {
   throw Object.assign(new Error('无法验证会议的端到端加密内容。请使用包含完整密钥的原始邀请或只读链接；本次内容未保存或确认接收。'), { encryptionFailed: true });
 }
@@ -318,7 +328,7 @@ if (typeof document !== 'undefined') startMeetingApp();
 
 function startMeetingApp() {
   const initialHash = location.hash;
-  let parsed = parseMeetingLink(initialHash);
+  let parsed = parseMeetingLocation(location.pathname, initialHash);
   const previousInvitation = history.state?.noknokInvitation;
   if (parsed?.mode === 'saved' && previousInvitation && previousInvitation.id === parsed.id) {
     const recovered = parseMeetingLink(new URLSearchParams({ id: previousInvitation.id, invite: previousInvitation.token, key: previousInvitation.key, e2ee: previousInvitation.encryptionId }).toString());
@@ -445,7 +455,10 @@ function startMeetingApp() {
 
   function link(mode, token) {
     if (!current.access.key || !current.access.encryptionId) encryptionFailure();
-    return `${location.origin}/meeting#${new URLSearchParams({ id: current.meeting.id, [mode]: token, key: current.access.key, e2ee: current.access.encryptionId })}`;
+    const params = new URLSearchParams({ [mode]: token, key: current.access.key, e2ee: current.access.encryptionId });
+    if (mode === 'invite') return `${location.origin}/invite/${current.meeting.id}#${params}`;
+    params.set('id', current.meeting.id);
+    return `${location.origin}/meeting#${params}`;
   }
 
   function stopPolling() {
@@ -824,8 +837,9 @@ function startMeetingApp() {
       $('invite-facts').replaceChildren(make('span', '', `${meeting.participants?.filter((p) => !p.leftAt).length || 1} 位参与者`), make('span', '', `有效至 ${time(meeting.expiresAt, true)}`));
       $('join-form').hidden = meeting.state !== 'active';
       $('return-to-room').hidden = !storage.rooms.some((r) => r.meeting.id === parsed.id && r.access?.participant);
-      const invitationUrl = `${location.origin}/meeting#${new URLSearchParams({ id: parsed.id, invite: parsed.token, key: parsed.key, e2ee: parsed.encryptionId })}`;
-      $('agent-prompt').value = meetingInvitationText(invitationUrl, undefined, 'zh');
+      const invitationUrl = `${location.origin}/invite/${parsed.id}#${new URLSearchParams({ invite: parsed.token, key: parsed.key, e2ee: parsed.encryptionId })}`;
+      $('agent-instructions').textContent = meetingJoinInstructions(invitationUrl);
+      $('agent-prompt').value = meetingInvitationText(invitationUrl);
       $('agent-join-help').hidden = meeting.state !== 'active';
       if (meeting.state !== 'active') announce('这场会议已经结束，不能再加入。', true);
     } catch (error) {
@@ -878,7 +892,7 @@ function startMeetingApp() {
     event.preventDefault();
     if (await mutate('end', { text: $('end-summary').value.trim(), reason: 'host_decision' })) { $('end-dialog').close(); stopPolling(); await refresh(); announce('会议已结束，记录已留在此浏览器。'); }
   });
-  $('copy-invite').addEventListener('click', () => copy(meetingInvitationText(link('invite', current.access.invite), undefined, 'zh')));
+  $('copy-invite').addEventListener('click', () => copy(meetingInvitationText(link('invite', current.access.invite), current.access.view ? link('view', current.access.view) : undefined)));
   $('copy-view').addEventListener('click', () => copy(link('view', current.access.view)));
   $('export-room').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(transcriptOf(current), null, 2)], { type: 'application/json;charset=utf-8' });

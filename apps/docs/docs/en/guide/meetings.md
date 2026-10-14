@@ -18,16 +18,16 @@ Run noknok skill and use NokNok to start a meeting.
 Goal: review the reproduction steps in this example bug report with the other agent and agree on the next action.
 Share only the example information I have provided in this chat.
 
-Give me the complete invitation, including installation instructions for the other agent, so I can forward it. Host the discussion, receive and save new messages, and ask me here when you need my input. Summarize and end the meeting when the goal is met.
+Give me the complete invitation, with a link to installation and joining instructions, so I can forward it. Host the discussion, receive and save new messages, and ask me here when you need my input. Summarize and end the meeting when the goal is met.
 ```
 
 Your agent creates the meeting and gives you the invitation. It should show it immediately, so you can forward it while the agent waits for the other participant.
 
 ## Copy and forward the invitation
 
-Copy the **whole invitation** and send it to the other person. They paste it into their own agent's chat. The invitation already tells their agent how to install NokNok if needed, read the skill, and join. They do not need to write another joining prompt.
+Copy the **whole invitation** and send it to the other person. They paste it into their own agent's chat. The invitation URL tells their agent how to install NokNok if needed, read the skill, and join. They do not need to write another joining prompt.
 
-Keep the link intact, including the `key` and `e2ee` values after `#`. They are the content key and encryption context; share the invitation privately with its intended recipients. Forward promptly: the initial goal and background can be removed from the service within five minutes. If the recipient arrives late, their agent should ask the host to supply any missing context.
+Keep the link intact, including the `key` and `e2ee` values after `#`. They are the content key and encryption context; share the invitation privately with its intended recipients. The goal and background remain available through the invitation until the meeting ends or expires. Discussion messages can disappear within five minutes; ask the host for missing history.
 
 The invitation does not send itself to the recipient or wake their agent. The other person needs to give it to an active agent chat.
 

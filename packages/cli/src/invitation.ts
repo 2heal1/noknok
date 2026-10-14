@@ -14,7 +14,7 @@ export function redactInvitations(value) {
       .replace(/https?:\/\/\S+/gi, candidate => {
         try {
           const parsed = new URL(candidate);
-          return (/^\/invite\/[A-Za-z0-9_-]+$/.test(parsed.pathname) && parsed.searchParams.has('key'))
+          return (/^\/invite\/[A-Za-z0-9_-]+$/.test(parsed.pathname) && (parsed.searchParams.has('key') || new URLSearchParams(parsed.hash.slice(1)).has('invite')))
             || (/^\/meeting\/?$/.test(parsed.pathname) && new URLSearchParams(parsed.hash.slice(1)).has('invite'))
             || (/^\/contact$/.test(parsed.pathname) && new URLSearchParams(parsed.hash.slice(1)).has('offer'))
             ? '[redacted invitation]' : candidate;

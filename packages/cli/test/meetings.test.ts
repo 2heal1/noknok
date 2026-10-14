@@ -8,7 +8,7 @@ import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import { createMeetings } from '../src/meetings.js';
 import { startRelay } from '../src/relay.js';
-import { meetingInvitationText } from '../web/meeting-invitation.js';
+import { meetingInvitationText, meetingJoinInstructions } from '../web/meeting-invitation.js';
 import { decodeMeetingLink, withMeetingKey } from '../src/meeting-client.js';
 import { generateKey, encryptText, contentAAD } from '../src/e2ee.js';
 
@@ -76,6 +76,26 @@ test('relay serves invitation assets while clients assemble complete encrypted h
     assert.equal(joined.status, 200);
     assert.equal(joined.body.meeting.id, room.meeting.id);
   }
+  const page = await fetch(invitationUrl);
+  assert.equal(page.status, 200);
+  assert.equal(page.headers.get('cache-control'), 'no-store');
+  const html = await page.text();
+  assert.match(html, /npm install --global @noknok\/cli/);
+  assert.match(html, /noknok skill/);
+  assert.match(html, /noknok meeting join/);
+  assert.ok(!html.includes('Private goal'));
+  assert.ok(!html.includes(key));
+  assert.ok(!html.includes(room.participant.token));
+  const instructions = meetingJoinInstructions(invitationUrl);
+  assert.ok(instructions.includes(`noknok meeting join '${invitationUrl}'`));
+  assert.ok(instructions.indexOf('npm install') < instructions.indexOf('noknok skill'));
+  // Existing invitations remain usable after the new page route is introduced.
+  const old = new URL(invitationUrl);
+  old.pathname = '/meeting';
+  const params = new URLSearchParams(old.hash.slice(1));
+  params.set('id', room.meeting.id);
+  old.hash = params.toString();
+  assert.deepEqual(decodeMeetingLink(old.href), decodeMeetingLink(invitationUrl));
   for (const file of ['meeting-invitation', 'e2ee']) {
     const asset = await fetch(`${f.url}/${file}.js`);
     assert.equal(asset.status, 200);
@@ -93,7 +113,7 @@ test('meetings have independent host, reusable invitation and read-only capabili
   assert.equal(room.meeting.hostId, room.participant.id);
   assert.equal(new Set([room.participant.token, room.inviteToken, room.viewToken]).size, 3);
   assert.equal(new URL(room.invitationUrl).search, '');
-  assert.equal(new URL(room.invitationUrl).pathname, '/meeting');
+  assert.equal(new URL(room.invitationUrl).pathname, `/invite/${room.meeting.id}`);
   assert.equal(Date.parse(room.meeting.expiresAt) - Date.parse(room.meeting.createdAt), 7_200_000);
   assert.equal(Date.parse(room.meeting.purgeAt) - Date.parse(room.meeting.expiresAt), 600_000);
   const invitation = await f.request(`${room.path}/invitation`, { token: room.inviteToken });

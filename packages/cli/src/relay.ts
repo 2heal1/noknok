@@ -49,9 +49,8 @@ export async function startRelay(options: RelayOptions = {}) {
   async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     if (closing) return write(res, 503, { error: { code: 'relay_closing', message: 'Relay is shutting down.' } });
     const parsed = new URL(req.url!, 'http://relay.invalid');
-    if (parsed.pathname === '/v1/meetings' || parsed.pathname.startsWith('/v1/meetings/')) {
-      await meetings.handle(req, res, parsed);
-      return;
+    if (parsed.pathname.startsWith('/invite/') || parsed.pathname === '/v1/meetings' || parsed.pathname.startsWith('/v1/meetings/')) {
+      if (await meetings.handle(req, res, parsed)) return;
     }
     if (req.method === 'GET' && parsed.pathname === '/health') return write(res, 200, { ok: true, version: 1 });
     if (['GET', 'HEAD'].includes(req.method!) && ['/', '/index.html'].includes(parsed.pathname)) {

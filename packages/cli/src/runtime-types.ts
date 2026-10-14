@@ -55,6 +55,7 @@ export interface MeetingRoom {
   id: string;
   state: string;
   hostId: string;
+  invitationContent?: { purpose: string; context: string };
   ownerId?: string;
   ownerAgentId?: string;
   participants: Map<string, MeetingParticipant>;

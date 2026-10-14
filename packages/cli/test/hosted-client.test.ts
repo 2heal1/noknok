@@ -27,7 +27,7 @@ async function fixture(t) {
   let url, encryptedMeeting;
   const room = () => ({ meeting: { id: meetingId, ...encryptedMeeting, state: 'active', participants: [], createdAt: new Date().toISOString() },
     participant: { id: participantId, name: 'agent-dot', kind: 'agent', role: 'host', token: participantToken },
-    viewUrl: `${url}/meeting#id=${meetingId}&view=${'v'.repeat(32)}`, invitationUrl: `${url}/meeting#id=${meetingId}&invite=${'i'.repeat(32)}` });
+    viewUrl: `${url}/meeting#id=${meetingId}&view=${'v'.repeat(32)}`, invitationUrl: `${url}/invite/${meetingId}#invite=${'i'.repeat(32)}` });
   const server = createServer(async (req, res) => {
     let input = '';
     for await (const chunk of req) input += chunk;
@@ -135,7 +135,7 @@ test('default service creates a meeting and contact identity without setup or se
   await main(['meeting', 'create', '--purpose', 'Collect reproduction steps', '--product', 'dot'], { emit: result => { meeting = result; } });
   assert.match(meeting.session, /^am_/);
   assert.match(meeting.localAgent, /^ap_/);
-  assert.match(meeting.invitationText, /https:\/\/api\.noknok\.cloud\/meeting#/);
+  assert.match(meeting.invitationText, /https:\/\/api\.noknok\.cloud\/invite\//);
   const saved = JSON.parse(await readFile(join(process.env.NOKNOK_HOME, 'profiles', meeting.localAgent, 'hosted.json'), 'utf8'));
   assert.equal(saved.server, 'https://api.noknok.cloud');
   assert.equal(saved.name, 'agent-dot');

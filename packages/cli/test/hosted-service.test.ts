@@ -387,11 +387,13 @@ test('native agents explicitly acknowledge saved bodies; hosted retry caches can
     f.service.meetings.inspect(meeting_id),
   ];
   for (const snapshot of snapshots) {
-    for (const marker of [args.purpose, args.context, sendArgs.text]) assert.ok(!JSON.stringify(snapshot).includes(marker), marker);
+    assert.ok(!JSON.stringify(snapshot).includes(sendArgs.text), sendArgs.text);
   }
   assert.ok(snapshots[0].events.some(event => event.bodyState === 'delivered'));
   const endArgs = { meeting_id, text: 'private-summary-to-delete', request_id: 'close-pending' };
   const ended = await f.tool(a, 'meeting_end', endArgs);
+  assert.equal(ended.meeting.purpose, undefined);
+  assert.equal(ended.meeting.context, undefined);
   await f.tool(a, 'meeting_ack', { meeting_id, receipts: ended.deliveryReceipts });
   const finalRead = await f.tool(b, 'meeting_read', { meeting_id });
   assert.equal(finalRead.meeting.summary, endArgs.text);
@@ -400,7 +402,7 @@ test('native agents explicitly acknowledge saved bodies; hosted retry caches can
   assert.ok(!JSON.stringify(f.service.meetings.inspect(meeting_id)).includes(endArgs.text));
 });
 
-test('native pending bodies expire without ACK, including cached creation metadata', async t => {
+test('native pending bodies expire without ACK while active invitation metadata remains', async t => {
   const f = await fixture(t, { deliveryTtlMs: 30 });
   const a = await f.register();
   const args = { purpose: 'expiring-native-purpose', context: 'expiring-native-context', request_id: 'expiry' };
@@ -411,8 +413,9 @@ test('native pending bodies expire without ACK, including cached creation metada
   const retry = await f.tool(a, 'meeting_create', args);
   assert.equal(retry.invitationText, undefined, 'The relay must not emit an incomplete handoff without the client-held encryption key.');
   for (const snapshot of [read, retry, f.service.meetings.inspect(created.meeting.id)]) {
-    assert.ok(!JSON.stringify(snapshot).includes(args.purpose));
-    assert.ok(!JSON.stringify(snapshot).includes(args.context));
+    assert.ok(snapshot.meeting ? snapshot.meeting.purpose : snapshot.purpose);
+    assert.ok(snapshot.meeting ? snapshot.meeting.context : snapshot.context);
+    assert.ok(!snapshot.events?.some(event => event.type === 'started' && event.data));
   }
   assert.equal(read.events.find(event => event.type === 'started').bodyState, 'expired');
   assert.equal((await f.tool(a, 'identity')).transcriptStorage, 'participant');

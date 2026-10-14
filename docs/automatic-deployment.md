@@ -1,71 +1,61 @@
-# 稳定版发布后的自动部署
+# Automatic deployment after stable releases
 
-本流程面向托管服务维护者。它只自动更新程序，不能替代加密版本的目标部署验证或真实原生宿主验收。网站由独立的 [Docs Deploy](docs-deployment.md) 工作流发布。
+This runbook is for hosted-service maintainers. It covers application updates, environment setup, and recovery. Package publishing and source tags are described in [releasing](releasing.md); the website has a separate [Docs Deploy workflow](docs-deployment.md).
 
-## 一个发布版本，两种版本状态
+## Trigger and release state
 
-客户端和服务器来自同一个 **`@noknok/cli`** npm 包：`noknok meeting`、本地 MCP、`noknok server` 和 `noknok hosted-server` 共用包版本。每个稳定版使用一个 **`vX.Y.Z`** Git tag 和一份 GitHub Release，没有独立的服务端 semver 或另一个服务器发布包。
+After `release.yml` publishes and verifies the exact stable npm version and `latest`, its `stable` job outputs `published-version`. The `deploy` job uses that version in the `noknok-production` environment and runs `scripts/deploy-hosted.ts`. The independent `archive` job records the source tag and GitHub Release. Either job can fail without blocking the other.
 
-需要区分两个状态：
+A merge with pending changesets updates the version PR without deploying. `workflow_dispatch` publishes a preview without deploying. Failed npm publication or verification prevents deployment. The workflow concurrency group does not cancel an active publication; the server also takes an exclusive lock.
 
-| 状态 | 含义 | 查询依据 |
+CLI and server ship in one `@noknok/cli` package and share its version sequence. The published package version and the version running on a server can differ:
+
+| State | Verification |
+| --- | --- |
+| Published version | Exact npm version, `vX.Y.Z` tag, and GitHub Release |
+| Running server version | Deploy job's `runningVersion` / result and restricted `state.json.current.version` |
+
+`noknok --version` reports the local installation. Health protocol fields are not package semantic versions. A successful npm publication or GitHub Release does not prove deployment success.
+
+A failed deployment marks the Release workflow as failed but does not undo npm publication or GitHub archival. After resolving the cause, rerun the failed deploy job using its original stable version. A full workflow rerun skips an existing immutable npm version and verifies it again. For archive failures and historical backfills, see [release recovery](releasing.md#git-tags-and-github-release-notes).
+
+## Upgrade only when runtime content changes
+
+Each build generates `dist/runtime-fingerprint.json`, covering compiled runtime files, meeting assets, and execution-relevant package configuration. Package checks recompute the fingerprint from the tarball. Version numbers, descriptions, README files, documentation, and skills are excluded.
+
+The server verifies the published package and combines its runtime fingerprint with the fixed Dockerfile, Compose, and download-policy fingerprints. If they match the running deployment, it returns `unchanged-runtime` and keeps the current container, version, and meetings. Otherwise it switches containers. Comparison uses the actual running version, so a failed or skipped intermediate release cannot hide a required update. Older deployments without a fingerprint are upgraded normally.
+
+For example, a skill-only `0.2.1` release can leave an equivalent `0.2.0` runtime running. `state.json.current.version` records the running version; `lastCheckedVersion` records the latest release skipped because its runtime was unchanged. Administrators install deployment-tool or policy updates separately.
+
+## GitHub environment
+
+Create `noknok-production`, restricted to `main`. Fully automatic deployment uses no manual approval gate. Keep the npm trusted publisher bound to `release.yml` without an environment; adding an environment to the stable job would change its OIDC identity.
+
+| Type | Name | Purpose |
 | --- | --- | --- |
-| 已发布包版本 | npm 上可安装的精确 `@noknok/cli@X.Y.Z`，tag 和 Release 对应其源码提交 | npm 精确版本、`vX.Y.Z` 和 GitHub Release |
-| 服务端实际运行版本 | 当前容器实际安装并运行的同一包版本 | deploy job 的 `runningVersion` / 运行结果，以及受限的 `state.json.current.version` |
+| Variable | `NOKNOK_DEPLOY_HOST` | SSH hostname or IPv4 address |
+| Variable | `NOKNOK_DEPLOY_PORT` | SSH port; defaults to 22 |
+| Variable | `NOKNOK_PUBLIC_URL` | Origin used for HTTPS health checks |
+| Secret | `NOKNOK_DEPLOY_SSH_KEY` | Dedicated `noknok-deploy` private key; never an administrator key |
+| Secret | `NOKNOK_DEPLOY_KNOWN_HOSTS` | Host keys independently verified through a trusted channel |
 
-`noknok --version` 显示执行该命令的本地安装版本，不证明远程服务器已升级；健康接口中的协议字段也不是包的语义化版本。发布包、推送 tag 和创建 Release 都不等于部署完成。
+GitHub runners need SSH and public HTTPS access to the server. Do not disable host-key verification or trust an unchecked `ssh-keyscan` result obtained during CI. An administrator must verify a changed host key before updating the secret.
 
-## 触发与失败处理
+Transfer private keys into GitHub Secrets through restricted files or stdin, never issues, PRs, logs, or configuration examples. During execution the runner uses a temporary `0700` directory and `0600` files, then removes them. SSH subprocesses do not inherit the environment containing the private key. Repository maintainers who can merge deployment code remain part of the deployment trust boundary.
 
-`release.yml` 的 stable job 发布精确版本并验证 npm `latest`，输出 `published-version`。独立的 archive job 校验该版本的 registry `gitHead`、main 历史及对应源码包版本，幂等创建 `vX.Y.Z` tag 和 GitHub Release。tag 指向实际已发布包的源码提交，而非重跑工作流时的任意新提交。详细规则见[发布流程](releasing.md)。
+## One-time server setup
 
-deploy job 同样依赖 stable job，使用其验证后的 `published-version`，在 `noknok-production` 环境执行 `scripts/deploy-hosted.ts`。archive 与 deploy 并行且独立：GitHub 归档失败不阻止部署，部署失败也不阻止创建 Release。有待发布 Changesets 的普通合入只更新版本 PR，不部署；`workflow_dispatch` 只发布 preview，不创建正式 tag / GitHub Release，也不部署。npm 发布失败或校验失败时不部署。
+First establish a Docker/Caddy instance using [self-hosting](deployment.md). The server needs Linux, Docker Compose, Python 3, curl, sudo, and OpenSSH. Keep the existing instance's Compose and environment files for the first rollback. Administrators install these root-owned files; CI cannot replace them:
 
-发布和部署共用不取消进行中任务的并发组，服务器还会加独占锁。部署失败会使 **Release 工作流**显示失败，但**不能撤回已成功的 npm 发布、Git tag 或 GitHub Release**。GitHub Release 页面记录软件发布，不将部署失败改写为包发布失败。修复部署问题后可重跑失败的 deploy job；它使用原稳定版本，不重新发布。若重跑完整工作流，已存在的不可变 npm 版本会跳过上传，再做来源验证并复用匹配的 tag 和 Release。
+- `/usr/local/libexec/noknok-deploy-ssh`: accepts only `deploy X.Y.Z`; rejects other commands, arguments, and prereleases.
+- `/usr/local/sbin/noknok-release-deploy`: fixed deployment policy, locking, health checks, and rollback.
+- `/usr/local/lib/noknok-deploy/`: fixed Dockerfile, download verification, Compose, and Caddy templates.
+- `/etc/noknok/deploy.json`: actual domain, project name, external volume names, and original Compose/environment paths; mode `0600`.
+- `/var/lib/noknok-deploy/`: current/previous snapshots, image IDs, state, and lock; inaccessible to ordinary users.
 
-发布说明保留对应版本 CHANGELOG 原文。建议 changeset 用「客户端」「服务端」「兼容性与升级」小节说明实际变化，没有变化的部分可省略；脚本不会从自由文本猜测分类，也不会据部署结果改写软件变化。格式建议见[发布流程](releasing.md)。
+Create private configuration from `deploy/release/deploy.example.json`; do not commit it. Use a new control volume when a fresh test environment is needed, preserving the original volume. Reuse the Caddy certificate volume. The installer takes a public-key file and creates a dedicated account with a forced SSH command. The account has no interactive shell, forwarding, or Docker-group membership, and can invoke only the fixed deployment command through sudo. Keep its private key with the administrator and in GitHub Secrets.
 
-历史补档或延迟归档时，原源码提交的 workflow 文件可能与当前默认分支不同。GitHub 创建 Release 此时可能要求 Actions `GITHUB_TOKEN` 无法取得的 workflow 写权限，返回 `403` 或 `404`。应使用已获明确授权的 GitHub 浏览器会话或具备相应仓库权限的 token 补齐记录；不要移动正确的 tag 或换成其他提交绕过权限检查。该失败不等于 npm 或独立部署失败。
-
-补档前可运行 `node scripts/github-release.ts --version X.Y.Z --dry-run`。完整检查 GitHub 记录需要授权的 `GITHUB_TOKEN`；无 token 时不请求 GitHub API，输出 `releaseExists: null`，表示未知。未认证的 `404` 可能隐藏私有仓库，不能据此判定记录不存在；Git 推送凭据不等于 GitHub API 已认证。
-
-## 按运行文件差异决定是否升级
-
-每次构建生成 `dist/runtime-fingerprint.json`，摘要覆盖全部编译后的 `dist` 运行文件、会议页面资源，以及影响执行的 package 配置。打包检查会从实际 tarball 重算摘要。版本号、描述、README、文档和 Skill 不参与比较。
-
-服务器构建并验证已发布包后，将运行摘要与固定 Dockerfile、Compose、下载策略的摘要组合，与当前实际部署状态比较。相同则返回 `unchanged-runtime`，保留当前容器、版本和会议；不同才切换容器。比较对象是当前线上版本，因此失败或跳过的中间发布不会造成漏判。没有摘要的早期版本无法证明相同，会正常部署。
-
-因此 npm `latest` 可以高于线上程序的版本：例如 `0.2.1` 只更新 Skill 时，服务可继续运行内容相同的 `0.2.0`；部署失败并成功回滚时，也会继续运行之前的版本。这是同一版本序列中的不同运行状态，不是客户端和服务器各自独立发版。`state.json.current.version` 是实际运行版本，`lastCheckedVersion` 是最近因运行内容相同而跳过的版本。部署程序或策略更新仍由管理员安装，不由普通发布替换。
-
-## GitHub 环境
-
-创建 `noknok-production` environment，只允许 `main` 分支部署。自动模式不配置人工等待审批。npm 的可信发布者仍是无 environment 的 `release.yml`：不要给 stable job 添加 environment，以免改变原 OIDC 身份。
-
-| 类型 | 名称 | 用途 |
-| --- | --- | --- |
-| Variable | `NOKNOK_DEPLOY_HOST` | SSH 主机名或 IPv4 地址 |
-| Variable | `NOKNOK_DEPLOY_PORT` | SSH 端口，默认 22 |
-| Variable | `NOKNOK_PUBLIC_URL` | 用于 HTTPS 健康检查的 origin |
-| Secret | `NOKNOK_DEPLOY_SSH_KEY` | 专用 `noknok-deploy` 用户的私钥，不使用管理员私钥 |
-| Secret | `NOKNOK_DEPLOY_KNOWN_HOSTS` | 通过可信渠道事先核验的主机公钥记录 |
-
-服务器必须允许 GitHub runner 访问 SSH 与公网健康地址。不使用 `StrictHostKeyChecking=no`，不在 CI 临时运行 `ssh-keyscan` 后直接信任结果。主机换钥匙时，由管理员重新核验后更新 Secret。
-
-私钥通过受限文件或 stdin 写入 GitHub Secret，不粘贴进 issue、PR、日志或配置示例。执行期间仅写到 runner 的 `0700` 临时目录、`0600` 文件，结束后删除；SSH 子进程不继承包含私钥的环境。GitHub Environment 的 Secret 仍是发布系统的信任边界，能修改并合入部署代码的人也必须可信。
-
-## 服务器一次性安装
-
-先按[自部署说明](deployment.md)建立 Docker/Caddy 实例。服务器需要 Linux、Docker Compose、Python 3、curl、sudo、OpenSSH；现有实例的 Compose 和环境文件用于首次失败回滚。以下部署文件由管理员安装为 root 所有，CI 无权替换：
-
-- `/usr/local/libexec/noknok-deploy-ssh`：只接受 `deploy X.Y.Z`，拒绝其他命令、参数和预发布版本。
-- `/usr/local/sbin/noknok-release-deploy`：固定部署策略、并发锁、健康检查、回滚。
-- `/usr/local/lib/noknok-deploy/`：固定 Dockerfile、下载校验代码、Compose 和 Caddy 模板。
-- `/etc/noknok/deploy.json`：实际域名、项目名、external 卷名、首次接管的 Compose/env 路径，权限 `0600`。
-- `/var/lib/noknok-deploy/`：当前/上一版快照、镜像 ID、部署状态与锁，禁止普通用户读取。
-
-以 `deploy/release/deploy.example.json` 创建真实配置，放在受限位置，勿提交。需要全新测试状态时，使用新的 control 卷名；原卷保持不变。Caddy 证书卷复用。安装器用**公钥文件**建立专用账户和 forced command，私钥留在管理端与 GitHub Secret 中；该账户不加入 docker 组、不允许交互 shell/转发，仅能通过 sudo 调用固定部署命令。
-
-将已审阅的部署文件放到 root 所有、其他用户不可写的目录中。输入配置和公钥也必须满足这个权限要求；从另一台机器传输 tar 时使用 `tar --no-same-owner`，避免继承另一台机器的 UID。管理员执行：
+Place reviewed deployment sources, configuration, and the public key in root-owned directories that other users cannot write. When transferring a tar archive from another machine, use `tar --no-same-owner` to avoid importing its UIDs. As administrator, run:
 
 ```sh
 bash /root/noknok-source/deploy/release/install.sh \
@@ -73,27 +63,27 @@ bash /root/noknok-source/deploy/release/install.sh \
   --config /root/noknok-production.json
 ```
 
-安装器验证 SSH 有效配置和 sudoers，只初始化新的 control 卷，不切换应用或修改 sshd 配置。安装完成后，用专用 key 验证普通命令与端口转发被拒绝。已有安装默认拒绝覆盖；更新固定程序或公钥需要显式 `--update`，且已有部署配置必须完全一致。修改域名或卷需要另外制定迁移步骤。应用版本发布不会自动替换部署程序。
+The installer validates effective SSH configuration and sudoers. It initializes only a new control volume; it does not switch the application or modify sshd configuration. Verify that ordinary commands and port forwarding are rejected with the dedicated key. Existing installations reject replacement unless `--update` is explicit, and existing deployment configuration must match exactly. Domain or volume changes need a separate migration. Application releases do not update deployment programs.
 
-## 版本与回滚
+## Version verification and rollback
 
-服务器只从 `https://registry.npmjs.org` 获取 `@noknok/cli` 的精确稳定版本，拒绝跳转和其他下载地址，核验名称、版本及 SHA-512 完整性。当前策略只允许没有运行时依赖的包；增加依赖时须同步审查部署策略。安装禁用生命周期脚本，构建时检查编译入口与 CLI 版本；构建失败不会切换线上实例。
+The server downloads only an exact stable `@noknok/cli` version from `https://registry.npmjs.org`, rejects redirects and alternate download origins, and verifies package name, version, and SHA-512 integrity. The current policy accepts packages without runtime dependencies; review the policy before adding dependencies. Installation disables lifecycle scripts. Builds verify the compiled entry point and CLI version; build failures leave the running instance untouched.
 
-切换只更新 NokNok 容器，不重建 Caddy、不执行 `compose down`、不删除持久卷。部署成功需要镜像 ID 一致、容器健康及公网 HTTPS `/health` 检查通过。失败会尝试恢复上一套镜像、Compose 和卷配置。自动回滚失败或进程中断时保留 pending 状态，后续自动部署会停下，避免覆盖不确定状态。
+Switching updates only the NokNok container. It does not rebuild Caddy, run `compose down`, or delete persistent volumes. Success requires the expected image ID, container health, and public HTTPS `/health` checks. Failure attempts to restore the previous image, Compose, and volume configuration. Interrupted deployments or failed automatic rollbacks retain pending state and block further automatic deployment until investigated.
 
-管理员先检查状态，再按需执行：
+Inspect state before manually rolling back:
 
 ```sh
 sudo cat /var/lib/noknok-deploy/state.json
 sudo /usr/local/sbin/noknok-release-deploy rollback previous
 ```
 
-状态不含聊天正文或密钥，但会暴露部署路径，应仅限管理员。CI 身份不能调用 rollback。自动部署拒绝低于已部署最高稳定版本的请求；重复部署当前版本只重新验健康。
+State excludes chat content and keys but exposes deployment paths, so restrict it to administrators. The CI identity cannot invoke rollback. Automatic deployment rejects versions below the highest deployed stable version; repeating the current version only rechecks health.
 
-**镜像回滚不是数据库回滚。** 对同一卷的 schema 或密钥做不兼容变更前，必须配套备份、恢复演练或改用新卷；部署程序不擅自恢复数据库覆盖新数据。会议正文只在内存中，任何应用重启都可能中断活动会议。
+**Image rollback does not roll back the database.** Before incompatible schema or key changes, provide backups and a tested restore procedure, or use a new volume. The deployment controller does not overwrite new data with an old database. Meetings live in memory; restarting the application can interrupt active meetings.
 
-## 凭据检查
+## Credential checks
 
-`pnpm check` 包含 `pnpm check:secrets`，扫描受版本控制文件中的常见凭据格式和敏感路径，仅输出位置、不输出匹配值。管理员还可以运行 `pnpm exec tsx scripts/check-secrets.ts --history` 扫描本地可达历史。扫描不能保证发现任意编码或图片中的秘密；发现真实泄露时先撤销/轮换，再处理历史，仅删除当前文件不够。
+`pnpm check` includes `pnpm check:secrets`, which scans tracked files for common credential formats and sensitive paths. It reports locations without printing matched values. Administrators can also run `pnpm exec tsx scripts/check-secrets.ts --history` against reachable local history. Scanning cannot detect every encoding or image; revoke or rotate a leaked credential before repairing history.
 
-环境变量是注入机制，不是加密存储。实际密钥只放 Secret、密钥管理器或受限文件；即使运维仓库私有，也只提交变量名、路径、用途和恢复步骤。每个实例的主机、卷和配置位置由其运维文档维护。
+Environment variables inject secrets; they do not encrypt storage. Store actual credentials in Secrets, a credential manager, or restricted files. Commit only variable names, paths, purposes, and recovery procedures, including in private operations repositories. Keep instance-specific hosts, volumes, and configuration locations in the operator's restricted records.

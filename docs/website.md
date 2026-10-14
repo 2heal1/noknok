@@ -1,10 +1,10 @@
-# 官网与文档站
+# Website maintenance
 
-官网位于 `apps/docs`，使用 Rspress 2、React 和 TypeScript，属于根目录 pnpm workspace 中的私有包 `@noknok/docs`。它与 `packages/cli` 的实际会议服务分开：官网介绍产品和用法，不创建会议、不接触身份凭据或聊天数据，也不随 CLI npm 包发布。
+The website lives in `apps/docs`, a private pnpm workspace package named `@noknok/docs`, using Rspress 2, React, and TypeScript. It introduces NokNok and provides user guides. The communication service and actual meeting UI live in `packages/cli`. The website does not create meetings, handle identity credentials/chat data, or ship in the CLI npm package.
 
-## 本地开发与构建
+## Local development and build
 
-在仓库根目录运行：
+From the repository root:
 
 ```sh
 corepack enable
@@ -12,7 +12,7 @@ pnpm install --frozen-lockfile
 pnpm website
 ```
 
-默认在 `http://127.0.0.1:3000` 预览。也可以只运行文档包并指定端口：
+The default preview is `http://127.0.0.1:3000`. To select a port or run package checks:
 
 ```sh
 pnpm --filter @noknok/docs dev --port 4178
@@ -21,45 +21,55 @@ pnpm --filter @noknok/docs build
 pnpm --filter @noknok/docs preview --port 4178
 ```
 
-`dev` 和 `preview` 都绑定回环地址。构建产物位于 `apps/docs/doc_build`。独立的 **Docs Deploy** 工作流会在文档与相关构建配置合入 main 后发布，也可通过 **Run workflow → main** 单独重部署；见[文档部署](docs-deployment.md)。它不依赖 npm 发版，不升级通信服务。构建需要安装开发依赖，部署后的页面不需要 Node 服务或模型 API Key。
+Development and preview bind to loopback. Output goes to `apps/docs/doc_build`. [Docs Deploy](docs-deployment.md) publishes site/build-input changes from `main`; **Run workflow → main** redeploys only the website. It does not require npm publication or restart the communication service. Builds need development dependencies; static serving needs no Node service or model API key.
 
-## 修改位置
+## Files and languages
 
-| 内容 | 文件或目录 |
+| Content | Location |
 | --- | --- |
-| Rspress 配置、语言与主题设置 | `apps/docs/rspress.config.ts` |
-| 官网首页组件 | `apps/docs/theme/HomePage.tsx` |
-| 敲门动画组件、时序与样式 | `apps/docs/theme/DoorIntro.tsx`、`door-intro.ts`、`intro.css` |
-| 首页中英文文案 | `apps/docs/theme/home-copy.ts` |
-| 中文指南 | `apps/docs/docs/zh/guide/*.md` |
-| 英文指南 | `apps/docs/docs/en/guide/*.md` |
-| 顶部导航与侧栏 | 对应语言目录的 `_nav.json`、`_meta.json` |
-| 对外静态图片和品牌资源 | `apps/docs/docs/public/brand/` |
+| Rspress configuration, languages, theme | `apps/docs/rspress.config.ts` |
+| Homepage | `apps/docs/theme/HomePage.tsx` |
+| Knock animation, timing, styles | `apps/docs/theme/DoorIntro.tsx`, `door-intro.ts`, `intro.css` |
+| Homepage translations | `apps/docs/theme/home-copy.ts` |
+| Chinese user guides | `apps/docs/docs/zh/guide/*.md` |
+| English user guides | `apps/docs/docs/en/guide/*.md` |
+| Navigation and sidebar | Each language's `_nav.json` and `_meta.json` |
+| Public images and brand assets | `apps/docs/docs/public/brand/` |
 
-中文为默认语言，安装路径是 `/guide/installation`，使用入口是 `/guide/getting-started`；英文分别为 `/en/guide/installation` 和 `/en/guide/getting-started`。静态构建会生成对应 HTML，导航和链接交给 Rspress 处理。搜索、侧栏、代码复制和语言切换使用 Rspress 能力，不再维护独立 `guide.html` 或手写文档翻译运行时。
+Repository maintainer documents under `docs/` use English. The user-facing website remains bilingual, with Chinese as the default language. Installation and usage routes are `/guide/installation` and `/guide/getting-started`; English adds `/en`. Rspress handles generated HTML, routing, search, sidebar, code copying, and language switching; there is no separate handwritten `guide.html` or translation runtime.
 
-安装指南与使用指南分别维护。使用指南只有两个主要场景：无需好友的即时会议，以及添加好友后直接联系；完整会议邀请由用户转发给对方用户，再粘贴到各自的 Agent 会话。另有记录保存、MCP Events、私有部署、排障和品牌来源等说明。更新用户操作时，中文与英文都要同步；命令要与实际 CLI 一致。开发命令使用 pnpm；普通用户安装公开包仍使用 `npm install -g @noknok/cli`。
+Keep installation separate from usage. The two primary user flows are instant invitations without a contact relationship and reaching an existing contact. People forward complete invitations to one another, then paste them into their own agent chats. Additional guides cover history, Events, self-hosting, troubleshooting, and brand sources. Update both user-guide languages together and verify commands against the CLI. Development uses pnpm; public installation uses `npm install -g @noknok/cli`.
 
-首页保留 NokNok 已有的品牌、简洁布局与场景展示。示意场景只说明产品目标；不能把可点击动画或合成回调写成真实 dot 自动唤醒已验收。端到端加密已实现、目标部署及真实宿主唤醒待验证等边界需与[上线清单](launch-checklist.md)一致。
+## Product and presentation principles
 
-## 敲门开场动画
+NokNok connects existing agents for instant text conversations. It supplies invitations, transport, and meeting space; participants bring their own models and execution environments. A useful demonstration shows a concrete question, a follow-up, and agreed next steps with owners. An ordinary Claude Code/Codex session can participate when it can run NokNok and reach the same service; a persistent personal agent is not required.
 
-保留 PR #11 的 10.2 秒开场：敲门、开门、镜头进入，然后四条示意消息依次出现。组件提供暂停/继续、跳过、重播；离开视口或浏览器标签时暂停，`prefers-reduced-motion` 下直接展示完整对话。组件卸载时释放动画帧、观察器和事件监听。动画不访问服务、模型或真实会话。
+Keep the centered headline, broad media area, two concise feature sections, and short self-hosting/source footer. Use near-white backgrounds, charcoal `#252823`, and ivory `#F7F3EA` media surfaces, with generous spacing. Preserve readable mobile layouts, visible keyboard focus, and reduced-motion behavior. Use official vectors rather than recreating the logo with CSS or text.
 
-动画内联 SVG 使用已批准门标的原路径与颜色。更新品牌时同时更新 `DoorIntro.tsx` 和 `docs/public/brand/mark.svg`；不要单独重画标志。
+Illustrations must be labeled as such. A successful webhook, an animated conversation, or a role named dot/Grokbot is not evidence of verified native-host compatibility. Instant delivery applies to connected participants receiving messages; model generation, host scheduling, and networking still affect response time. Do not promise zero latency, automatic replies from every offline agent, or voice/video features.
 
-## 品牌资源
+State self-hosting conditions accurately: all participants need network access to the same service; cloud hosts also need supported Events and trusted endpoint execution for wake-up. Different origins have independent identities. Current callbacks require public HTTPS, so a private network alone does not establish native background wake-up. Keep encryption and acceptance claims aligned with [E2EE](e2ee.md) and the [launch checklist](launch-checklist.md).
 
-NokNok 原始品牌资料在 `docs/brand`；站点使用复制到 `docs/public/brand` 的导出资源，不从其他源码目录读取文件。修改品牌时先更新原始资源，再同步网站；保持比例、留白与可访问替代文本，检查小尺寸图标。不要重新绘制已有标志。
+The planned recording in [demo-script.md](demo-script.md) provides reusable synthetic prompts and a storyboard. Until a recording exists, keep the illustrative state visible. A future player needs a real tested media URL, captions/transcript, user-initiated playback, and a mobile check; do not display a working-looking play control with no video.
 
-产品场景中的第三方标志仅用于标识对应 agent：
+## Knock introduction
 
-- dot 使用 OpenAI [dot 页面](https://chatgpt.com/zh-Hans-CN/features/dots/)的原始 SVG，遵循 [OpenAI 品牌指南](https://openai.com/brand/)。
-- Grok Bot PNG 来自用户提供的素材，未经独立下载来源核验；保留比例、颜色和透明度，使用受 [Grok 品牌指南](https://x.ai/legal/brand-guidelines)约束。
-- Claude Code 图标来自 Anthropic 的[官方扩展](https://marketplace.visualstudio.com/items?itemName=anthropic.claude-code)，不是自制标志。[其名称与标志条款](https://code.claude.com/docs/en/legal-and-compliance)另有使用条件。
+The existing 10.2-second introduction knocks, opens the door, moves the camera inside, then reveals four illustrative messages. It supports pause/resume, skip, and replay, pauses outside the viewport or in a hidden tab, and shows the full conversation under `prefers-reduced-motion`. Unmounting releases animation frames, observers, and listeners. It accesses no service, model, or real conversation.
 
-这些来源记录不代表授权、合作、背书或完成宿主集成。
+The inline SVG uses the approved door mark's geometry and colors. If the brand changes, update `DoorIntro.tsx` and `apps/docs/docs/public/brand/mark.svg` together.
 
-## 验证
+## Brand assets
 
-文案或导航更新后至少执行文档包 typecheck 和 build，并在预览中检查：中英文切换、首页和入门页、复制命令、搜索、侧栏以及窄屏。CLI 的包检查还需确认 `doc_build`、React/Rspress 依赖和开发源码不会意外进入发布包。
+`docs/brand` is the source of truth. Export there first, then sync copies to `apps/docs/docs/public/brand/` and keep `apps/docs/docs/public/icon.svg` aligned with the official favicon. Preserve proportions, clear space, accessible alternative text, and small-icon readability. Use `logo-compact.svg` for navigation, `mark.svg` for standalone marks, and `wordmark.svg` for the footer.
+
+Third-party product marks identify the illustrated agents:
+
+- dot uses the original SVG from OpenAI's [dot page](https://chatgpt.com/zh-Hans-CN/features/dots/), subject to the [OpenAI brand guidelines](https://openai.com/brand/).
+- The Grok Bot PNG was supplied by the user; its download provenance was not independently verified. Preserve its proportions, colors, and transparency; consult the [Grok brand guidelines](https://x.ai/legal/brand-guidelines).
+- The Claude Code icon comes from Anthropic's [official extension](https://marketplace.visualstudio.com/items?itemName=anthropic.claude-code). Its [name and logo terms](https://code.claude.com/docs/en/legal-and-compliance) apply separately.
+
+Source attribution does not establish permission, partnership, endorsement, or completed host integration. NokNok's own Apache-2.0 terms and attribution requirements are in [LICENSE](../LICENSE) and [NOTICE](../NOTICE).
+
+## Verification
+
+After copy/navigation changes, run documentation typecheck and build. When changing site behavior or layout, inspect language switching, home/getting-started pages, copied commands, search, sidebar, keyboard access, and narrow screens in preview. CLI package checks must exclude `doc_build`, React/Rspress dependencies, and development source from published packages.

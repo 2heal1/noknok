@@ -1,44 +1,39 @@
-# 验证记录与范围
+# Validation scope and evidence
 
-更新日期：2026-10-14。本页区分仓库验证、历史部署证据和待验收事项。当前通信统一为加密会议；过去明文版本的测试数量或公网合成结果不能作为当前加密版本的部署证明。
+Use this page to find verification entry points and distinguish development coverage from historical infrastructure checks. For a specific release, use its PR/CI result and the operator's deployment evidence. Do not interpret an old test count, healthy endpoint, or synthetic callback as acceptance of the current encrypted version.
 
-## 当前加密实现的验证入口
+## Verification entry points
 
-| 验证 | 入口与覆盖 |
+Tests below live in `packages/cli/test/` unless otherwise specified.
+
+| Area | Entry points and coverage |
 | --- | --- |
-| 算法与格式 | `packages/cli/test/e2ee.test.ts`：AES-GCM 已知向量、Node/Web Crypto 互通、规范编码、错误密钥、AAD、篡改与大小边界 |
-| 会议 HTTP 与客户端 | `meeting-e2ee.test.ts`、`meeting-crypto.test.ts`、`meeting-cli.test.ts`：实际请求/响应没有测试明文或内容密钥，重试复用密文，错误密钥/篡改/降级/重放失败且不确认 |
-| 托管好友与本地 MCP | `hosted-client.test.ts`、`hosted-service.test.ts`、`hosted-stdio.test.ts`：联系密钥仅在参与端，好友通知携带封装会议密钥，CLI 与本地工具完整收发 |
-| 浏览器与链接 | `meeting-ui.test.ts`、`meeting-link-security.test.ts`：本地解密、fragment 处理、先保存后确认、缺失记录、导出、持久重试及清除本地状态 |
-| 投递与权限 | 会议及 hosted 测试：逐事件收件凭据、所有必要参与者确认、到期清理、撤销、只读限制、重试缓存不恢复已清理内容 |
-| 构建与发布包 | `pnpm check`、`pnpm check:package`：编译、类型、测试、凭据扫描、实际 npm 归档与离线安装、浏览器加密资产和 bundled skill |
-| 官网文档 | `pnpm --filter @noknok/docs typecheck` 与 `pnpm --filter @noknok/docs build` |
+| Cryptography and encoding | `e2ee.test.ts`: AES-GCM vectors, Node/Web Crypto interoperability, canonical encoding, wrong keys, AAD, tampering, and size limits |
+| HTTP and clients | `meeting-e2ee.test.ts`, `meeting-crypto.test.ts`, `meeting-cli.test.ts`: no test plaintext/keys on the wire, exact-ciphertext retries, and rejection without ACK on wrong keys, tampering, downgrade, or replay |
+| Contacts and local MCP | `hosted-client.test.ts`, `hosted-service.test.ts`, `hosted-stdio.test.ts`: endpoint contact keys, wrapped meeting keys, and CLI/local-tool exchanges |
+| Browser and links | `meeting-ui.test.ts`, `meeting-link-security.test.ts`: local decryption, fragments, save-before-ACK, gaps, export, persistent retries, and local clearing |
+| Delivery and permissions | Meeting/hosted tests: per-event receipt tokens, required recipients, expiry, revocation, read-only limits, and retries not restoring cleared content |
+| Release and deployment | `github-release.test.ts`, `release-verification.test.ts`, `release-deployment.test.ts`, `docs-deployment.test.ts`: source tagging, retries, package verification, deployment/recovery, and static publishing; isolated/mock checks do not prove a live deployment |
+| Build and distributable | `pnpm check`, `pnpm check:package`: build, types, tests, credential scanning, actual tarball inspection, offline installation, browser assets, and bundled skill |
+| Website | `pnpm --filter @noknok/docs typecheck` and `pnpm --filter @noknok/docs build` |
+| Example exchange | `pnpm demo`: encrypted exchange between two independent local identities |
 
-E2EE 开发阶段已执行自动化与真实 Chrome 合成验证：错误密钥在加入前拒绝；CLI/浏览器交流在网络中只出现密文；发送响应丢失后刷新重试复用同一密文与请求 ID，仅生成一条事件。独立安全审查、不同浏览器矩阵和真实原生宿主不在这些结果之内。
+Development included automated tests and synthetic Chrome checks: a wrong key failed before joining, CLI/browser traffic carried ciphertext, and refreshing after a lost send response reused the same request ID/ciphertext without creating a duplicate event. These checks did not establish an independent audit, a browser support matrix, or real native-host wake-up.
 
-删除旧通信实现、同步 main 后，本轮回归结果：
+Exact historical counts and reproduction notes remain in [this file's Git history](https://github.com/2heal1/noknok/commits/main/docs/validation.md) and the associated PRs. Keeping them as the current page's headline would confuse an old run with the current code.
 
-- `pnpm check`：197 项测试通过，0 失败、0 跳过，包含编译与类型检查。旧两方通信、接收器、网关和 PoC 的实现及对应测试已删除，测试数量因此变化；会议、托管加密及投递安全测试继续执行。
-- `pnpm demo`：两个独立身份的加密会议往返通过。
-- `pnpm check:package`：版本 `0.1.0` 的实际归档及离线安装通过，产物 68 个文件。
-- 文档收尾后已重跑类型检查、构建与包检查：18 个 HTML 页面及 SSG Markdown 均构建通过，最终包的离线安装验证通过。
+## Historical infrastructure evidence
 
-上述真实 Chrome 记录来自删除旧通信实现前的 E2EE 验证（共检查 130 个请求）；本轮以保留的加密路径自动化和双身份演示回归为主，没有重新声称完成浏览器矩阵或生产部署。
+Restricted checks on 2026-10-14 covered hosted containers, Caddy, HTTPS, control-volume permissions, synthetic callbacks, and application-container recreation. Identities and subscriptions survived with the control volume; in-memory meetings did not. Synthetic accounts/subscriptions were subsequently cleaned up or disabled. These results apply to the versions used then, not automatically to a later encrypted release.
 
-## 保留的历史部署证据
+Deployment automation checks covered dedicated SSH accounts, pinned host trust, command/forwarding restrictions, the deployment controller, and rollback state transitions. Independent website deployment checks covered isolated permissions, static output, and the public commit marker without changing the application container. See [application deployment](automatic-deployment.md) and [website deployment](docs-deployment.md).
 
-2026-10-14 的受限环境曾完成 hosted 容器、Caddy、HTTPS、控制卷权限、合成回调与应用容器重建检查。身份和订阅可在保留控制卷时恢复，内存会议不能恢复。合成测试账号和订阅已清理或停用。这些记录针对当时运行版本，**不证明本次加密协议已部署**。
+## Evidence still needed per target release/environment
 
-部署自动化曾验证专用 SSH 账号、固定主机信任、命令与端口转发限制、部署控制器及回滚状态机。文档独立发布曾验证专用权限、静态产物和公网提交标记，应用容器未随文档发布变化。它们证明对应机制，不能替代新版服务的发布后验收。
+- Encrypted CLI/browser/contact exchanges, cleanup, and inspection of server requests, responses, memory, database, logs, and exports for test plaintext or content keys.
+- Real native-host encryption, key custody, persistence, and Events-driven joining/replies after the setup task ends without further human input.
+- Independent security review of shared keys, lack of forward secrecy, and lack of automatic rekeying.
+- Database/original-key restore drills, abnormal termination, certificate renewal, sustained operation, capacity, and alerts.
+- A successful stable-package deployment and verification of actual running-version / unchanged-runtime behavior in the target environment.
 
-历次具体版本、计数和复现过程见 [validation.md 的 Git 历史](https://github.com/2heal1/noknok/commits/main/docs/validation.md)，部署机制见[自动部署](automatic-deployment.md)和[文档部署](docs-deployment.md)。
-
-## 尚未完成
-
-- 目标环境部署当前加密版本后，检查服务端 HTTP、工具响应、内存、数据库、日志及导出不含测试正文或内容密钥，并复验跨端收发与清理。
-- 真实 dot 或其他原生宿主的可信端侧密钥保管、持久保存和原生 Events：设置任务结束后，无人工补充输入地加入并实质回复。
-- 独立安全审查，明确接受或进一步改进共享密钥、无前向保密和无自动换钥等边界。
-- 数据库与原服务密钥的一致性备份恢复、异常退出、证书自动续期、长期稳定性、容量和告警。
-- 真实稳定版发布后的完整自动部署与运行内容差异判断。
-
-完整责任和发布门禁见[上线清单](launch-checklist.md)。文档或包发布不意味着开放真实用户内测。
+The [launch checklist](launch-checklist.md) tracks these open items. This documentation does not assert a live deployment's current status.

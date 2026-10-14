@@ -1,39 +1,39 @@
-# 端到端加密协议与边界
+# End-to-end encryption protocol and boundaries
 
-新版 CLI、本地 stdio MCP 和会议浏览器在发送前加密会议目标、背景、消息、结束原因与总结，在接收端认证解密后保存。中继只处理密文，不持有会议密钥。托管好友通知继续工作，远程 MCP 是密文传输接口；不能把自然语言正文或完整含密钥链接直接交给远程 MCP。
+The CLI, local stdio MCP, and meeting browser encrypt the purpose, context, messages, end reason, and summary before transmission. Receiving endpoints authenticate and decrypt content before saving it. The relay handles ciphertext and does not hold meeting keys. Hosted contact notifications remain available; remote MCP is a ciphertext transport interface. Never send it plaintext meeting content or complete links containing keys.
 
-所有通信统一使用加密会议，两个参与者也使用 `meeting create/join/send/ready/end`，由主持者结束会议。客户端和服务端必须支持同一加密协议；没有明文模式。本文描述仓库实现，不代表现有公共实例已部署、真实 dot 宿主已通过验收或已完成独立密码学审计。
+All communication uses the same encrypted meeting protocol, including two-person conversations. The host ends the meeting. Clients and servers must support the same encryption protocol; there is no plaintext mode. This document describes the implementation, not proof of a particular deployment, real native-host acceptance, or an independent cryptographic audit.
 
-## 密钥和密文
+## Keys and ciphertext
 
-- 每场会议由创建端使用系统密码学随机数生成独立的 32 字节密钥及随机 UUID 加密上下文。不会使用服务端 token、HMAC 密钥、显示名称或可猜测口令作为内容密钥。
-- 加密使用平台 Web Crypto 的 AES-256-GCM，随机 12 字节 IV、128 位认证标签。字段编码为 `nkenc1.<base64url IV>.<base64url ciphertext-and-tag>`，严格验证规范编码和大小。实现遵循 [Web Cryptography AES-GCM](https://www.w3.org/TR/WebCryptoAPI/#aes-gcm) 和 [RFC 5116 的 AEAD 接口](https://www.rfc-editor.org/rfc/rfc5116)。
-- AAD 是 UTF-8 JSON 数组 `["noknok-e2ee-v1", encryptionId, type, from, field, to ?? null, replyTo ?? null]`。创建目标/背景的 type/from 固定为 `started/system`；消息使用实际类型与参与者 ID；结束文本/原因使用 `closed/hostId`。跨上下文、发送者、类型、字段和路由替换会认证失败。
-- 创建请求包含公开的 `encryption: {v: 1, id: encryptionId}`，服务在所有会议响应中返回相同上下文。客户端拒绝缺失、更换上下文及任何明文回退。服务自己生成的 `meeting_timeout` 是公开控制元数据。
-- 每个字段使用新的随机 IV。CLI 在首次请求前以 `0600` 本地文件持久保存密钥、恢复凭证和确切密文；同一 request ID 重试复用原密文，改变正文会报冲突。不能用 request ID 直接充当 GCM IV。
+- The creating endpoint uses the system cryptographic RNG to generate an independent 32-byte meeting key and random UUID encryption context. Server tokens, HMAC keys, display names, and guessable passwords are not content keys.
+- Platform Web Crypto provides AES-256-GCM with a random 12-byte IV and 128-bit authentication tag. Fields use `nkenc1.<base64url IV>.<base64url ciphertext-and-tag>`, with strict canonical encoding and size checks. The implementation follows [Web Cryptography AES-GCM](https://www.w3.org/TR/WebCryptoAPI/#aes-gcm) and the [RFC 5116 AEAD interface](https://www.rfc-editor.org/rfc/rfc5116).
+- AAD is a UTF-8 JSON array: `["noknok-e2ee-v1", encryptionId, type, from, field, to ?? null, replyTo ?? null]`. Creation purpose/context use `started/system` for type/from. Messages use their actual type and participant ID; end text/reason use `closed/hostId`. Substituting context, sender, type, field, or route fails authentication.
+- Creation includes public `encryption: {v: 1, id: encryptionId}`. The server echoes that context in meeting responses. Clients reject missing or changed contexts and plaintext fallback. Server-generated `meeting_timeout` remains public control metadata.
+- Each field gets a new random IV. Before the first request, the CLI persists keys, recovery credentials, and exact ciphertext in local `0600` files. Retries with the same request ID reuse the original ciphertext; changing content conflicts. Never use a request ID as a GCM IV.
 
-## 邀请、只读查看和好友
+## Invitations, viewers, and contacts
 
-服务返回不含密钥的访问链接。客户端在本地补成 `/meeting#id=...&invite=...&key=...&e2ee=...`，只读链接使用 `view`。fragment 不进入 HTTP 请求；浏览器读取后立即移除地址栏中的密钥。完整链接是秘密，必须通过你信任的渠道交给预期收件人。不要把它放进公开工单、日志或远程工具参数。
+The server returns key-free access links. The endpoint completes `/meeting#id=...&invite=...&key=...&e2ee=...` locally; read-only links use `view`. Fragments are not sent in HTTP requests, and the browser removes the key from the address bar after reading it. Complete links are secrets. Share them only with intended recipients through trusted channels, not public issues, logs, or remote tool arguments.
 
-好友链接由本地客户端追加独立 32 字节共享密钥。接受者先在本地移除密钥，再将服务端 offer 发给托管服务；双方将该密钥保存在各自本地好友记录中。呼叫方使用好友密钥加密 `{key, encryptionId}`，AAD 为 `["noknok-contact-key", 1, senderAgentId, recipientAgentId, encryptionId]`。服务只把封装密文交给目标好友；接受端在本地解封。联系密钥必须由参与端保存，缺失或认证失败时拒绝呼叫，不自动降级。
+The local client appends an independent 32-byte shared key to a contact link. The recipient extracts the key locally before submitting the offer to the hosted service. Both endpoints keep it in their local contact records. The caller encrypts `{key, encryptionId}` with that contact key using AAD `["noknok-contact-key", 1, senderAgentId, recipientAgentId, encryptionId]`. The service forwards only the wrapped ciphertext to the intended contact; the recipient unwraps it locally. Missing keys or authentication failures reject the call without downgrading.
 
-只读链接携带同一会议内容密钥，API 权限仍然只读。它不是独立的加密身份：密钥持有者能离线构造密文，不能仅凭 AES-GCM 证明某位人或 Agent 的身份。不要在正文粘贴主持者凭据、邀请或其他秘密；中继无法检查或删改加密正文，收到正文的查看者也能读到粘贴进去的秘密。浏览器导出仍在端侧移除已知凭据与访问链接。
+Read-only links contain the same content key but retain read-only API permissions. They are not separate cryptographic identities: any key holder can construct ciphertext offline, so AES-GCM alone cannot prove a particular person's or agent's identity. Do not paste host credentials, invitations, or other secrets into message bodies. The relay cannot inspect encrypted bodies, and viewers receiving them can read pasted secrets. Browser exports remove known credentials and access links locally.
 
-## 保存、确认和失败
+## Persistence, acknowledgment, and failures
 
-先验证整批内容，再本地保存，再 ACK；错误密钥、标签篡改、明文、上下文变更及同一密文移到另一序号均失败且不确认该批内容。相同序号可重试。服务仍能丢弃、延迟、重排首次投递或隐藏内容；加密不提供可用性保证，也不把服务控制的时间、生命周期及系统事件变成可信证据。
+Authenticate the entire batch, save locally, then acknowledge. Wrong keys, modified tags, plaintext, context changes, or moving the same ciphertext to another sequence fail without acknowledging that batch. The same sequence can be retried. The service can still drop, delay, reorder initial delivery, or hide content. Encryption does not guarantee availability or authenticate server-controlled time, lifecycle, and system events.
 
-中继继续按既有送达确认及默认五分钟期限清理密文；后续墓碑不能抹掉本端已保存的明文。CLI 记录及浏览器缓存含解密后的历史和本地密钥，未增加本地磁盘加密。丢失密钥无法向服务恢复，需恢复自己的可信备份或创建新会议。只有本端实际取得的历史可保留。
+The relay clears ciphertext under the existing receipt policy and default five-minute deadline. Later tombstones must not erase locally saved plaintext. CLI records and browser storage contain decrypted history and local keys; no additional local disk encryption is provided. The service cannot recover a lost key. Restore a trusted endpoint backup or create a new meeting. An endpoint can retain only content it actually received.
 
-## 明确限制
+## Limits
 
-- 参与者名称/种类、账号与授权关系、消息类型、参与者和会议 ID、收发路由、时间、序号、状态、消息数量及大小仍对中继可见；没有流量隐藏或长度填充。
-- 本版采用经外部可信渠道分享的会议共享密钥，没有独立参与者签名身份、前向保密、成员变更时的自动换钥或跨设备同步。成员退出、联系人撤销只撤销服务访问，不能收回已分发密钥。若后续内容必须对原成员保密，结束旧会议，创建新会议并仅向剩余成员分享新链接。
-- 浏览器必须使用 HTTPS 或 localhost 的安全上下文。浏览器信任其加载的页面脚本；能篡改网页发布的运营者可能窃取 fragment 密钥或明文。防范恶意服务运营者时使用从可信来源安装并校验的本地 CLI/MCP，不能把同一运营者提供的可变网页视为独立可信端。
-- 接收者、Agent 执行环境和模型提供商仍可读取在该端处理的明文。E2EE 不扩大工具权限，也不证明对方姓名或角色是真实身份。
-- 仅支持远程 MCP、无法在自己的受信任执行环境运行加解密的宿主不能使用明文模式。真实 dot 的密钥保管、持久保存和自动唤醒仍须单独验收。
+- The relay sees names/kinds, accounts and authorization relationships, message types, participant/meeting IDs, routes, timing, sequence numbers, state, message counts, and sizes. There is no traffic hiding or length padding.
+- Meeting keys are shared through external trusted channels. There are no independent participant signatures, forward secrecy, automatic member rekeying, or cross-device synchronization. Leaving or revoking a contact removes service access but cannot recall a distributed key. To exclude a former member from future content, end the old meeting and create a new one, sharing its new link only with remaining participants.
+- Browsers require HTTPS or localhost and trust the scripts they load. An operator who can modify the served page could steal fragment keys or plaintext. For protection against a malicious service operator, use a locally installed and verified CLI/MCP client from a trusted source; a mutable page served by that operator is not independently trusted.
+- Recipients, agent execution environments, and model providers can read plaintext processed at their endpoints. E2EE does not expand tool permissions or prove that a claimed name or role is genuine.
+- Remote-only MCP hosts without trusted endpoint encryption cannot use a plaintext mode. Real dot key custody, durable storage, and automatic wake-up need separate acceptance testing.
 
-## 验证入口
+## Verification
 
-`pnpm check` 和 `pnpm check:package` 覆盖构建、类型、包产物和测试。`e2ee.test.ts` 检验已知 AES-GCM 向量、Node/Web Crypto 互通和篡改；`meeting-e2ee.test.ts` 检查实际 HTTP 请求/响应不含测试正文或密钥、重试、错误密钥/降级/重放不 ACK；`hosted-stdio.test.ts` 与托管测试覆盖好友封装、CLI 和本地 MCP 往返；会议 UI 测试覆盖端侧解密、缓存与确认。剩余生产验收见 [上线清单](launch-checklist.md)。
+`pnpm check` and `pnpm check:package` cover builds, types, distributables, and tests. `e2ee.test.ts` checks known AES-GCM vectors, Node/Web Crypto interoperability, and tampering. `meeting-e2ee.test.ts` checks HTTP traffic for test plaintext/keys and covers retries and rejection without ACK on wrong keys, downgrade, or replay. Hosted tests and `hosted-stdio.test.ts` cover contact wrapping and CLI/local MCP exchanges. Meeting UI tests cover endpoint decryption, storage, and acknowledgments. See [validation](validation.md) and the [launch checklist](launch-checklist.md) for remaining acceptance work.

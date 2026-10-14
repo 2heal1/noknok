@@ -11,6 +11,7 @@ import { main } from '../src/cli.js';
 import { decodeHostedContact, hostedOrigin, contactKeyAAD } from '../src/hosted-client.js';
 import { generateKey, isEncryptedText, encryptText } from '../src/e2ee.js';
 import { MeetingStore } from '../src/meeting-client.js';
+import { authorizeOAuth } from './oauth-helper.js';
 
 const accountToken = 'account_abcdefghijklmnopqrstuvwxyz0123456789';
 const agentToken = 'agent_abcdefghijklmnopqrstuvwxyz0123456789';
@@ -22,7 +23,7 @@ const issuedCapability = 'issued_abcdefghijklmnopqrstuvwxyz0123456789';
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'noknok-hosted-client-'));
   const stateDir = join(directory, 'agent');
-  const calls = [], mutations = { dropAccount: 0, dropRegister: 0, claim: false, redirect: false, invitations: [] };
+  const calls = [], mutations = { dropAccount: 0, dropRegister: 0, claim: false, redirect: false, invitations: [], pairingError: false };
   const meetingId = randomUUID(), participantId = randomUUID(), participantToken = 'participant_abcdefghijklmnopqrstuvwxyz012345';
   let url, encryptedMeeting;
   const room = () => ({ meeting: { id: meetingId, ...encryptedMeeting, state: 'active', participants: [], createdAt: new Date().toISOString() },
@@ -32,7 +33,7 @@ async function fixture(t) {
     let input = '';
     for await (const chunk of req) input += chunk;
     const body = input ? JSON.parse(input) : undefined;
-    calls.push({ path: req.url, body, authorization: req.headers.authorization });
+    calls.push({ path: req.url, method: req.method, body, authorization: req.headers.authorization });
     const send = value => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(value)); };
     if (req.url === '/health') return send({ ok: true, mode: 'hosted' });
     if (mutations.redirect) { res.writeHead(302, { location: `${url}/unexpected` }); res.end(); return; }
@@ -44,6 +45,15 @@ async function fixture(t) {
       if (mutations.dropRegister-- > 0) { req.socket.destroy(); return; }
       return send({ agentId: 'agent-a', agentToken });
     }
+    if (req.url === '/oauth/pairings') return send({ pairing_id: 'pair-one', user_code: 'ABCD-EFGH', verification_uri: `${url}/oauth/pair`, verification_uri_complete: `${url}/oauth/pair`, expires_at: Date.now() + 300000 });
+    if (req.url === '/oauth/pairings/pair-one') return send({ pairing_id: 'pair-one', status: 'awaiting_cli', agent_id: 'agent-a', expires_at: Date.now() + 300000,
+      client: { client_id: 'client-one', client_name: 'Test application', redirect_uri: 'https://client.example/callback' }, scope: 'noknok:events:read noknok:events:manage noknok:status:read', confirmation: 'confirmation_abcdefghijklmnopqrstuvwxyz' });
+    if (req.url === '/oauth/pairings/pair-one/confirm') {
+      if (mutations.pairingError) { res.statusCode = 400; return send({ error: 'invalid_request', error_description: 'Review this exact pending request before confirming it.' }); }
+      return send({ pairing_id: 'pair-one', status: 'approved' });
+    }
+    if (req.url === '/oauth/grants') return send({ grants: [{ grant_id: 'grant-one', agent_id: 'agent-a', client_id: 'client-one', revoked: false }] });
+    if (req.url === '/oauth/grants/grant-one') return send({ revoked: true });
     if (req.url.startsWith('/v1/meetings/')) {
       return send({ meeting: room().meeting, events: [], nextCursor: 0 });
     }
@@ -56,6 +66,7 @@ async function fixture(t) {
         : name === 'noknok_identity' ? { agentId: 'agent-a', accountId: 'account-a' }
         : name === 'noknok_inbox' ? { invitations: mutations.invitations }
         : name === 'noknok_subscription_status' ? { subscribed: false, receiving: false }
+        : name === 'noknok_subscription_stop' ? { subscriptionId: args.subscription_id, unsubscribed: true }
         : name === 'noknok_friend_revoke' ? { revoked: true }
         : { ...room(), invitationId: 'invitation-one', notification: { queued: true } };
       return send({ jsonrpc: '2.0', id: body.id, result: { structuredContent: data, content: [{ type: 'text', text: JSON.stringify(data) }] } });
@@ -96,12 +107,115 @@ test('hosted setup saves scoped credentials privately and does not disclose them
   assert.equal(f.calls.length, before);
   const config = await f.run(['config']);
   assert.equal(config.private, true);
-  assert.equal(config.remoteMcpMode, 'ciphertext-only-and-events');
+  assert.equal(config.remoteMcpMode, 'oauth-events-only');
   assert.equal(config.mcpConfig.mcpServers.noknok.command, process.execPath);
   assert.ok(config.mcpConfig.mcpServers.noknok.args.includes('mcp'));
   assert.ok(!JSON.stringify(config.mcpConfig).includes(agentToken));
   assert.equal(config.eventsMcpConfig.mcpServers.noknok_events.url, `${f.url}/mcp`);
-  assert.equal(config.eventsMcpConfig.mcpServers.noknok_events.headers.Authorization, `Bearer ${agentToken}`);
+  assert.equal(config.eventsMcpConfig.mcpServers.noknok_events.headers, undefined);
+  assert.equal(config.authentication.type, 'oauth');
+  assert.equal(config.authentication.resource, `${f.url}/mcp`);
+  assert.ok(!JSON.stringify(config).includes(agentToken));
+  assert.ok(!JSON.stringify(config).includes(accountToken));
+});
+
+test('OAuth pairing and revocation reuse the existing profile without exposing its credentials or changing contacts', async t => {
+  const f = await fixture(t);
+  await f.setup();
+  await f.run(['friend-add', `${f.url}/contact#offer=${offer}&key=${contactKey}`]);
+  const original = await f.saved(), requests = f.calls.length;
+  const paired = await f.run(['pair']);
+  assert.equal(paired.agent_id, original.agentId);
+  assert.equal(paired.user_code, 'ABCD-EFGH');
+  assert.equal(new URL(paired.verification_uri_complete).search, '');
+  const pending = await f.run(['pair-status', paired.pairing_id]);
+  assert.equal(pending.client.client_name, 'Test application');
+  assert.equal(pending.agent_id, original.agentId);
+  assert.match(pending.scope, /noknok:events:manage/);
+  const confirmed = await f.run(['pair-confirm', paired.pairing_id, '--confirmation', pending.confirmation]);
+  assert.equal(confirmed.status, 'approved');
+  const grants = await f.run(['grants']);
+  assert.equal(grants.grants[0].grant_id, 'grant-one');
+  assert.equal((await f.run(['revoke', 'grant-one'])).revoked, true);
+  const oauthCalls = f.calls.slice(requests);
+  assert.deepEqual(oauthCalls.map(call => [call.method, call.path]), [
+    ['POST', '/oauth/pairings'], ['GET', '/oauth/pairings/pair-one'], ['POST', '/oauth/pairings/pair-one/confirm'], ['GET', '/oauth/grants'], ['DELETE', '/oauth/grants/grant-one'],
+  ]);
+  assert.deepEqual(oauthCalls[2].body, { confirmation: pending.confirmation });
+  for (const call of oauthCalls) assert.equal(call.authorization, `Bearer ${agentToken}`);
+  for (const value of [paired, pending, confirmed, grants]) {
+    assert.ok(!JSON.stringify(value).includes(agentToken));
+    assert.ok(!JSON.stringify(value).includes(accountToken));
+    assert.ok(!JSON.stringify(value).includes(contactKey));
+  }
+  assert.deepEqual(await f.saved(), original);
+  const beforeInvalid = f.calls.length;
+  await assert.rejects(f.run(['pair-confirm', 'pair-one']), { code: 'INVALID_ARGUMENT' });
+  await assert.rejects(f.run(['pair-status', '../another-agent']), { code: 'INVALID_ARGUMENT' });
+  await assert.rejects(f.run(['revoke', 'grant-one?agent=other']), { code: 'INVALID_ARGUMENT' });
+  assert.equal(f.calls.length, beforeInvalid);
+  f.mutations.pairingError = true;
+  await assert.rejects(f.run(['pair-confirm', paired.pairing_id, '--confirmation', pending.confirmation]), { code: 'invalid_request', message: 'Review this exact pending request before confirming it.' });
+});
+
+test('pairing operations never create a replacement identity for an uninitialized profile', async t => {
+  const f = await fixture(t);
+  for (const command of [['pair'], ['pair-status', 'pair-one'], ['pair-confirm', 'pair-one', '--confirmation', 'confirmation_abcdefghijklmnopqrstuvwxyz'], ['grants'], ['revoke', 'grant-one'], ['subscription-stop', 'subscription-one']]) {
+    await assert.rejects(f.run(command), { code: 'HOSTED_SETUP_REQUIRED' });
+  }
+  assert.equal(f.calls.length, 0);
+});
+
+test('the trusted CLI can stop one subscription without exporting an Agent token', async t => {
+  const f = await fixture(t);
+  await f.setup();
+  const original = await f.saved();
+  const result = await f.run(['subscription-stop', 'subscription-one']);
+  assert.equal(result.unsubscribed, true);
+  assert.deepEqual(f.calls.at(-1).body.params, { name: 'noknok_subscription_stop', arguments: { subscription_id: 'subscription-one' } });
+  assert.equal(f.calls.at(-1).authorization, `Bearer ${agentToken}`);
+  assert.ok(!JSON.stringify(result).includes(agentToken));
+  assert.deepEqual(await f.saved(), original);
+});
+
+test('real OAuth browser ceremony uses the original CLI pairing commands and preserves its identity', async t => {
+  const { startHostedService } = await import('../src/hosted-service.js');
+  const directory = await mkdtemp(join(tmpdir(), 'noknok-cli-oauth-real-'));
+  const reservation = createServer();
+  reservation.listen(0, '127.0.0.1'); await once(reservation, 'listening');
+  const port = reservation.address().port;
+  await new Promise(resolve => reservation.close(resolve));
+  const service = await startHostedService({ port, publicUrl: `http://127.0.0.1:${port}`, dataDir: join(directory, 'service') });
+  t.after(async () => { await service.close(); await rm(directory, { recursive: true, force: true }); });
+  const stateDir = join(directory, 'agent'), results = [], commands = [];
+  const run = async (...args: string[]) => {
+    let value;
+    commands.push(args[0]);
+    await main(['hosted', ...args, '--state-dir', stateDir], { emit: result => { value = result; results.push(result); } });
+    return value;
+  };
+  const setup = await run('setup', '--server', service.url, '--product', 'dot');
+  const original = await readFile(join(stateDir, 'hosted.json'), 'utf8'), profile = JSON.parse(original);
+  const connected = await authorizeOAuth({ baseUrl: service.url, realm: service.url, agentToken: profile.agentToken,
+    cliRequest: async (path, method, input: any) => {
+      const pieces = path.split('/');
+      const value = pieces[3] === undefined ? await run('pair') : method === 'GET' ? await run('pair-status', pieces[3])
+        : await run('pair-confirm', pieces[3], '--confirmation', input.confirmation);
+      return Response.json(value, { status: path === '/oauth/pairings' ? 201 : 200 });
+    },
+  });
+  assert.deepEqual(commands, ['setup', 'pair', 'pair-status', 'pair-confirm']);
+  assert.equal(connected.pending.agent_id, setup.agentId);
+  const grants = await run('grants');
+  assert.equal(grants.grants.length, 1);
+  assert.equal(grants.grants[0].agent_id, setup.agentId);
+  assert.equal(grants.grants[0].client_id, connected.client.client_id);
+  assert.equal((await run('revoke', grants.grants[0].grant_id)).revoked, true);
+  assert.equal((await run('grants')).grants[0].revoked, true);
+  assert.equal((await run('identity')).agentId, setup.agentId);
+  assert.equal(await readFile(join(stateDir, 'hosted.json'), 'utf8'), original);
+  const serialized = JSON.stringify(results);
+  for (const secret of [profile.agentToken, profile.accountToken, connected.tokens.access_token, connected.tokens.refresh_token]) assert.ok(!serialized.includes(secret));
 });
 
 test('default service creates a meeting and contact identity without setup or sending credentials elsewhere', async t => {
@@ -341,7 +455,7 @@ test('real hosted service connects two CLI agents, archives their discussion, an
 });
 
 
-test('legacy contacts cannot start calls and tampered wrapped invitations cannot join', async t => {
+test('contacts without encryption keys cannot start calls and tampered wrapped invitations cannot join', async t => {
   const f = await fixture(t);
   await f.setup();
   await f.run(['friend-add', `${f.url}/contact#offer=${offer}&key=${contactKey}`]);

@@ -9,14 +9,14 @@ These English documents cover implementation, release operations, verification, 
 | [Meeting contract](meeting-contract.md) | HTTP schemas, authorization, receipts, retention, and local sessions |
 | [End-to-end encryption](e2ee.md) | Keys, ciphertext/AAD, sharing, retries, and trust limits |
 | [Hosted service](hosted-service.md) | Identities, contact grants/keys, directed calls, storage, and notifications |
-| [MCP integration](mcp.md) | Local encryption tools, remote ciphertext interfaces, and native Events |
+| [MCP integration](mcp.md) | Local encryption tools, OAuth pairing/scopes, and native Events |
 
 ## Release and operations
 
 | Document | Purpose |
 | --- | --- |
 | [Releasing](releasing.md) | Changesets, npm, previews, source tags, and GitHub Release notes |
-| [Self-hosting](deployment.md) | Initial server setup, schema upgrades, networking, and resource limits |
+| [Self-hosting](deployment.md) | Initial server setup, persistent storage, networking, and resource limits |
 | [Automatic deployment](automatic-deployment.md) | Stable-package deployment, runtime comparison, SSH setup, and rollback |
 | [Website deployment](docs-deployment.md) | Independent static publishing and its restricted server account |
 | [Validation](validation.md) | Test entry points and the limits of historical evidence |

@@ -8,6 +8,8 @@ NokNok is an instant communication tool for agents, with end-to-end encrypted te
 
 [User documentation](https://noknok.cloud)
 
+To let your personal agent receive contact calls while idle, follow the [automatic wake-up guide](https://noknok.cloud/en/guide/mcp).
+
 ## Code of Conduct
 
 Please follow our [Code of Conduct](https://github.com/2heal1/noknok/blob/main/CODE_OF_CONDUCT.md) when participating in this project.

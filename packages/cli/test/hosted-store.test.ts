@@ -49,33 +49,34 @@ test('independent SQLite connections recover the same account without creating d
   } finally { second.close(); }
 });
 
-test('schema upgrade removes admission records while preserving identities, contacts, revocations and quotas', t => {
-  const env = setup(t);
-  const a = env.agent(), b = env.agent(), c = env.agent();
-  const exchange = env.store.acceptOffer(a.agentId, env.store.issueOffer(b.agentId));
-  env.store.revokeAgent(c.agentId);
-  env.store.db.prepare('INSERT INTO quotas(owner,bucket,window_start,expires_at,count) VALUES (?,?,?,?,?)').run(a.accountId, 'create', 0, 1_900_000_000_000, 7);
-  env.store.db.exec(`PRAGMA foreign_keys=OFF;
-    BEGIN IMMEDIATE;
-    CREATE TABLE accounts_old (id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, code_hash TEXT NOT NULL, request_hash TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, UNIQUE(code_hash,request_hash));
-    INSERT INTO accounts_old SELECT id,token_hash,'retired-admission',request_hash,active FROM accounts;
-    DROP TABLE accounts;
-    ALTER TABLE accounts_old RENAME TO accounts;
-    CREATE TABLE codes (hash TEXT PRIMARY KEY, remaining INTEGER NOT NULL, expires_at INTEGER NOT NULL);
-    INSERT INTO codes VALUES ('retired-admission',1,1900000000000);
-    UPDATE meta SET value='1' WHERE name='schema_version';
-    COMMIT;
-    PRAGMA foreign_keys=ON;`);
-  env.restart();
-  assert.deepEqual(env.store.authenticate(a.agentToken), { agentId: a.agentId, accountId: a.accountId });
-  assert.equal(env.store.isAgentActive(c.agentId), false);
-  rejectsCode(() => env.store.authenticate(c.agentToken), 'UNAUTHENTICATED');
-  env.store.verifyCapability(a.agentId, b.agentId, exchange.contact.capability);
-  assert.equal(env.store.db.prepare('SELECT count FROM quotas WHERE owner=?').get(a.accountId).count, 7);
-  assert.equal(env.store.db.prepare("SELECT value FROM meta WHERE name='schema_version'").get().value, '2');
-  assert.equal(env.store.db.prepare("SELECT name FROM sqlite_master WHERE name='codes'").get(), undefined);
-  assert.deepEqual(env.store.db.prepare('PRAGMA foreign_key_check').all(), []);
-  assert.ok(env.store.registerAgent(a.accountToken, { requestId: secret() }).agentId);
+test('unsupported control schemas fail before changing identity data or service keys', t => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'noknok-schema-rejection-'));
+  const options = { dataDir, realm: 'https://noknok.example' };
+  t.after(() => rmSync(dataDir, { recursive: true, force: true }));
+  const store = openHostedStore(options);
+  const account = store.registerAccount(secret());
+  const a = store.registerAgent(account.accountToken, { requestId: secret() });
+  const b = store.registerAgent(account.accountToken, { requestId: secret() });
+  const contact = store.acceptOffer(a.agentId, store.issueOffer(b.agentId));
+  store.close();
+  for (const version of ['1', '2', 'unsupported', null]) {
+    const database = new DatabaseSync(join(dataDir, 'control.sqlite'));
+    if (version === null) database.prepare("DELETE FROM meta WHERE name='schema_version'").run();
+    else database.prepare("INSERT OR REPLACE INTO meta(name,value) VALUES ('schema_version',?)").run(version);
+    database.close();
+    const files = ['control.sqlite', 'signing.key', 'subscriptions.key'];
+    const before = files.map(file => readFileSync(join(dataDir, file)));
+    rejectsCode(() => openHostedStore(options), 'STORE_CONFIGURATION_MISMATCH');
+    files.forEach((file, index) => assert.deepEqual(readFileSync(join(dataDir, file)), before[index], file));
+  }
+  const database = new DatabaseSync(join(dataDir, 'control.sqlite'));
+  database.prepare("INSERT INTO meta(name,value) VALUES ('schema_version','3')").run();
+  database.close();
+  const reopened = openHostedStore(options);
+  try {
+    assert.deepEqual(reopened.authenticate(a.agentToken), { agentId: a.agentId, accountId: account.accountId });
+    reopened.verifyCapability(a.agentId, b.agentId, contact.contact.capability);
+  } finally { reopened.close(); }
 });
 
 test('contact exchange binds both directions and cannot be stolen or forged by C', (t) => {
@@ -154,29 +155,34 @@ test('agent and account quotas persist and reset at bounded window boundaries', 
   assert.equal(env.store.consumeQuota(a.agentId, 'wake.daily', budget).remaining, 1);
 });
 
-test('subscriptions persist encrypted, switch atomically, cannot cross identity AAD, and expire', (t) => {
+test('subscriptions persist encrypted, coexist, cannot cross identity AAD, and expire', (t) => {
   const env = setup(t), a = env.agent(), b = env.agent();
-  const record = { id: 'subscription-1', eventName: 'noknok.activity', deliveryUrl: 'https://host.example/private-target', secret: 'whsec_very-secret-value', expiresAt: env.args.now() + 60_000 };
+  const record = { id: 'subscription-1', owner: 'grant_test', name: 'noknok.activity', arguments: { recipient_id: a.agentId },
+    url: 'https://host.example/private-target', secret: 'whsec_very-secret-value', active: true, expiresAt: env.args.now() + 60_000 };
   env.store.putSubscription(a.agentId, record);
-  assert.deepEqual(env.store.getSubscription(a.agentId), record);
-  assert.equal(env.store.getSubscription(b.agentId), null);
+  rejectsCode(() => env.store.getSubscription(a.agentId, undefined), 'INVALID_ARGUMENT');
+  rejectsCode(() => env.store.deleteSubscription(a.agentId, undefined), 'INVALID_ARGUMENT');
+  assert.deepEqual(env.store.getSubscription(a.agentId, record.id), record);
+  assert.equal(env.store.getSubscription(b.agentId, record.id), null);
   assert.equal(env.store.deleteSubscription(a.agentId, 'not-the-id'), false);
   env.restart();
-  assert.deepEqual(env.store.getSubscription(a.agentId), record);
+  assert.deepEqual(env.store.getSubscription(a.agentId, record.id), record);
   const databaseBytes = readFileSync(join(env.dataDir, 'control.sqlite'));
-  for (const sensitive of [record.secret, record.deliveryUrl, a.agentToken, a.accountToken]) assert.equal(databaseBytes.includes(Buffer.from(sensitive)), false);
+  for (const sensitive of [record.secret, record.url, a.agentToken, a.accountToken]) assert.equal(databaseBytes.includes(Buffer.from(sensitive)), false);
   const raw = new DatabaseSync(join(env.dataDir, 'control.sqlite'));
   try {
     const ciphertext = raw.prepare('SELECT encrypted FROM subscriptions WHERE agent_id=?').get(a.agentId).encrypted;
     raw.prepare('INSERT INTO subscriptions(agent_id,subscription_id,encrypted,expires_at) VALUES (?,?,?,?)').run(b.agentId, record.id, ciphertext, record.expiresAt);
-    rejectsCode(() => env.store.getSubscription(b.agentId), 'SUBSCRIPTION_CORRUPT');
+    rejectsCode(() => env.store.getSubscription(b.agentId, record.id), 'SUBSCRIPTION_CORRUPT');
   } finally { raw.close(); }
   const rotated = { ...record, id: 'subscription-2', secret: 'whsec_new-private-value' };
-  env.store.setSubscription(a.agentId, rotated);
-  assert.deepEqual(env.store.getSubscription(a.agentId), rotated);
-  assert.equal(env.store.deleteSubscription(a.agentId, record.id), false);
+  env.store.putSubscription(a.agentId, rotated);
+  assert.deepEqual(env.store.getSubscription(a.agentId, rotated.id), rotated);
+  assert.equal(env.store.listSubscriptions(a.agentId).length, 2);
+  assert.equal(env.store.deleteSubscription(a.agentId, record.id), true);
+  assert.deepEqual(env.store.getSubscription(a.agentId, rotated.id), rotated);
   env.advance(60_001);
-  assert.equal(env.store.getSubscription(a.agentId), null);
+  assert.equal(env.store.getSubscription(a.agentId, rotated.id), null);
   env.store.cleanup();
 });
 

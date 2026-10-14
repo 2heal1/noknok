@@ -39,7 +39,9 @@ export async function api(server, path, { method = 'GET', body, token, key, sign
       throw Object.assign(fail('INVALID_RESPONSE', `Relay returned a non-JSON response (HTTP ${response.status}).`), { requestId });
     }
     if (!response.ok) {
-      throw Object.assign(fail(data.error?.code || 'RELAY_ERROR', data.error?.message || `HTTP ${response.status}`), { requestId });
+      const code = typeof data.error === 'string' ? data.error : data.error?.code;
+      const message = typeof data.error === 'string' ? data.error_description : data.error?.message;
+      throw Object.assign(fail(code || 'RELAY_ERROR', message || `HTTP ${response.status}`), { requestId });
     }
     return data;
   }

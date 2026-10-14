@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { gunzipSync } from 'node:zlib';
 import { fingerprintFiles } from './runtime-fingerprint.js';
@@ -16,6 +16,7 @@ const REGISTRY = 'https://registry.npmjs.org';
 const REQUIRED = [
   'package.json', 'README.md', 'LICENSE', 'NOTICE', 'dist/bin/noknok.js', 'dist/runtime-fingerprint.json',
   'dist/src/cli.js', 'dist/src/mcp-stdio.js', 'dist/src/hosted-service.js', 'dist/src/e2ee.js',
+  'dist/src/hosted-oauth.js', 'dist/src/oauth-engine.js',
   'dist/src/deploy/server.js', 'dist/src/deploy/hosted-server.js',
   'skills/noknok/SKILL.md', 'skills/noknok/references/hosted.md',
   'dist/web/contact.html', 'dist/web/contact.js', 'dist/web/contact-invitation.js',
@@ -193,6 +194,9 @@ export async function checkPackage({ root = ROOT, archivePath }: { root?: string
     const installed = join(prefix, 'node_modules', '@noknok', 'cli');
     const installedManifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'));
     if (installedManifest.name !== expected.name || installedManifest.version !== expected.version) fail('INSTALLED_IDENTITY_MISMATCH');
+    // Import from the isolated offline install: no workspace node_modules may
+    // satisfy the OAuth library's transitive dependencies at runtime.
+    await command(process.execPath, ['--input-type=module', '-e', `const m = await import(${JSON.stringify(pathToFileURL(join(installed, 'dist/src/hosted-oauth.js')).href)}); if (typeof m.createHostedOAuth !== 'function') process.exit(1);`], { cwd: work, env });
     const installedSkill = join(installed, 'skills', 'noknok', 'SKILL.md');
     const expectedSkill = files.get('skills/noknok/SKILL.md')!.toString('utf8');
     for (const bin of ['noknok']) {
@@ -213,7 +217,7 @@ export async function checkPackage({ root = ROOT, archivePath }: { root?: string
     return {
       ok: true, ...inspection, npmVersion,
       integrity: `sha512-${createHash('sha512').update(archive).digest('base64')}`,
-      checks: ['archive-contents', 'publish-metadata', 'secret-patterns', 'offline-tarball-install', 'offline-npm-exec', 'canonical-cli-bin', 'bundled-skill', 'no-agent-state'],
+      checks: ['archive-contents', 'publish-metadata', 'secret-patterns', 'offline-tarball-install', 'offline-oauth-import', 'offline-npm-exec', 'canonical-cli-bin', 'bundled-skill', 'no-agent-state'],
     };
   } finally {
     await rm(temp, { recursive: true, force: true });

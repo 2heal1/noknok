@@ -155,21 +155,23 @@ export class MeetingStore {
     try {
       let value;
       try { value = JSON.parse(await readFile(path, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-      if (value && ((!reuseName && value.name !== name) || (explicitId !== undefined && explicitId !== value.requestId))) {
+      if (e2ee) requireMeetingKey(e2ee);
+      // Persist complete credentials before the first request. An incomplete
+      // saved receipt must never create replacement credentials for a retry.
+      if (value === undefined) value = { name, requestId: requestId(explicitId), session: `am_${randomUUID()}`,
+        retryToken: randomBytes(32).toString('base64url'), encryptionKey: e2ee?.key ?? generateKey(),
+        encryption: { v: 1, id: e2ee?.encryptionId ?? randomUUID() } };
+      if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.name !== 'string' || !value.name.trim()
+        || typeof value.requestId !== 'string' || !value.requestId.trim() || Buffer.byteLength(value.requestId) > 128 || value.requestId.includes('\0')
+        || !HANDLE.test(value.session) || typeof value.retryToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value.retryToken)
+        || Buffer.from(value.retryToken, 'base64url').toString('base64url') !== value.retryToken
+        || !validKey(value.encryptionKey) || value.encryption?.v !== 1 || !UUID.test(value.encryption.id)) {
+        throw fail('INVALID_LOCAL_RECEIPT', 'The saved meeting receipt is incomplete or invalid. Restore this profile from its trusted local backup.');
+      }
+      if ((!reuseName && value.name !== name) || (explicitId !== undefined && explicitId !== value.requestId)) {
         throw fail('MEETING_IDENTITY_CONFLICT', 'This invitation already has a local participant with another name or request ID. Reuse the original name or a separate explicitly bound profile/state directory.');
       }
-      value ||= { name, requestId: requestId(explicitId), session: `am_${randomUUID()}` };
-      // requestId is public retry metadata, not proof of participant ownership.
-      // Persist an independent recovery capability before sending any request.
-      value.retryToken ??= randomBytes(32).toString('base64url');
-      if (!/^[A-Za-z0-9_-]{43}$/.test(value.retryToken) || Buffer.from(value.retryToken, 'base64url').toString('base64url') !== value.retryToken) throw fail('INVALID_LOCAL_RECEIPT', 'The saved meeting retry capability is invalid. Restore this profile from its trusted local backup.');
-      if (e2ee) {
-        requireMeetingKey(e2ee);
-        if (value.encryptionKey && (value.encryptionKey !== e2ee.key || value.encryption?.id !== e2ee.encryptionId)) throw fail('E2EE_KEY_CONFLICT', 'This invitation conflicts with the saved encryption key.');
-      }
-      value.encryptionKey ??= e2ee?.key || generateKey();
-      value.encryption ??= { v: 1, id: e2ee?.encryptionId || randomUUID() };
-      requireMeetingKey({ key: value.encryptionKey, encryptionId: value.encryption.id });
+      if (e2ee && (value.encryptionKey !== e2ee.key || value.encryption.id !== e2ee.encryptionId)) throw fail('E2EE_KEY_CONFLICT', 'This invitation conflicts with the saved encryption key.');
       await atomicWrite(path, value);
       return { ...value, release, prepare: async (input, transform) => {
         const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');

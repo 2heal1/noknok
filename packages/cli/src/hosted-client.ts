@@ -32,7 +32,7 @@ export function decodeHostedContact(value: unknown, requireEncryption = true) {
     const url = new URL(value), params = new URLSearchParams(url.hash.slice(1));
     if (url.pathname !== '/contact' || url.search || url.username || url.password || params.size !== (params.has('key') ? 2 : 1) || !credential(params.get('offer')) || (requireEncryption && !validKey(params.get('key'))) || (params.has('key') && !validKey(params.get('key')))) throw new Error();
     return { server: hostedOrigin(url.origin), offer: params.get('offer'), key: params.get('key') || undefined, relayLink: `${url.origin}/contact#offer=${encodeURIComponent(params.get('offer')!)}` };
-  } catch { throw fail('INVALID_CONTACT', 'Use a complete encrypted NokNok contact link with offer and key in its fragment. Re-add legacy contacts using a new link.'); }
+  } catch { throw fail('INVALID_CONTACT', 'Use a complete encrypted NokNok contact link with offer and key in its fragment.'); }
 }
 
 export const contactKeyAAD = (sender: string, recipient: string, encryptionId: string) => JSON.stringify(['noknok-contact-key', 1, sender, recipient, encryptionId]);
@@ -150,14 +150,17 @@ async function archiveMeeting(store, state, result, pending, signal) {
 }
 
 export async function hostedCommand(command: string, args: string[], options: CliOptions, { signal, textInput }: CommandContext = {}) {
-  const argumentCount = ['friend-add', 'friend-remove', 'call', 'accept'].includes(command) ? 1 : 0;
+  const argumentCount = ['friend-add', 'friend-remove', 'call', 'accept', 'pair-status', 'pair-confirm', 'revoke', 'subscription-stop'].includes(command) ? 1 : 0;
   if (args.length !== argumentCount) throw fail('INVALID_ARGUMENT', `Expected ${argumentCount} argument(s) after hosted ${command}.`);
+  if (['pair-status', 'pair-confirm', 'revoke', 'subscription-stop'].includes(command) && !identifier(args[0])) throw fail('INVALID_ARGUMENT', 'Use the pairing, grant or subscription ID returned by this service.');
+  if (command === 'pair-confirm' && !credential(options.confirmation)) throw fail('INVALID_ARGUMENT', 'Provide --confirmation from hosted pair-status after reviewing the application, Agent and requested permissions.');
   if (['create', 'call'].includes(command) && !options.purpose?.trim()) throw fail('INVALID_ARGUMENT', 'Provide --purpose with the meeting goal.');
   const store = new HostedStore(options['state-dir']);
   const decoded = command === 'friend-add' ? decodeHostedContact(args[0]) : undefined;
   return store.locked(async (state, save) => {
     const configured = options.server || process.env.NOKNOK_SERVER;
     if (state && configured && hostedOrigin(configured) !== state.server) throw fail('SERVER_MISMATCH', 'This profile belongs to another service. Use a separate profile; no credentials were sent.');
+    if (['pair', 'pair-status', 'pair-confirm', 'grants', 'revoke', 'subscription-stop'].includes(command) && !state?.agentToken) throw fail('HOSTED_SETUP_REQUIRED', 'Use the existing identity with its original --agent profile. Run hosted setup only if you do not already have an identity.');
     if (command === 'setup' || !state?.agentToken) {
       const server = hostedOrigin(options.server || process.env.NOKNOK_SERVER || state?.server || decoded?.server || DEFAULT_HOSTED_SERVER);
       const name = state?.name || nameFrom(options);
@@ -180,25 +183,37 @@ export async function hostedCommand(command: string, args: string[], options: Cl
         await save(state);
       }
       if (command === 'setup') return { agentId: state.agentId, accountId: state.accountId, server: state.server, name: state.name,
-        next: 'Keep this localAgent handle. Use hosted friend-link or hosted friend-add with --agent. Adding a friend does not start a wait loop or activate background wakeup. Use hosted config to obtain private MCP connection settings.' };
+        next: 'Keep this localAgent handle. Use hosted friend-link or hosted friend-add with --agent. Adding a friend does not start a wait loop or activate background wakeup. Use hosted config for local MCP and remote OAuth connection settings.' };
     }
     if (!state?.agentToken) throw fail('HOSTED_SETUP_REQUIRED', 'Resume identity registration using this same --agent profile.');
     if (decoded && decoded.server !== state.server) throw fail('SERVER_MISMATCH', 'The contact link belongs to another service. No credentials were sent. Set up a separate profile for that service.');
     const profile = state; const token = state.agentToken;
     const tool = (name: string, parameters: Record<string, unknown> = {}) => hostedTool(profile.server, token, name, parameters, { signal });
+    if (command === 'pair') return { ...await api(state.server, '/oauth/pairings', { method: 'POST', token, body: {}, signal }), agent_id: state.agentId,
+      next: 'Add the remote /mcp URL using OAuth in your client. Enter user_code on the NokNok authorization page, review the target application, Agent and permissions, then run hosted pair-status with this pairing_id and the same --agent. Pairing links contain no permanent credential or content key.' };
+    if (command === 'pair-status') return { ...await api(state.server, `/oauth/pairings/${args[0]}`, { token, signal }),
+      next: 'Review the displayed application, redirect URI, Agent and scope. Only confirm the request you intended using hosted pair-confirm PAIRING_ID --confirmation CONFIRMATION and this same --agent, then return to the browser to finish authorization.' };
+    if (command === 'pair-confirm') return { ...await api(state.server, `/oauth/pairings/${args[0]}/confirm`, { method: 'POST', token, body: { confirmation: options.confirmation }, signal }),
+      next: 'Return to the same authorization page to finish connecting. Authorization does not create an Events subscription or grant messaging permissions.' };
+    if (command === 'grants') return api(state.server, '/oauth/grants', { token, signal });
+    if (command === 'revoke') return { ...await api(state.server, `/oauth/grants/${args[0]}`, { method: 'DELETE', token, signal }),
+      next: 'This OAuth authorization and its subscriptions are revoked. Other grants and the original local identity remain separate.' };
     if (command === 'wakeup') return { server: state.server, agentId: state.agentId, mode: 'host-instructions', applied: false, requiresClientAction: true,
       subscription: { name: 'noknok.activity', arguments: { recipient_id: state.agentId } },
       instructions: wakeupInstructions(),
       next: 'Follow these instructions in the current client only when the user requested automatic wake-up. This CLI command has not created a subscription or enabled automatic answering.' };
     if (command === 'config') return { server: state.server, agentId: state.agentId, private: true, encryption: 'end-to-end', instructions: connectionInstructions(), requiresClientAction: true,
       messaging: { transport: 'local-cli', command: 'noknok', profile: options.agent ? ['--agent', options.agent] : ['--state-dir', store.directory] },
-      remoteMcpMode: 'ciphertext-only-and-events',
+      remoteMcpMode: 'oauth-events-only',
       mcpConfig: { mcpServers: { noknok: { command: process.execPath, args: [executablePath, 'mcp', ...(options.agent ? ['--agent', options.agent] : ['--state-dir', store.directory])],
         ...(process.env.NOKNOK_HOME ? { env: { NOKNOK_HOME: resolve(process.env.NOKNOK_HOME) } } : {}) } } },
-      eventsMcpConfig: { mcpServers: { noknok_events: { url: `${state.server}/mcp`, headers: { Authorization: `Bearer ${state.agentToken}` } } } },
-      next: 'Use this local stdio MCP with hosted_* then meeting_* tools, or the local CLI: they encrypt and decrypt on this device. The remote MCP only accepts ciphertext and cannot handle natural-language meeting content. Treat Events credentials as a secret; native Events subscription is a separate user-authorized action.' };
+      eventsMcpConfig: { mcpServers: { noknok_events: { url: `${state.server}/mcp` } } },
+      authentication: { type: 'oauth', resource: `${state.server}/mcp`, resourceMetadata: `${state.server}/.well-known/oauth-protected-resource/mcp`,
+        scopes: ['noknok:events:read', 'noknok:events:manage', 'noknok:status:read'], pairingCommand: 'noknok hosted pair', existingAgentRequired: true },
+      next: 'Add the remote URL using OAuth and pair this existing identity with hosted pair; do not paste the CLI Agent token. OAuth grants only Events and minimal status access. Use local stdio MCP or the original CLI for encryption and decryption. Native Events subscription is a separate user-authorized action; an unavailable CLI means notified, waiting for execution environment.' };
     if (command === 'identity') return { ...await tool('noknok_identity'), name: state.name, server: state.server };
     if (command === 'subscription-status') return tool('noknok_subscription_status');
+    if (command === 'subscription-stop') return tool('noknok_subscription_stop', { subscription_id: args[0] });
     if (command === 'friend-link') {
       const result = await tool('noknok_friend_link');
       const link = decodeHostedContact(result.link, false);

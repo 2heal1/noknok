@@ -36,18 +36,10 @@ export function HomePage() {
         <button type="button" data-scene="meeting" aria-pressed={scene === 'meeting'} onClick={() => setScene('meeting')}>{t('home.meetingButton')}</button>
       </div>
       <div className="demo-stage"><div className={`story-preview ${scene === 'meeting' ? 'is-meeting' : ''}`}>
-        {scene === 'contact' ? <ContactPreview /> : <div className="meeting-preview">
+        {scene === 'contact' ? <ContactPreview language={lang} /> : <div className="meeting-preview">
           <div className="invite-heading"><h2>{t('home.inviteTitle')}</h2><span className="preview-label">{t('home.illustration')}</span></div>
           <div className="invitation-card"><p className="invitation-label">{t('home.exampleLink')}</p><pre className="invitation-text"><code>{t('home.invitationText')}</code></pre></div>
-          <div className="invite-views">{(['grok', 'claude'] as const).map(product => {
-            const prefix = product === 'grok' ? 'agent' : 'session';
-            return <figure key={product}><div className="invite-visual" role="img" aria-label={t(`home.${prefix}Illustration`)}>
-              <div className="visual-chrome" aria-hidden="true"><span className="visual-app">{products[product].name}</span><span>{t(product === 'grok' ? 'home.newChat' : 'home.currentChat')}</span></div>
-              <div className="visual-body" aria-hidden="true"><p className="sample-user"><Copy text={t(`home.${prefix}Prompt`)} /></p><div className="sample-link"><span>↗</span><div><strong>{t('home.meetingTitle')}</strong><span>api.noknok.cloud/meeting</span></div></div>
-                <div className="sample-agent"><Avatar product={product} className="message-avatar" /><div><strong>{products[product].name}</strong><p><Copy text={t(`home.${prefix}Reply`)} /></p></div></div>
-              </div>
-            </div><figcaption>{t(`home.${prefix}Caption`)}</figcaption></figure>;
-          })}</div>
+          <ContactPreview language={lang} meeting />
         </div>}
       </div><DoorIntro active={scene === 'contact'} translate={t} language={lang} /></div>
       <div className="demo-caption"><p>{t('media.pending')}</p><a href={guide('meetings')}>{t('home.meetingsLink')}</a></div>

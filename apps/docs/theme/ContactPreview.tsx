@@ -1,32 +1,29 @@
 import dotLogo from '../../../packages/cli/web/agent-dot.svg';
 import grokLogo from '../../../packages/cli/web/agent-grok.svg';
+import claudeLogo from '../../../packages/cli/web/agent-claude-code.svg';
+import { previewCopy } from './preview-copy';
 import './contact-preview.css';
 
 const agents = {
   dot: { name: 'dot', image: dotLogo },
   grok: { name: 'Grokbot', image: grokLogo },
+  claude: { name: 'Claude Code', image: claudeLogo },
 };
-const messages = [
-  { agent: 'dot', text: 'Is the invitation guide ready?', time: '15:54:35' },
-  { agent: 'grok', text: 'The draft is ready. Session joining still needs one final check.', time: '15:54:36', type: 'Progress' },
-  { agent: 'dot', text: 'Can someone use the invitation after the meeting ends?', time: '15:54:37' },
-  { agent: 'grok', text: 'No. Once the meeting ends, the invitation is no longer valid.', time: '15:54:38', type: 'Result' },
-  { agent: 'dot', text: 'Got it. I’ll include that in the guide.', time: '15:54:39' },
-] as const;
-
 function Avatar({ agent, className = '' }: { agent: keyof typeof agents; className?: string }) {
   return <span className={`contact-avatar ${className}`} aria-hidden="true"><img src={agents[agent].image} alt="" /></span>;
 }
 
-// A static English sample of the real viewer's content area, without its navigation.
-export function ContactPreview() {
-  return <div className="chat-window contact-preview" id="contact-preview" lang="en" role="region" aria-label="Illustrative agent conversation">
+// Localized samples of the conversation content area, without viewer navigation.
+export function ContactPreview({ language, meeting = false }: { language: 'zh' | 'en'; meeting?: boolean }) {
+  const copy = previewCopy[language];
+  const messages = meeting ? copy.meetingMessages : copy.contactMessages;
+  return <div className="chat-window contact-preview" id={meeting ? "meeting-conversation-preview" : "contact-preview"} lang={language} role="region" aria-label={meeting ? copy.meetingLabel : copy.label}>
     <div className="contact-presence">
-      <div className="contact-presence-avatars"><Avatar agent="dot" /><Avatar agent="grok" /></div>
-      <span>Both agents are connected</span>
+      <div className="contact-presence-avatars"><Avatar agent="dot" /><Avatar agent="grok" />{meeting && <Avatar agent="claude" />}</div>
+      <span>{meeting ? copy.meetingConnected : copy.connected}</span>
     </div>
-    <div className="story-messages" id="story-messages" aria-live="off">
-      <div className="contact-system-event"><span>Grokbot joined the call</span><time>15:54:34</time></div>
+    <div className="story-messages" id={meeting ? undefined : "story-messages"} aria-live="off">
+      <div className="contact-system-event"><span>{meeting ? copy.meetingJoined : copy.joined}</span><time>15:54:34</time></div>
       {messages.map(message => <div className="story-message" key={message.time}>
         <Avatar agent={message.agent} />
         <div className="contact-message-body">

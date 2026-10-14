@@ -102,23 +102,8 @@
 .noknok-home .invitation-label { color: #6d665b; font-size: 10px; margin-bottom: 10px; }
 .noknok-home .invitation-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.8 'SFMono-Regular', Consolas, monospace; }
 .noknok-home .invitation-text code { font: inherit; }
-.noknok-home .invite-views { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 25px; }
-.noknok-home .invite-views figure { margin: 0; min-width: 0; }
-.noknok-home .invite-visual { background: white; border: 1px solid #e2dfd7; border-radius: 16px; overflow: hidden; min-height: 340px; }
-.noknok-home .visual-chrome { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 16px 19px; border-bottom: 1px solid #eeece7; color: var(--muted); font-size: 10px; }
-.noknok-home .visual-app { color: var(--ink); font-size: 12px; font-weight: 550; }
-.noknok-home .visual-body { padding: 23px 21px; }
-.noknok-home .sample-user { margin-left: auto; width: fit-content; padding: 12px 15px; border-radius: 14px 14px 3px 14px; background: #f1f0ec; color: #44463f; font-size: 12px; line-height: 1.8; }
-.noknok-home .sample-link { display: flex; align-items: center; gap: 10px; border: 1px solid #e5e1d7; padding: 11px 12px; border-radius: 10px; margin-top: 9px; margin-left: auto; width: fit-content; }
-.noknok-home .sample-link > span { color: #6d665b; font-size: 17px; }
-.noknok-home .sample-link strong { font-size: 10px; display: block; font-weight: 500; }
-.noknok-home .sample-link div > span { display: block; font-size: 9px; color: #737067; margin-top: 2px; }
-.noknok-home .sample-agent { display: flex; gap: 10px; margin-top: 25px; }
-.noknok-home .sample-agent .message-avatar { flex-shrink: 0; width: 27px; height: 27px; font-size: 17px; background: #eee1d8; color: #685446; }
-.noknok-home .sample-agent .product-avatar { background: #fff; }
-.noknok-home .sample-agent strong { font-size: 10px; font-weight: 500; }
-.noknok-home .sample-agent p { font-size: 12px; line-height: 1.8; color: #50504c; margin-top: 5px; }
-.noknok-home .invite-views figcaption { margin-top: 12px; text-align: center; font-size: 12px; }
+.noknok-home .meeting-preview { width: min(800px, 100%); margin-inline: auto; }
+.noknok-home .meeting-preview .contact-preview { margin-top: 24px; }
 .noknok-home .claude-avatar { background: #fff; }
 .noknok-home .session-message { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; background: #f3f5ee; }
 .noknok-home .session-message > span { display: grid; place-items: center; font-size: 10px; background: #e3e8da; color: #536146; width: 23px; height: 23px; border-radius: 50%; flex-shrink: 0; }
@@ -126,18 +111,15 @@
 .noknok-home .session-message p { color: #526046; font-size: 11px; }
 @media (max-width: 700px) {
 .noknok-home .story-preview.is-meeting { padding: 27px 22px; }
-.noknok-home .invite-views { grid-template-columns: 1fr; gap: 25px; }
 .noknok-home .invite-heading h2 { font-size: 22px; }
 .noknok-home .invitation-card { padding: 14px; }
 .noknok-home .invitation-text { font-size: 11px; }
-.noknok-home .invite-visual { height: auto; min-height: 335px; }
 }
 @media (max-width: 420px) {
 .noknok-home .story-preview.is-meeting { padding: 24px 15px; }
 .noknok-home .invite-heading { gap: 12px; margin-bottom: 18px; }
 .noknok-home .invite-heading h2 { font-size: 21px; }
 .noknok-home .invite-heading .preview-label { font-size: 9px; }
-.noknok-home .visual-body { padding: 20px 17px; }
 }
 
 @media (max-width: 1000px) {

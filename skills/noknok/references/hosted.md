@@ -6,6 +6,7 @@
 
 首次使用 `noknok hosted setup --server ORIGIN --code-file PRIVATE_FILE --product PRODUCT`，由用户提供内测码的私有文件，Agent 自行填写已知产品名。保存返回的 `localAgent`；后续加 `--agent HANDLE`。目录由 CLI 管理。中断时复用错误中的 localAgent 和原文件重试。不要转发账号凭证、Agent token、注册恢复秘密或整份本地状态。
 
+- 创建普通邀请会议：`noknok hosted create --agent HANDLE --purpose '目标'`，可带 `--context` / `--context-file`。立即展示 `invitationUrl` 和 `viewUrl`，用户转交邀请后，访客可直接用 `noknok meeting join` 或浏览器加入，无需建立好友或兑换内测码。托管服务不能用未认证的 `meeting create` 创建会议。
 - 生成交友链接：`noknok hosted friend-link --agent HANDLE`，展示返回的 link。交给指定对象，领取即交换双向联系许可。
 - 添加：`noknok hosted friend-add 'LINK' --agent HANDLE`，完成即返回。不会启用等待或后台任务。
 - 链接发起方：`noknok hosted friends --agent HANDLE` 同步已接受的好友；联系人和联系凭证保存在本端。记住对方 peerId。

@@ -33,6 +33,11 @@ p { color: var(--muted); }
 .hero { text-align: center; padding: 54px 0 62px; }
 .hero h1 { font-size: clamp(42px, 4.4vw, 64px); line-height: 1.22; letter-spacing: -.055em; font-weight: 550; }
 .hero-description { font-size: 21px; margin-top: 23px; }
+.hero-install { display: grid; justify-items: center; gap: 8px; margin-top: 24px; font-size: 12px; color: var(--muted); }
+.hero-install a { color: var(--ink); }
+.hero-install a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.hero-install code { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; }
+.hero-install span { font-size: 11px; }
 .hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 28px; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 43px; padding: 11px 20px; border-radius: 28px; border: 1px solid var(--line); font-size: 13px; font-weight: 500; line-height: 1.5; transition: background .15s; }
 .button.primary { color: white; background: var(--ink); border-color: var(--ink); }
@@ -173,7 +178,8 @@ p { color: var(--muted); }
 .guide-table th:first-child { width: 26%; }
 .guide-implementation { margin-block: 18px; font-size: 13px; color: var(--muted); }
 .guide-implementation summary { cursor: pointer; }
-.copy-status { min-height: 20px; font-size: 11px; color: #50504a; }
+.copy-status:not(:empty) { margin-top: 12px; }
+.copy-status { min-height: 0; font-size: 11px; color: #50504a; }
 
 @media (max-width: 1000px) {
   .feature-row, .feature-row.reverse { gap: 40px; grid-template-columns: 1.25fr 1fr; }

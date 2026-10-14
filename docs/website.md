@@ -1,6 +1,6 @@
 # Product website
 
-The public product website lives in `website/`. It is a standalone static site with no build step or third-party runtime dependencies. The homepage uses a centered headline, a short subtitle, a large media area, two concise feature rows, and a compact self-hosting/source section. It illustrates two demo scenarios, reserves a place for the future recording, and links to the full public guide at `guide.html`.
+The public product website lives in `website/`. It is a standalone static site with no build step or third-party runtime dependencies. The homepage uses a centered headline, a short subtitle, a large media area, two concise feature rows, and a compact self-hosting/source section. It illustrates two demo scenarios, reserves a place for the future recording, and links to the practical bilingual usage guide at `guide.html`. The hero includes the public npm install command for `@noknok/cli`; the bundled skill is named `noknok`.
 
 The conversations and meeting shown on the website are **illustrative examples**. The website does not connect to a NokNok service, send agent messages, create meeting invitations, or join a real meeting.
 
@@ -14,7 +14,7 @@ The visual reference is the [ChatGPT dots page](https://chatgpt.com/zh-Hans-CN/f
 - Two feature rows explain contacting an agent, with the wake-up condition close to the claim, and a group text meeting that accepts an ordinary agent session without a persistent personal agent. A person adds context by talking to their own session, which relays the authorized supplement into the meeting.
 - A compact ending links to self-hosting guidance and the source. The license note belongs in the source area. The footer marks the product preview and points to the current E2EE and real-host wake-up status.
 
-The homepage has no FAQ, long deployment section, repeated call-to-action blocks, or walkthrough modal. Readers follow a normal script link for the complete storyboard. `guide.html` retains the detailed setup instructions, network and identity boundaries, FAQ, and release conditions with the same near-white background, charcoal text, and official brand assets. Keep these details in the guide when shortening homepage copy.
+The homepage has no FAQ, long deployment section, repeated call-to-action blocks, or walkthrough modal. Readers follow a normal script link for the complete storyboard. `guide.html` covers installation, the bundled skill, choosing a service, copyable meeting prompts, optional CLI commands, human participation, local history, contacts, troubleshooting, and data boundaries with the same near-white background, charcoal text, and official brand assets. Keep these details in the guide when shortening homepage copy.
 
 ## Door intro animation
 
@@ -32,7 +32,23 @@ The existing real-recording configuration in `website/content.js` remains availa
 
 Show the full `invitationText` template from `src/meeting-client.mjs`: the join link, goal, agent/browser instructions, and read-only view link. Redact the meeting ID and both credentials, using `https://api.noknok.cloud/meeting#id=…&invite=…` and `https://api.noknok.cloud/meeting#id=…&view=…`. Keep the actual English CLI instructions in both website languages; only the illustrative meeting goal follows the page language. The older `An anonymous agent invites…`, `/invite/<callId>?key=…`, `Session:` and `/view#session=…` format belongs to the two-party `invite` / `accept` flow and must not stand in for a reusable group-meeting invitation. Both panels refer to the same example meeting. The link `?scene=meeting#demo` opens this scene directly, including when a recording is configured. Label the address as an example and the panels as illustrations; they are neither functioning meeting entries nor screenshots of verified host integrations. Do not embed live invitation credentials or turn the redacted address into a join link.
 
-The repository still implements browser-based human participation. That is an existing implementation capability, not the C role or the public story used here; this content change does not remove or deny it.
+The repository also implements browser-based human participation. The usage guide explicitly describes opening an invitation, joining as a person, and sending a supplement, separately from watching through a read-only view link. This is a real participation option, distinct from the illustrative C role on the homepage.
+
+## Usage-guide maintenance
+
+The guide is written for someone who has not read the repository or a demo script. Its main path is: install `@noknok/cli` in the agent’s execution environment → read `noknok skill` → choose one reachable service → create a meeting → forward the complete invitation → join and discuss → let the host end → keep local records. Skill files and references ship in the npm package. `noknok skill --path` locates the installed `skills/noknok/SKILL.md`; no separate skill package or repository clone is required. This is not automatic registration with every agent host.
+
+Keep instructions grounded in shipped CLI behavior:
+
+- Use `noknok` as the canonical command and `@noknok/cli` as the package. Link to the package instead of hardcoding a release version into the static site. Protocol names and supported compatibility environment variables do not change when the skill is renamed.
+- Use `noknok server` for a same-machine quick start. Everyone in a meeting uses the same reachable service; installing the CLI on each side does not require running multiple servers.
+- Distinguish authenticated hosted creation with `hosted create` from a guest joining an ordinary invitation with `meeting join`. Hosted beta codes create hosted identities; an ordinary meeting guest does not need an identity merely to join.
+- Store and reuse each agent’s own returned `localAgent` and `session`. Do not prompt users to invent local directories or copy a different agent’s handles.
+- Separate the invitation’s join capability from the read-only view capability. Browser participants are humans; an agent that relays a human’s words is still an agent.
+- Keep E2EE and real-host wake-up status accurate. The current hosted origin is restricted to synthetic integration testing, not an unrestricted public service. Adding contacts does not enable automatic background answering.
+- Link product documentation to `main`, not stale feature branches or PRs. Keep the existing homepage illustration and brand layout; operational steps belong in the guide.
+
+Guide copy lives in `website/guide-copy.js`, homepage copy in `website/home-copy.js`. Each key must have both Chinese and English values. The corresponding HTML contains Chinese fallback text for no-JavaScript rendering. When changing translated content, update both the catalog and fallback HTML. Prompt-copy feedback should remain near the selected card.
 
 ## Website language
 
@@ -42,7 +58,7 @@ Translations include navigation, metadata, accessibility labels, demo conversati
 
 ## Local preview
 
-Use Node.js 24 from the source repository root:
+Use Node.js 24:
 
 ```sh
 npm run website

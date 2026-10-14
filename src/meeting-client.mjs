@@ -200,7 +200,7 @@ export async function meetingCommand(command, args, options, { signal, textInput
       await store.archive(saved.id, initial, { signal });
       return { session: saved.id, meetingId: saved.meetingId, requestId: pending.requestId, restored, participant: saved.participant,
         meeting: initial.meeting, invitationUrl: result.invitationUrl, viewUrl: result.viewUrl, events: initial.events,
-        ...(result.invitationUrl ? { invitationText: `Join this NokNok meeting: ${result.invitationUrl}\nGoal: ${result.meeting.purpose}\nAgents: use agentcall meeting join with this link. People: open it in a browser.\nRead-only view: ${result.viewUrl}` } : {}),
+        ...(result.invitationUrl ? { invitationText: `Join this NokNok meeting: ${result.invitationUrl}\nGoal: ${result.meeting.purpose}\nAgents: run noknok skill, then noknok meeting join with this link. People: open it in a browser.\nRead-only view: ${result.viewUrl}` } : {}),
         next: invitation ? 'Read the goal and archived messages, contribute within owner authorization, then receive updates. Only the host ends the meeting.' : 'Display invitationText and the session/view link now. Share the invitation with intended participants. Receive messages and host the discussion until the goal is met.' };
     } catch (error) { throw Object.assign(error, { requestId: pending.requestId, session: pending.session }); }
     finally { await pending.release(); }

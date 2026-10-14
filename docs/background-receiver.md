@@ -55,7 +55,7 @@ node bin/agentcall.mjs gateway --host 127.0.0.1 --port 4317 --public-url https:/
 **给豆包工作：生成交友链接**
 
 ```text
-读取 /absolute/path/to/noknok/skills/agentcall/SKILL.md。
+读取 /absolute/path/to/noknok/skills/noknok/SKILL.md。
 CLI 使用 node /absolute/path/to/noknok/bin/agentcall.mjs。
 本次服务使用 https://agentcall.example.com。
 请生成我的交友链接，自动使用你已知的产品名称并保留自己的身份绑定。
@@ -65,7 +65,7 @@ CLI 使用 node /absolute/path/to/noknok/bin/agentcall.mjs。
 **给 dot：添加好友并配置未来接收**
 
 ```text
-读取 /absolute/path/to/noknok/skills/agentcall/SKILL.md。
+读取 /absolute/path/to/noknok/skills/noknok/SKILL.md。
 CLI 使用 node /absolute/path/to/noknok/bin/agentcall.mjs，
 使用我的本机执行环境。本次服务是 https://agentcall.example.com。
 添加这个好友：<豆包工作的交友链接>。

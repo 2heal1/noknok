@@ -6,33 +6,40 @@ NokNok 提供两种模式：基础 `server` 用于用户转交邀请的临时会
 
 `/meeting` 展示多人交流并区分人和 Agent，健康接口为 `/health`。会议由 CLI/MCP 创建；无邀请的页面不提供创建表单。旧 `/view`、两方通话和本机接收器只属于兼容模式。
 
-## 本机验证
+## 安装与本机验证
 
-基础邀请会议无需账号：
+在服务所在机器安装 Node.js 22.13 或更高版本（建议 24），再安装 CLI。包中同时包含 `noknok` skill、会议网页和服务入口：
 
 ```sh
-node bin/noknok.mjs server --port 4317
+npm install --global @noknok/cli
+noknok --version
+```
+
+基础邀请会议无需账号或数据库，保持以下进程运行：
+
+```sh
+noknok server --port 4317
 ```
 
 托管模式使用独立数据目录：
 
 ```sh
-node bin/noknok.mjs hosted-server --data-dir .noknok-service --public-url http://127.0.0.1:4317
+noknok hosted-server --data-dir .noknok-service --public-url http://127.0.0.1:4317
 ```
 
 另一个终端生成限次内测码：
 
 ```sh
-node bin/noknok.mjs beta-code --data-dir .noknok-service --public-url http://127.0.0.1:4317 --output-file .noknok-service/code.txt
+noknok beta-code --data-dir .noknok-service --public-url http://127.0.0.1:4317 --output-file .noknok-service/code.txt
 ```
 
 `--output-file` 以 `0600` 权限创建新文件，不覆盖已有文件。将代码私下交给目标用户，用 `hosted setup --code-file FILE` 兑换；不要提交状态目录或代码文件。省略输出文件会直接打印包含代码的结果，适合明确需要读取代码的运营操作。
 
-后续加好友、发起会议和原生订阅的步骤见 [托管服务使用说明](hosted-service.md)。不同电脑的 localhost 不相通，云端 dot 也不能直接访问你的 `127.0.0.1`。
+基础服务启动后，按照[开始使用](getting-started.md)创建并转交会议邀请。托管服务需先兑换码建立主持者身份，再创建会议；普通邀请的访客可以直接加入。后续加好友、发起会议和原生订阅见[托管服务使用说明](hosted-service.md)。不同电脑的 localhost 不相通，云端 dot 也不能直接访问你的 `127.0.0.1`。
 
 ## 托管模式的 HTTPS 部署
 
-域名解析到服务器，开放 80/443，准备 Docker Compose，然后在仓库根目录执行：
+这一节适合服务运营者，使用仓库中的部署模板；普通参会者只需安装 CLI 或打开邀请，无需部署。取得仓库源码后，将域名解析到服务器，开放 80/443，准备 Docker Compose，然后在仓库根目录执行：
 
 ```sh
 export NOKNOK_DOMAIN=noknok.example.com
@@ -105,7 +112,7 @@ Compose 为应用和 Caddy 分别设置 384 MiB、128 MiB 内存上限，主机�
 `--public-url` 只是参与者实际访问的 origin，不会申请网络通道；服务不支持子路径挂载。基础邀请模式可这样部署，并用 `AGENTCALL_SERVER_KEY` 限制创建：
 
 ```sh
-node bin/noknok.mjs server --host 0.0.0.0 --port 4317 --public-url https://relay.example.com
+noknok server --host 0.0.0.0 --port 4317 --public-url https://relay.example.com
 ```
 
 该共享密钥不等于托管模式的内测码和多身份鉴权。通用兼容入口 `deploy/server.mjs` 仍接受 `PORT`、`AGENTCALL_PUBLIC_URL`、`AGENTCALL_SERVER_KEY`、`AGENTCALL_MAX_MEETINGS` 等原配置；它不自动开启新的托管模式。

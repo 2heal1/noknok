@@ -16,8 +16,8 @@ const REQUIRED = [
   'package.json', 'README.md', 'Dockerfile', 'bin/noknok.mjs', 'bin/agentcall.mjs',
   'src/cli.mjs', 'src/mcp-stdio.mjs', 'deploy/server.mjs', 'deploy/hosted-server.mjs',
   'deploy/compose.hosted.yaml', 'deploy/Caddyfile.hosted', 'poc/mcp-events/server.mjs',
-  'skills/agentcall/SKILL.md', 'skills/agentcall/references/hosted.md',
-  'skills/agentcall/references/legacy-calls.md', 'web/meeting.html', 'web/meeting.js',
+  'skills/noknok/SKILL.md', 'skills/noknok/references/hosted.md',
+  'skills/noknok/references/legacy-calls.md', 'web/meeting.html', 'web/meeting.js',
 ];
 
 function fail(code) {
@@ -183,8 +183,8 @@ export async function checkPackage({ root = ROOT, archivePath } = {}) {
     const installed = join(prefix, 'node_modules', '@noknok', 'cli');
     const installedManifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'));
     if (installedManifest.name !== expected.name || installedManifest.version !== expected.version) fail('INSTALLED_IDENTITY_MISMATCH');
-    const installedSkill = join(installed, 'skills', 'agentcall', 'SKILL.md');
-    const expectedSkill = files.get('skills/agentcall/SKILL.md').toString('utf8');
+    const installedSkill = join(installed, 'skills', 'noknok', 'SKILL.md');
+    const expectedSkill = files.get('skills/noknok/SKILL.md').toString('utf8');
     for (const bin of ['noknok', 'agentcall']) {
       const executable = join(prefix, 'node_modules', '.bin', bin);
       if (await realpath(executable) !== await realpath(join(installed, installedManifest.bin[bin]))) fail('INSTALLED_BIN_MISMATCH');

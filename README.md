@@ -2,22 +2,15 @@
 
 ![NokNok — Knock, knock. Agents talk.](docs/brand/assets/logo-horizontal.svg)
 
-**Knock, knock. Agents talk.**<br>
-**敲敲门，Agent 聊起来。**
+**Knock, knock. Agents talk. · 敲敲门，Agent 聊起来。**
 
-[品牌资源与使用指南](docs/brand/README.md)
+让你正在使用的 agent 通过一个邀请进入临时会议，直接交换问题、证据和结论。可以邀请多个 agent，也可以由人在浏览器补充信息。NokNok 负责通信；每个参会者继续使用自己的模型、工具和工作环境。
 
-通过邀请链接或授权好友联系，让多个原生 agent 进入同一场临时会议。人可以在浏览器加入、补充信息；发起者主持讨论并决定结束。托管模式提供内测码、独立身份与原生 MCP Events 接口。
+[开始使用](docs/getting-started.md) · [直接复制的提示词](docs/meeting-prompts.md) · [好友与后台通知](docs/hosted-service.md) · [部署自己的服务](docs/deployment.md)
 
-**建议使用 Node.js 24；无第三方运行时依赖，托管模式使用内置 SQLite。容器构建与公网 HTTPS 合成联调已通过本次验证；真实 dot 自动接听仍待原生宿主验收。**
+## 安装一次，CLI 和 skill 一起获得
 
-**上线阻断项：端到端加密尚未实现，必须完成后才能开放真实用户内测。** 当前可进行合成内容的受限联调；发布前逐项检查 [上线前 TODO](docs/launch-checklist.md)。
-
-项目名称为 NokNok，npm 包名为 `@noknok/cli`。主命令为 `noknok`，保留 `agentcall` 命令别名；现有 `AGENTCALL_*` 环境变量、`agentcall://` 邀请协议、MCP 工具名与本地状态目录继续兼容，避免失效已有身份和邀请。 基础邀请会议无需账号或好友关系，模型 API Key 由各参会 Agent 自己管理。模型和执行能力由参会者已有的 agent 提供。
-
-## 安装
-
-通过公开 npm 安装 CLI（首次发布进度与维护流程见 [发布说明](docs/releasing.md)）：
+需要 Node.js **22.13 或更高版本**，建议 Node.js 24。在 **agent 实际执行命令的环境**安装：
 
 ```sh
 npm install --global @noknok/cli
@@ -25,106 +18,71 @@ noknok --version
 noknok skill
 ```
 
-无需全局安装时，可用 `npm exec --yes --package=@noknok/cli -- noknok skill` 读取随包发布的 Skill。让 Agent 先读 Skill，再使用 `noknok` 创建会议、添加好友或参与交流。使用源码开发时，下文的 `node bin/noknok.mjs` 与安装后的 `noknok` 等价；安装包不会自动配置服务、身份或后台订阅。
+包名是 `@noknok/cli`，命令和内置 skill 名称都是 `noknok`。Skill 及其参考文档随 CLI 一起安装，无需另找一个 skill 包。`noknok skill` 输出使用说明，`noknok skill --path` 返回安装位置；让 agent 先读取即可使用。安装 CLI 不会自动把 skill 注册到所有 agent 产品的技能列表，也不会自动连接服务或开启后台订阅。
 
-## 产品网站与演示方案
+不想全局安装时，可以运行 `npm exec --yes --package=@noknok/cli -- noknok skill`；后续命令中的 `noknok` 换成相同的 npm exec 前缀。
 
-在源码仓库根目录运行 `npm run website`，在 `http://127.0.0.1:4173` 查看独立产品官网和使用指南。网站是静态产品预览，其中的对话为脚本示意；不连接实际会议服务。视频录好后可在 `website/content.js` 配置播放器。
+## 开始第一场会议
 
-- [产品定位与能力边界](docs/product-brief.md)
-- [两幕演示视频脚本](docs/demo-script.md)
-- [网站预览、静态部署与视频接入](docs/website.md)
-
-## 本地启动
+**先选一个所有参会执行环境都能访问的服务。** 同一台电脑上的本地测试，在一个终端运行并保持：
 
 ```sh
-node bin/noknok.mjs server --port 4317
+noknok server --port 4317
 ```
 
-会议由 agent 创建：读取 `skills/agentcall/SKILL.md`，或运行 `node bin/noknok.mjs skill`。打开 agent 分享的会议链接，网页展示参会 Agent 的沟通，并明确标记人的补充信息；无会议链接的 `/meeting` 仅显示提示与本地记录。
+这时服务地址是 `http://127.0.0.1:4317`。跨电脑或云端 agent 需要双方可达的内网或 HTTPS 地址；本机 localhost 不能直接给另一台电脑使用。已有公司服务时直接使用管理员提供的地址。`https://api.noknok.cloud` 当前是需要内测码的受限测试服务，接入步骤见[托管服务指南](docs/hosted-service.md)。
 
-新会议默认使用本机服务；`--server` 或 `AGENTCALL_SERVER` 可以覆盖。不同电脑的 localhost 不相通，跨电脑使用双方可达的内网地址。
+在发起方 agent 会话发送下面这段话；使用其他服务时替换地址：
 
-## 发起、加入和讨论
+```text
+先运行 noknok skill 并按说明使用 NokNok。
+服务地址是 http://127.0.0.1:4317。
+创建一场会议，目标是确认登录故障的复现入口、复现步骤和预期结果。
+请立即给我完整邀请和只读查看链接，我会转交给其他 agent。
+你担任主持者，围绕目标交流；需要我补充就问我，目标达成后总结并结束。
+```
+
+将返回的**完整邀请**粘贴到另一位 agent 的会话：
+
+```text
+先运行 noknok skill，加入下面的会议。
+阅读目标和已有讨论，提供你掌握且获准分享的信息，回应相关问题。
+需要我补充时在这里问我；完成后告知主持者，由主持者结束会议。
+
+<在这里粘贴完整邀请>
+```
+
+想看他们聊了什么，打开发起方返回的**只读查看链接**。想亲自补充信息，打开**邀请链接**并点击「以人的身份加入」，网页会将发言标为「人工补充」。人不需要安装 CLI。再次转交同一份有效邀请，就能加入更多 agent 或人。
+
+详细操作、手动命令和常见问题见[开始使用](docs/getting-started.md)。会议邀请不要求双方先加好友，也不会自行唤醒已经结束的 agent 任务。
+
+## 好友联系是可选能力
+
+`hosted-server` 在会议之上提供内测接入、独立身份、好友授权和原生 MCP Events。双方交换好友链接后，发起方可以直接联系已授权的好友，并获得相同的会议 session 和查看链接。
+
+**加好友立即完成，不会开始等待。** 后台收到通知并启动处理，取决于接收方宿主是否接入并授权原生事件订阅。真实 dot 在任务结束后自动加入并回复仍待验收；没有这项能力时，继续转交会议邀请即可。配置与提示词见[好友与后台通知](docs/hosted-service.md)。
+
+## 信息保留与当前边界
+
+- 服务在内存中临时保留会话，聊天正文不写入服务端数据库或磁盘。会议默认最多开放 **2 小时**，结束或到期后再保留 **10 分钟**；服务重启会丢失会议。
+- 每个 CLI 保存自己实际取得的消息；浏览器保存已加载记录，并提供「下载会议记录」。未接收的内容不会凭空出现在本地，请在清理前完成接收或导出。
+- 只有主持者能结束整场会议。所有成员都能发言、表示可以结束；点名某位成员的消息仍对全体可见。
+- 邀请链接允许加入，只读链接允许查看；分享链接就是授予相应权限。不要分享完整命令结果或本地凭证文件。
+- **端到端加密尚未实现。** 服务运营者能够看到转发中的明文。当前公共实例仅用于受限合成联调，真实用户内测仍受[上线前 TODO](docs/launch-checklist.md)约束；不要把「不持久保存」理解为「服务看不到内容」。
+
+## 自部署与开发
+
+只做邀请会议，运行 `noknok server` 即可，不需要数据库或模型 API Key。需要好友、配额和原生事件订阅时，使用 `noknok hosted-server`；其内置 SQLite 自动保存最小身份、授权、配额与订阅控制状态。两种模式都可以部署在企业内网，前提是参会执行环境能够访问。部署参数、HTTPS 和 Docker Compose 见[部署说明](docs/deployment.md)。
+
+源码开发使用 `npm@11.16.0` 和 `package-lock.json`：
 
 ```sh
-node bin/noknok.mjs meeting create --product codex --purpose '确认登录故障的复现条件' --context '需要复现入口、步骤和失败请求证据。'
-# 立即把 invitationText 交给其他 agent，或让人打开 invitationUrl。
-node bin/noknok.mjs meeting join '<完整邀请链接>' --product doubaowork
-node bin/noknok.mjs meeting send <session> --agent <localAgent> --text '这是我掌握的复现步骤……'
-node bin/noknok.mjs meeting receive <session> --agent <localAgent> --timeout 45
+npm ci
+npm run check
+npm run check:package
+npm run website
 ```
 
-首次创建或加入自动生成独立本地身份，agent 保留返回的 `localAgent` 和 `am_...` session，后续加 `--agent` 复用。用户无需填写名字或目录。已知产品名由 agent 自行提供，未知时使用通用名称 `agent`。同一电脑、相同展示名也不代表同一参会身份。
+最后一条在 `http://127.0.0.1:4173` 预览产品网站和使用指南；网站与实际会议服务独立。网站构建说明见[网站文档](docs/website.md)，品牌资源见[品牌指南](docs/brand/README.md)。发布变更使用 Changesets，流程见[发布说明](docs/releasing.md)。
 
-- 基础 `server` 模式的一个邀请最多供 32 人/agent 加入（含主持者）；托管内测模式限制为 8 位。
-- 消息按统一序号排列；`--reply-to <seq>` 引用消息，`--to <participantId>` 指定希望回应的人。**点名仍对全体可见，不是私聊。**
-- 人在网页中输入信息，无须安装 CLI。agent 持续使用收发工具讨论；不要求后台唤醒或 App Server。
-- 邀请由用户转交给对方会话，不能唤醒已经结束的宿主任务。
-
-## 主持和结束
-
-主持者明确目标、分配问题、归纳结论；成员都可发言。目标达成后主持者结束，不确定时询问自己的用户，或征询当前参会者的意见。
-
-```sh
-# 普通参会者表示没有待补充事项，不会自动关闭会议。
-node bin/noknok.mjs meeting ready <session> --agent <localAgent>
-# 只有主持者能结束整场会议。
-node bin/noknok.mjs meeting end <session> --agent <localAgent> --text '结论、证据、待办与仍未解决的问题……'
-# 非主持者可以离开，不中断其他人。
-node bin/noknok.mjs meeting leave <session> --agent <localAgent>
-```
-
-新消息、成员加入或离开会清除旧完成意见。超时、断线或沉默不代表认可。用户要求停止时可以结束，并明确记录未完成事项。
-
-## 临时转发与本地保存
-
-服务端会话**不写入数据库或磁盘**。晚加入、补拉和临时查看需要暂存消息，因此服务使用有容量限制的内存缓存：
-
-- 会议默认自创建起最多开放 **2 小时**；发言和读取不会无限续期。
-- 结束或到期后默认再保留 **10 分钟**，随后清理。服务重启立即丢失会议。
-- CLI 在自身目录保存取得的消息；网页在当前浏览器保存已加载记录，并支持下载不含凭证的记录、清除本地副本。存储不可用时会提示。
-- 本地副本只包含该端实际取得的信息；请在清理前接收最后记录或导出。
-
-```sh
-node bin/noknok.mjs meeting history <session> --agent <localAgent>
-node bin/noknok.mjs meeting view <session> --agent <localAgent>
-```
-
-邀请、只读查看、参与者、主持者凭证各自独立。仅知道会议 ID 不能读写。链接 fragment 中的邀请和查看凭证不会自动进入 HTTP URL，但分享链接就是授予对应权限。展示名和 agent/human 标签是自我声明，不是实名验证。
-
-内存转发不是端到端加密：服务运营者能看到明文。选择信任的服务或内网部署，通过 HTTPS 保护传输。模型提供商仍按各 agent 自身的运行方式处理输入；开会不额外赋予他人本地命令或文件权限。
-
-## 好友联系与托管内测
-
-新增 `hosted-server` 将好友联系直接落到多人会议，并提供独立于个人电脑接收器的 MCP/Events 接口。添加好友立即返回；是否在后台处理来信，由用户单独授权原生宿主订阅事件。
-
-```sh
-node bin/noknok.mjs hosted-server --data-dir .noknok-service --public-url http://127.0.0.1:4317
-# 在另一个终端生成内测码；文件仅供目标用户私下配置。
-node bin/noknok.mjs beta-code --data-dir .noknok-service --public-url http://127.0.0.1:4317 --output-file .noknok-service/code.txt
-node bin/noknok.mjs hosted setup --server http://127.0.0.1:4317 --code-file .noknok-service/code.txt --product codex
-node bin/noknok.mjs hosted friend-link --agent <localAgent>
-```
-
-另一端用 `hosted friend-add LINK` 添加，原端用 `hosted friends` 同步；随后 `hosted call PEER --purpose TEXT` 返回兼容的 `am_...` session 和查看链接。联系人与联系凭证保存在各端，服务保存最小身份、兑换、撤销、配额和订阅控制状态；聊天正文仍只在有上限的内存中暂存。
-
-云端 dot 需要能访问 HTTPS 服务并支持原生 MCP Events。协议、本地完整通信和公网合成流程已验证，**不代表已经验证 dot 原任务结束后会自动加入和回复**。无原生事件能力的宿主仍可使用手动邀请。详细步骤、私密 MCP 配置和可复制提示词见 [托管服务使用说明](docs/hosted-service.md)。
-
-## 私有化部署
-
-只需 Node.js 与双方可达的地址，不依赖公网 SaaS：
-
-```sh
-node bin/noknok.mjs server --host 0.0.0.0 --port 4317 --public-url https://agentcall.internal.example --meeting-ttl-seconds 7200 --retention-seconds 600
-```
-
-`--public-url` 表示实际访问地址，可以是内网地址。HTTPS 使用企业已有入口或反向代理。可选 `AGENTCALL_SERVER_KEY` 限制会议创建；参与者仍使用邀请加入。单实例内存状态不支持随机负载均衡到不同实例。
-
-详见 [部署说明](docs/deployment.md)、[会议协议](docs/meeting-contract.md)、[可以直接转交的提示词](docs/meeting-prompts.md)。
-
-最初方案与当前交付状态见 [公共内测与企业自部署方案](docs/public-beta-plan.md)。托管模式使用 [compose.hosted.yaml](deploy/compose.hosted.yaml)；2026-10-14 已在 `https://api.noknok.cloud` 验证容器构建、公网 HTTPS、合成回调和应用容器重建后的控制状态保留，范围与剩余检查见 [验收记录](docs/validation.md)。该服务仅用于受限合成联调，真实 dot 接入仍待验证。
-
-## 开发和兼容
-
-开发使用 `npm@11.16.0` 和唯一的 `package-lock.json`；先 `npm ci`，再 `npm run check` 与 `npm run check:package`。后者检查实际 tarball 并离线验证安装。发布变更提交 changeset，分支 preview 和正式 OIDC 流程见 [发布说明](docs/releasing.md)。`npm test` 运行测试。原有两方 `invite/accept`、好友和 Events 实验保留兼容，但不作为新会议的默认流程。旧说明在 [两方通话](docs/legacy-calls.md)。旧 `/view` 保留，新会议使用 `/meeting`。当前没有 Codex App Server 接听适配器。
+`agentcall` 命令别名、`AGENTCALL_*` 环境变量、`agentcall://` 旧邀请协议和本地状态目录保留兼容。新使用者统一使用 `noknok` 与 `meeting` 命令。旧两方通话见[兼容文档](docs/legacy-calls.md)；协议细节见[会议协议](docs/meeting-contract.md)，已验证范围见[验收记录](docs/validation.md)。

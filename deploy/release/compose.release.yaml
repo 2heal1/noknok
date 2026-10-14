@@ -6,6 +6,8 @@ services:
     environment:
       NOKNOK_PUBLIC_URL: https://${NOKNOK_DOMAIN:?set NOKNOK_DOMAIN}
       NOKNOK_DATA_DIR: /data
+      # No backend ports are published; Caddy overwrites forwarded client IPs.
+      NOKNOK_TRUST_PROXY: "true"
       NODE_OPTIONS: --max-old-space-size=192
     volumes: ["control:/data"]
     restart: unless-stopped

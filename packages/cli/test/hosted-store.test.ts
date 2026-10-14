@@ -260,3 +260,35 @@ test('unclaimed contact links expire at 30 minutes without deleting established 
   assert.equal(env.store.claimOffer(a.agentId, acceptedOffer).accepted, true);
   assert.equal(env.store.verifyCapability(b.agentId, a.agentId, exchange.contact.capability).issuer, a.agentId);
 });
+
+test('registration quotas are atomic, persistent and charge only new accounts', t => {
+  const env = setup(t), source = '192.0.2.10', requestId = secret();
+  const first = env.store.registerAccount(requestId, source);
+  for (let i = 0; i < 9; i++) env.store.registerAccount(secret(), source);
+  rejectsCode(() => env.store.registerAccount(secret(), source), 'QUOTA_EXCEEDED');
+  env.restart();
+  assert.deepEqual(env.store.registerAccount(requestId, source), first);
+  rejectsCode(() => env.store.registerAccount(secret(), source), 'QUOTA_EXCEEDED');
+  env.advance(3_600_000);
+  for (let i = 0; i < 10; i++) env.store.registerAccount(secret(), source);
+  env.advance(3_600_000);
+  rejectsCode(() => env.store.registerAccount(secret(), source), 'QUOTA_EXCEEDED');
+  assert.equal(env.store.db.prepare("SELECT count FROM quotas WHERE owner='service' AND bucket='accounts.day'").get().count, 20);
+  // Another source retains its allowance; raw client addresses are not stored.
+  env.store.registerAccount(secret(), '192.0.2.11');
+  assert.equal(JSON.stringify(env.store.db.prepare('SELECT owner,bucket FROM quotas').all()).includes(source), false);
+  env.advance(86_400_000);
+  env.store.registerAccount(secret(), source);
+});
+
+test('daily registration ceiling bounds distributed signups without charging failed attempts', t => {
+  const env = setup(t);
+  for (let i = 0; i < 100; i++) env.store.registerAccount(secret(), `192.0.2.${i + 1}`);
+  rejectsCode(() => env.store.registerAccount(secret(), '198.51.100.1'), 'QUOTA_EXCEEDED');
+  assert.equal(env.store.db.prepare('SELECT COUNT(*) AS n FROM accounts').get().n, 100);
+  assert.equal(env.store.db.prepare('SELECT COUNT(*) AS n FROM quotas WHERE owner != ?').get('service').n, 200);
+  env.restart();
+  rejectsCode(() => env.store.registerAccount(secret(), '198.51.100.1'), 'QUOTA_EXCEEDED');
+  env.advance(86_400_000);
+  env.store.registerAccount(secret(), '198.51.100.1');
+});

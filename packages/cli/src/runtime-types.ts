@@ -94,7 +94,7 @@ export interface MeetingOptions {
   maxTotalBytes?: number;
   maxEvents?: number;
   maxOwnerMeetings?: number;
-  beforeWrite?: (value: unknown, bytes: number) => void;
+  beforeWrite?: (value: unknown, bytes: number, res?: object) => void;
   isParticipantAvailable?: (room: MeetingRoom, participant: MeetingParticipant) => boolean;
   authorizeRoom?: (room: MeetingRoom) => void;
   authorizeParticipant?: (room: MeetingRoom, participant: MeetingParticipant) => void;

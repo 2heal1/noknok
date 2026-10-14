@@ -150,7 +150,7 @@ export function createMeetings(options: MeetingOptions) {
   let closing = false;
 
   function reply(res, status, value) {
-    try { options.beforeWrite?.(value, Buffer.byteLength(JSON.stringify(value))); }
+    try { options.beforeWrite?.(value, Buffer.byteLength(JSON.stringify(value)), res); }
     catch (error) { return write(res, error.status || 503, { error: { code: error.code || 'response_budget', message: error.status ? error.message : 'Response budget reached.' } }); }
     return write(res, status, value);
   }

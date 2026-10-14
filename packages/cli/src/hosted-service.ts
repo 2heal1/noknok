@@ -1,4 +1,5 @@
 import type { AddressInfo } from 'node:net';
+import { isIP } from 'node:net';
 import type { HostedStore } from './hosted-store.js';
 import type { ActivityEvent, DeliveryAuthorization, DeliveryView, EventsOptions, HostedIdentity, WebhookPost } from './hosted-types.js';
 import type { MeetingParticipant } from './runtime-types.js';
@@ -62,12 +63,37 @@ function validOrigin(value) {
   return url.origin;
 }
 
+// Forwarded addresses are opt-in: only enable behind an isolated proxy that
+// overwrites X-Forwarded-For. Never trust client-supplied address chains.
+export function clientRateKey(req: Pick<http.IncomingMessage, 'socket' | 'headers'>, trustProxy = false): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  let address = req.socket.remoteAddress || 'unknown';
+  if (trustProxy && typeof forwarded === 'string' && isIP(forwarded.trim())) address = forwarded.trim();
+  if (address.startsWith('::ffff:') && isIP(address.slice(7)) === 4) address = address.slice(7);
+  if (isIP(address) === 6) {
+    // Canonicalize IPv6 and group a /64 so rotating interface IDs does not
+    // mint new registration or request budgets.
+    const canonical = new URL(`http://[${address}]`).hostname.slice(1, -1);
+    const [left, right] = canonical.split('::');
+    const head = left ? left.split(':') : [];
+    const tail = right ? right.split(':') : [];
+    const words = right === undefined ? head : [...head, ...Array(8 - head.length - tail.length).fill('0'), ...tail];
+    if (words.slice(0, 5).every(word => parseInt(word, 16) === 0) && parseInt(words[5], 16) === 65535) {
+      const high = parseInt(words[6], 16), low = parseInt(words[7], 16);
+      return [high >> 8, high & 255, low >> 8, low & 255].join('.');
+    }
+    return words.slice(0, 4).map(word => parseInt(word, 16).toString(16)).join(':') + '::/64';
+  }
+  return address;
+}
+
 export interface HostedServiceOptions {
   dataDir?: string; publicUrl?: string; port?: number; host?: string;
   maxAccounts?: number; maxAgentsPerAccount?: number; maxMeetings?: number; maxOwnerMeetings?: number;
   maxParticipants?: number; maxRoomBytes?: number; maxTotalBytes?: number;
   meetingTtlMs?: number; idleTtlMs?: number; retentionMs?: number; deliveryTtlMs?: number; maxEvents?: number;
   maxDailyEgressBytes?: number; maxAccountDailyEgressBytes?: number;
+  maxDailyPublicEgressBytes?: number; trustProxy?: boolean;
   webhookPost?: WebhookPost; eventOptions?: Omit<EventsOptions, 'store'>; store?: HostedStore;
 }
 interface JoinedMeeting {
@@ -94,11 +120,14 @@ class MeetingResponse extends EventEmitter {
 
 /** Independent hosted adapter. It never dispatches to a laptop or arbitrary upstream. */
 export async function startHostedService({ dataDir, publicUrl, port = 4317, host = '127.0.0.1',
-  maxAccounts = 1000, maxAgentsPerAccount = 2, maxMeetings = 5, maxOwnerMeetings = 2,
+  maxAccounts = 1000, maxAgentsPerAccount = 2, maxMeetings = 5, maxOwnerMeetings = 1,
   maxParticipants = 8, maxRoomBytes = 2 * 1024 * 1024, maxTotalBytes = 8 * 1024 * 1024,
   idleTtlMs, meetingTtlMs = 7_200_000, retentionMs = 600_000, deliveryTtlMs = 300_000, maxEvents = 500,
   maxDailyEgressBytes = 512 * 1024 * 1024, maxAccountDailyEgressBytes = 50 * 1024 * 1024,
+  maxDailyPublicEgressBytes = 64 * 1024 * 1024, trustProxy = false,
   webhookPost, eventOptions = {}, store: suppliedStore }: HostedServiceOptions = {}) {
+  if (typeof trustProxy !== 'boolean') throw new TypeError('trustProxy must be a boolean.');
+  if (!Number.isSafeInteger(maxDailyPublicEgressBytes) || maxDailyPublicEgressBytes < 1) throw new TypeError('maxDailyPublicEgressBytes must be positive.');
   if (!dataDir && !suppliedStore) throw new TypeError('A persistent dataDir is required.');
   if (!publicUrl) throw new TypeError('publicUrl is required.');
   const realm = validOrigin(publicUrl);
@@ -107,6 +136,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
   const processKey = randomBytes(32);
   const sessions = new Map(), invitations = new Map<string, MeetingInvitation>(), operations = new Map<string, PendingOperation>(), rates = new Map();
   const activeRequests = new Map(), notificationFailures = new Map();
+  const businessResponses = new WeakSet<object>();
   let closing = false, inflight = 0;
   const secretFor = (...parts) => createHmac('sha256', processKey).update(JSON.stringify(parts)).digest('base64url');
   function activeAgent(id) { try { store.accountForAgent(id); return true; } catch { return false; } }
@@ -174,10 +204,11 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
     beforeCreate(actor) { store.consumeQuota(actor!.agentId, 'meeting_create', { limit: 30, windowMs: DAY, scope: 'account' }); },
     authorizeRoom(room) { if (!activeAgent(room.ownerAgentId)) throw failure(403, 'owner_revoked', 'Meeting owner access was revoked.'); },
     authorizeParticipant(room, participant) { if (participant.authId && !activeAgent(participant.authId)) throw failure(403, 'agent_revoked', 'Participant access was revoked.'); },
-    beforeWrite(value, bytes) {
+    beforeWrite(value, bytes, res) {
       if (!value || typeof value !== 'object' || !('meeting' in value) || !value.meeting || typeof value.meeting !== 'object' || !('id' in value.meeting) || typeof value.meeting.id !== 'string') return;
       const room = meetings.inspect(value.meeting.id);
       if (!room) return;
+      if (res) businessResponses.add(res);
       store.consumeQuota(room.ownerAgentId!, 'egress_bytes', { limit: maxAccountDailyEgressBytes, windowMs: DAY, scope: 'account', amount: bytes });
     },
     beforeMutation(room, participant, operation) {
@@ -382,16 +413,28 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
 
   const server = http.createServer(async (req, res) => {
     let actorKey;
+    let responseBudget: 'egress_bytes' | 'public_egress_bytes' | undefined = 'public_egress_bytes';
     const originalEnd = res.end.bind(res), originalHead = res.writeHead.bind(res);
     let pendingHead;
     res.writeHead = (...args) => { pendingHead = args; return res; };
     res.end = (data, ...rest) => {
+      if (businessResponses.has(res)) responseBudget = 'egress_bytes';
       const bytes = data === undefined ? 0 : Buffer.byteLength(data);
-      try { if (bytes) store.consumeServiceQuota('egress_bytes', { limit: maxDailyEgressBytes, windowMs: DAY, amount: bytes }); }
+      // Authenticated metadata/discovery responses also need an account cap;
+      // otherwise one registered client could drain the whole business budget.
+      if (actorKey && bytes && pendingHead?.[0] < 400) {
+        try { store.consumeQuota(actorKey, 'mcp_egress_bytes', { limit: maxAccountDailyEgressBytes, windowMs: DAY, scope: 'account', amount: bytes }); }
+        catch {
+          if (res.headersSent) { res.destroy(); return res; }
+          originalHead(429, HEADERS);
+          return originalEnd(JSON.stringify({ error: { code: 'account_egress_limit', message: 'Daily account response budget reached.' } }));
+        }
+      }
+      try { if (bytes && responseBudget) store.consumeServiceQuota(responseBudget, { limit: responseBudget === 'egress_bytes' ? maxDailyEgressBytes : maxDailyPublicEgressBytes, windowMs: DAY, amount: bytes }); }
       catch {
         if (res.headersSent) { res.destroy(); return res; }
         originalHead(429, HEADERS);
-        return originalEnd(JSON.stringify({ error: { code: 'service_egress_limit', message: 'Daily service response budget reached.' } }));
+        return originalEnd(JSON.stringify({ error: { code: responseBudget === 'egress_bytes' ? 'service_egress_limit' : 'public_egress_limit', message: 'Daily response budget reached.' } }));
       }
       if (pendingHead) Reflect.apply(originalHead, res, pendingHead);
       return originalEnd(data, ...rest);
@@ -400,15 +443,19 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
     try {
       if (closing) throw failure(503, 'closing', 'Service is stopping.');
       if (inflight > 64) throw failure(429, 'concurrency_limit', 'Too many concurrent requests.');
-      // Ignore forwarded client IP headers: a caller must not create arbitrary rate buckets.
-      limit('global', 2400); limit(`ip:${req.socket.remoteAddress}`, 1200);
+      const clientKey = clientRateKey(req, trustProxy);
+      limit(`ip:${clientKey}`, 1200);
       if (typeof req.url !== 'string' || req.url.length > 2048 || req.url.includes('#')) throw failure(400, 'invalid_url', 'Invalid request URL.');
       const url = new URL(req.url, realm);
       if (url.origin !== realm) throw failure(400, 'invalid_url', 'Absolute upstream URLs are not supported.');
       const hosted = url.pathname.startsWith('/v1/hosted') || url.pathname.startsWith('/mcp');
       if (req.headers.origin !== undefined && (hosted || req.headers.origin !== realm)) throw failure(403, 'origin_denied', 'Origin not allowed.');
       cleanup();
-      if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true, mode: 'hosted', transcriptStorage: 'participant', deliveryStorage: 'pending_memory', deliveryTtlMs });
+      if (req.method === 'GET' && url.pathname === '/health') {
+        responseBudget = undefined;
+        return send(res, 200, { ok: true, mode: 'hosted', transcriptStorage: 'participant', deliveryStorage: 'pending_memory', deliveryTtlMs });
+      }
+      limit('global', 2400);
       if (req.method === 'GET' && ASSETS.has(url.pathname)) {
         const [file, type] = ASSETS.get(url.pathname)!;
         res.writeHead(200, { ...HEADERS, 'Content-Type': type, 'X-Frame-Options': 'DENY',
@@ -418,7 +465,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
       if (hosted && (url.search || req.method !== 'POST')) throw failure(405, 'post_required', 'Use POST without query parameters.');
       if (url.pathname === '/v1/hosted/accounts') {
         limit('account_registration', 30); const input = await body(req); requireFields(input, ['requestId']);
-        return send(res, 200, store.registerAccount(input.requestId));
+        return send(res, 200, store.registerAccount(input.requestId, clientKey));
       }
       if (url.pathname === '/v1/hosted/agents') {
         limit('registration', 30); const input = await body(req); requireFields(input, ['requestId']);
@@ -428,6 +475,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
         const pathToken = url.pathname === '/mcp' ? undefined : url.pathname.slice(5);
         if (pathToken && bearer(req) && pathToken !== bearer(req)) throw failure(401, 'credential_mismatch', 'Conflicting credentials.');
         const actor = store.authenticate(pathToken || bearer(req)); actorKey = actor.agentId;
+        responseBudget = 'egress_bytes';
         limit(`agent:${actorKey}`, 240);
         activeRequests.set(actorKey, (activeRequests.get(actorKey) || 0) + 1);
         if (activeRequests.get(actorKey) > 12) throw failure(429, 'agent_concurrency', 'Too many concurrent requests for this agent.');

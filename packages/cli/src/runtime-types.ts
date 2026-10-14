@@ -29,6 +29,7 @@ export interface RelayOptions {
   serverKey?: string;
   retentionMs?: number;
   meetingTtlMs?: number;
+  idleTtlMs?: number;
   maxMeetings?: number;
 }
 export interface MeetingParticipant {
@@ -62,6 +63,7 @@ export interface MeetingRoom {
   inviteToken: string;
   viewToken: string;
   createdAt: number;
+  lastActivityAt: number;
   expiresAt: number;
   closedAt?: number;
   reason?: string;
@@ -83,6 +85,7 @@ export interface MeetingOptions {
   getUrl: () => string;
   deliveryTtlMs?: number;
   meetingTtlMs?: number;
+  idleTtlMs?: number;
   retentionMs?: number;
   maxMeetings?: number;
   serverKey?: string;

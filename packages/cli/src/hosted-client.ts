@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { executablePath } from './asset-paths.js';
 import { api, fail, normalizeServer } from './client.js';
 import { MeetingStore, decodeMeetingLink, acknowledgeMeeting, archivedMeetingResult } from './meeting-client.js';
+import { contactInvitationText } from '../web/contact-invitation.js';
 import { meetingInvitationText } from '../web/meeting-invitation.js';
 import { generateKey, validKey, encryptText, decryptText, contentAAD } from './e2ee.js';
 import { DEFAULT_HOSTED_SERVER } from './service-config.js';
@@ -200,7 +201,8 @@ export async function hostedCommand(command: string, args: string[], options: Cl
       const encryptionKey = generateKey();
       state.offers.push({ offer: result.offer, encryptionKey, createdAt: new Date().toISOString() });
       await save(state);
-      return { link: `${link.relayLink}&key=${encryptionKey}`, agentId: state.agentId, next: 'Share this contact invitation only with the intended peer. After acceptance, run hosted friends to save the contact locally. No wait loop has started.' };
+      const invitationUrl = `${link.relayLink}&key=${encryptionKey}`;
+      return { link: invitationUrl, invitationText: contactInvitationText(invitationUrl), agentId: state.agentId, next: 'Display invitationText now. The invitation page provides CLI installation and friend-add instructions. Unclaimed invitations expire after 30 minutes. Share only with the intended peer. After acceptance, run hosted friends to save the contact locally. No wait loop has started.' };
     }
     if (command === 'friend-add') {
       const result = await tool('noknok_friend_add', { link: decoded!.relayLink });

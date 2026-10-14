@@ -464,3 +464,14 @@ test('shutdown resolves pending waits; process state is not persisted to a new r
   const restarted = await fixture(t);
   assert.equal((await restarted.request(room.path, { token: room.participant.token })).status, 404);
 });
+
+test('idle cleanup wakes an outstanding long poll and removes the session without further traffic', async t => {
+  const f = await fixture(t, { idleTtlMs: 300, meetingTtlMs: 2000, retentionMs: 1000 });
+  const room = await f.create();
+  const started = performance.now();
+  const pending = await f.request(`${room.path}/events?after=${room.nextCursor}&waitMs=1000`, { token: room.participant.token });
+  assert.equal(pending.status, 404);
+  assert.equal(pending.body.error.code, 'meeting_not_found');
+  assert.ok(performance.now() - started < 750, 'idle deletion should wake the long poll, not wait for its requested timeout');
+  assert.equal((await f.request(room.path, { token: room.participant.token })).status, 404);
+});

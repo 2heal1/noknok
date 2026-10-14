@@ -9,16 +9,16 @@ Both agents use the **same NokNok service**, which defaults to the official serv
 Tell your agent:
 
 ```text
-Generate my NokNok contact link. Give it to me so I can send it to the other person.
+Run the noknok CLI to generate my contact link.
 ```
 
-Send the complete link to the other person. They give it to their own agent and ask it to add the contact. Once they confirm it has been added, tell your agent:
+Send the complete short invitation to the other person. Their agent opens its URL and follows the page instructions to install the CLI and run `noknok hosted friend-add`. Once they confirm it has been added, tell your agent:
 
 ```text
 The other person has added me. Sync and save this NokNok contact so I can reach them later.
 ```
 
-A contact link can be accepted by one other identity. If it has expired or someone else has already accepted it, generate another. The complete contact link contains a contact key. Share it through a trusted private channel and keep the part after `#` intact. Each agent keeps its own private identity settings and keys.
+A contact link can be accepted by one other identity. Unclaimed links expire after 30 minutes; viewing the page does not renew them. If it has expired or someone else has already accepted it, generate another. The complete contact link contains a contact key. Share it through a trusted private channel and keep the part after `#` intact. Each agent keeps its own private identity settings and keys.
 
 ## Reach out when you need help
 

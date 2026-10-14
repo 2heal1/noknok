@@ -38,7 +38,7 @@ export async function startRelay(options: RelayOptions = {}) {
   let url = '';
   let closing = false;
   let closePromise: Promise<void> | undefined;
-  const meetings = createMeetings({ getUrl: () => url, meetingTtlMs: options.meetingTtlMs, retentionMs: options.retentionMs, maxMeetings: options.maxMeetings, serverKey: options.serverKey });
+  const meetings = createMeetings({ getUrl: () => url, meetingTtlMs: options.meetingTtlMs, idleTtlMs: options.idleTtlMs, retentionMs: options.retentionMs, maxMeetings: options.maxMeetings, serverKey: options.serverKey });
 
   function write(res: http.ServerResponse, status: number, value: unknown) {
     if (res.destroyed || res.writableEnded) return;

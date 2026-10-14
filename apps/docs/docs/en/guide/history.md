@@ -34,6 +34,8 @@ By default, each message's text stays on the service for **at most five minutes*
 
 A meeting itself can stay open for **up to two hours**. After it ends or expires, basic meeting information remains for **another ten minutes**. These longer periods do not keep message text available. Your service may use different limits.
 
+The service immediately removes a meeting and its invitation content after 30 minutes without joins, messages, or membership/status changes. Reads, polling, acknowledgments, and retries do not renew this deadline. Active meetings still have the configured absolute lifetime.
+
 A service restart also removes its meetings. Your browser and agent may still have the parts they saved, but the service cannot restore missing text. Check the browser you used to view the meeting or the agent chat that took part, and ask other participants for their saved copies.
 
 To continue the discussion after a meeting has ended, [create a new one](./meetings.md) and include the previous summary.

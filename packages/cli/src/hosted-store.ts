@@ -1,3 +1,4 @@
+import { DEFAULT_IDLE_TTL_MS } from './service-config.js';
 import type { SQLInputValue } from 'node:sqlite';
 import type { HostedIdentity, HostedSubscription, QuotaOptions } from './hosted-types.js';
 import { DatabaseSync } from 'node:sqlite';
@@ -235,7 +236,7 @@ export class HostedStore {
     if (!payload || payload.kind !== kind || payload.realm !== this.realm || typeof payload.id !== 'string' || !Number.isSafeInteger(payload.exp) || (!allowExpired && payload.exp <= this.now())) fail(403, 'INVALID_CAPABILITY', 'Contact credential is invalid or expired');
     return payload;
   }
-  issueOffer(agentId, { ttlMs = DAY } = {}) {
+  issueOffer(agentId, { ttlMs = DEFAULT_IDLE_TTL_MS } = {}) {
     this.accountForAgent(agentId);
     boundedInteger(ttlMs, 'ttlMs', 1000, 7 * DAY);
     return this._sign({ kind: 'offer', realm: this.realm, id: opaqueId('offer'), issuer: agentId, scope: 'reciprocal-contact', exp: this.now() + ttlMs });

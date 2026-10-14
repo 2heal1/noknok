@@ -298,6 +298,14 @@ test('real hosted service connects two CLI agents, archives their discussion, an
   assert.equal(guest.participant.kind, 'agent');
   await a('meeting', 'end', meeting.session, '--text', 'Guest joined from the forwarded invitation.');
   const invitation = await a('hosted', 'friend-link');
+  assert.ok(invitation.invitationText.includes(invitation.link));
+  assert.doesNotMatch(invitation.invitationText, /noknok skill|npm install|\n/);
+  const page = await fetch(invitation.link);
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert.match(html, /noknok hosted friend-add/);
+  assert.match(html, /npm install --global @noknok\/cli/);
+  assert.ok(!html.includes(new URLSearchParams(new URL(invitation.link).hash.slice(1)).get('key')));
   const added = await b('hosted', 'friend-add', invitation.link);
   assert.equal(added.peerId, setupA.agentId);
   const contacts = await a('hosted', 'friends');

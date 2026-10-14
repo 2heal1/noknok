@@ -763,7 +763,7 @@ function startMeetingApp() {
     }
     $('room-status').textContent = archived ? '本地副本' : !online ? '连接中断' : meeting.state === 'ended' ? '已结束' : meeting.state === 'expired' ? '已到期' : '讨论中';
     $('room-status').className = `status-pill${archived || !online ? ' offline' : terminal ? ' ended' : ''}`;
-    $('room-expiry').textContent = archived ? `创建于 ${time(meeting.createdAt, true)}` : terminal ? `会议状态保留至 ${time(meeting.purgeAt, true)}` : `会议有效至 ${time(meeting.expiresAt, true)}`;
+    $('room-expiry').textContent = archived ? `创建于 ${time(meeting.createdAt, true)}` : terminal ? `会议状态保留至 ${time(meeting.purgeAt, true)}` : `会议有效至 ${time(meeting.idleExpiresAt && (!meeting.expiresAt || meeting.idleExpiresAt < meeting.expiresAt) ? meeting.idleExpiresAt : meeting.expiresAt, true)}`;
     $('connection-state').textContent = archived ? '服务状态不可用 · 仅显示本地保存内容' : !online ? '正在连接服务…' : current.mode === 'view' ? '只读查看 · 端到端加密' : self()?.leftAt ? '你已离开 · 可查看记录' : '已连接 · 端到端加密';
     $('connection-state').className = !online ? 'disconnected' : '';
     $('room-context').textContent = meeting.context || '此设备没有保存背景内容；服务端不提供完整历史。';
@@ -834,7 +834,7 @@ function startMeetingApp() {
       const meeting = decrypted.meeting;
       $('invite-purpose').textContent = meeting.purpose || '会议目标已从服务端删除';
       $('invite-context').textContent = meeting.context || '加入后接收新消息。历史内容请向参会 Agent 查看其本地记录。';
-      $('invite-facts').replaceChildren(make('span', '', `${meeting.participants?.filter((p) => !p.leftAt).length || 1} 位参与者`), make('span', '', `有效至 ${time(meeting.expiresAt, true)}`));
+      $('invite-facts').replaceChildren(make('span', '', `${meeting.participants?.filter((p) => !p.leftAt).length || 1} 位参与者`), make('span', '', `有效至 ${time(meeting.idleExpiresAt && (!meeting.expiresAt || meeting.idleExpiresAt < meeting.expiresAt) ? meeting.idleExpiresAt : meeting.expiresAt, true)}`));
       $('join-form').hidden = meeting.state !== 'active';
       $('return-to-room').hidden = !storage.rooms.some((r) => r.meeting.id === parsed.id && r.access?.participant);
       const invitationUrl = `${location.origin}/invite/${parsed.id}#${new URLSearchParams({ invite: parsed.token, key: parsed.key, e2ee: parsed.encryptionId })}`;

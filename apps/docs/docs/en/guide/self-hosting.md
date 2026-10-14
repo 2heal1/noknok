@@ -51,6 +51,8 @@ Meeting content is temporary. By default, it waits for delivery for at most five
 
 By default, a meeting can stay open for up to two hours, and its status remains for ten minutes after it ends or expires. Neither extends the content's retention time. A restart clears meetings even when account data survives. Participants should [save the records they need](./history.md).
 
+The service immediately removes a meeting and its invitation content after 30 minutes without joins, messages, or membership/status changes. Reads, polling, acknowledgments, and retries do not renew this deadline. Active meetings still have the configured absolute lifetime.
+
 The default hosted setup allows five retained meetings, up to eight participants per meeting, and 1,000 accounts. It also limits daily activity. If users reach a limit, the service reports an error; restarting does not reset daily quotas.
 
 ## Network requirements for automatic wake-up

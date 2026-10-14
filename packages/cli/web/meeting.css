@@ -871,6 +871,7 @@ summary {
 }
 
 .context-text {
+  overflow-wrap:anywhere;
   font-size:12px;
   color:var(--muted);
   line-height:1.9;

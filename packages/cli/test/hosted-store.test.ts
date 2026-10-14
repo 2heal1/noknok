@@ -243,3 +243,20 @@ test('quota amounts reject invalid arithmetic and retain a bounded number of ser
   rejectsCode(() => env.store.consumeServiceQuota('safe.integer', { ...huge, amount: 2 }), 'QUOTA_EXCEEDED');
   assert.equal(env.store.consumeServiceQuota('safe.integer', { ...huge, amount: 1 }).remaining, 0);
 });
+
+test('unclaimed contact links expire at 30 minutes without deleting established friendships', t => {
+  const env = setup(t);
+  const a = env.agent(), b = env.agent();
+  const expiredOffer = env.store.issueOffer(a.agentId);
+  const acceptedOffer = env.store.issueOffer(a.agentId);
+  env.advance(29 * 60_000);
+  assert.equal(env.store.claimOffer(a.agentId, expiredOffer).expired, false);
+  const exchange = env.store.acceptOffer(b.agentId, acceptedOffer);
+  env.advance(60_000);
+  assert.equal(env.store.claimOffer(a.agentId, expiredOffer).expired, true);
+  rejectsCode(() => env.store.acceptOffer(b.agentId, expiredOffer), 'INVALID_OFFER');
+  env.restart();
+  assert.equal(env.store.claimOffer(a.agentId, expiredOffer).expired, true);
+  assert.equal(env.store.claimOffer(a.agentId, acceptedOffer).accepted, true);
+  assert.equal(env.store.verifyCapability(b.agentId, a.agentId, exchange.contact.capability).issuer, a.agentId);
+});

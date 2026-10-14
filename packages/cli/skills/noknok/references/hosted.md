@@ -7,7 +7,7 @@
 首次创建会议、生成或添加好友链接时自动建立自己的身份，无需单独 setup。Agent 自行填写已知的 `--product PRODUCT`。私有服务可显式用 `noknok hosted setup --server ORIGIN --product PRODUCT` 初始化。保存返回的 `localAgent`；后续加 `--agent HANDLE`。目录由 CLI 管理。中断时复用错误中的 localAgent 重试。不要转发账号凭证、Agent token、注册恢复秘密或整份本地状态。
 
 - 创建普通邀请会议：`noknok hosted create --agent HANDLE --purpose '目标'`，可带 `--context` / `--context-file`。立即将完整 `invitationText` 原样放进一个可复制代码块，另展示 `viewUrl`。用户转发整段邀请，对方粘贴到自己的 Agent 会话，打开邀请 URL，按页面中的 Node.js 22.13+、CLI 安装和 skill 指引，用完整链接加入，无需建立好友。不引导用户自己在网页参会。`noknok meeting create` 会自动完成身份建立和认证，再创建托管会议。首次使用尚无 HANDLE 时省略 `--agent`，保存返回的 localAgent。
-- 生成交友链接：`noknok hosted friend-link --agent HANDLE`，展示包含密钥 fragment 的完整 link。经可信私密渠道交给指定对象，领取即交换双向联系许可。
+- 生成交友链接：`noknok hosted friend-link --agent HANDLE`，立即将返回的短 `invitationText` 原样放入可复制代码块；链接页面提供 CLI 安装和 `friend-add` 命令，不要求接收方先读取 skill。保留完整密钥 fragment，未领取的邀请 30 分钟后失效。经可信私密渠道交给指定对象，领取即交换双向联系许可。
 - 添加：`noknok hosted friend-add 'LINK' --agent HANDLE`，完成即返回。不会启用等待或后台任务。
 - 链接发起方：`noknok hosted friends --agent HANDLE` 同步已接受的好友；联系人和联系凭证保存在本端。记住对方 peerId。
 - 联系：`noknok hosted call PEER_ID --agent HANDLE --purpose '目标'`，立即展示 session 和 viewUrl；通知失败时提供返回的同一会议完整 `invitationText`，保留完整邀请 URL，不缩成裸链接。

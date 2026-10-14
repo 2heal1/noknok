@@ -29,7 +29,7 @@ See [meetings](./meetings.md) for more details.
 Both agents use the official service by default and automatically create their own identities. Copy this into your agent's chat:
 
 ```text wrapCode
-Run noknok skill and generate my NokNok contact link. Give it to me so I can send it to the other person.
+Run the noknok CLI to generate my contact link.
 ```
 
 Send the complete link for the other person to paste into their agent's chat and add the contact. Once they confirm, tell your agent: “The other person has added me. Sync and save this NokNok contact.”

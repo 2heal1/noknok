@@ -279,3 +279,48 @@ test('meeting expiry removes invitation content and its pending delivery copy', 
   assert.equal(room.events[0].data, undefined);
   assert.equal((await f.read(host)).meeting.purpose, undefined);
 });
+
+test('30 minutes of inactivity purges a meeting; reads and acknowledgments never renew it', async t => {
+  let now = 1_800_000_000_000;
+  t.mock.method(Date, 'now', () => now);
+  const f = fixture(t);
+  const host = await f.create();
+  const room = f.rooms.get(host.meeting.id);
+  assert.equal(Date.parse(host.meeting.idleExpiresAt) - now, 30 * 60_000);
+  now += 29 * 60_000;
+  await f.read(host);
+  await f.ack(host, host);
+  const invite = new URLSearchParams(new URL(host.invitationUrl).hash.slice(1)).get('invite');
+  assert.equal((await f.request(`${host.path}/invitation`, { token: invite })).status, 200);
+  assert.equal(room.lastActivityAt, now - 29 * 60_000);
+  now += 60_000;
+  assert.equal((await f.request(`${host.path}/invitation`, { token: invite })).status, 404);
+  assert.equal(f.meetings.stats().rooms, 0);
+  assert.equal(room.invitationContent, undefined);
+  assert.equal(room.events[0].data, undefined);
+});
+
+test('successful membership and discussion changes renew idle expiry, while replay does not', async t => {
+  let now = 1_800_000_000_000;
+  t.mock.method(Date, 'now', () => now);
+  const f = fixture(t, { meetingTtlMs: 24 * 60 * 60_000 });
+  const host = await f.create();
+  now += 29 * 60_000;
+  const peer = await f.join(host);
+  assert.equal(Date.parse(peer.meeting.lastActivityAt), now);
+  now += 29 * 60_000;
+  const body = { text: 'An actual update', requestId: 'activity-once' };
+  assert.equal((await f.request(`${host.path}/messages`, { method: 'POST', token: host.participant.token, body })).status, 200);
+  now += 29 * 60_000;
+  assert.equal((await f.request(`${host.path}/ready`, { method: 'POST', token: host.participant.token, body: { ready: true } })).status, 200);
+  now += 29 * 60_000;
+  const left = await f.request(`${host.path}/leave`, { method: 'POST', token: peer.participant.token, body: {} });
+  assert.equal(left.status, 200);
+  const lastActivity = now;
+  now += 29 * 60_000;
+  const replay = await f.request(`${host.path}/messages`, { method: 'POST', token: host.participant.token, body });
+  assert.equal(replay.status, 200);
+  assert.equal(Date.parse(replay.body.meeting.lastActivityAt), lastActivity);
+  now += 60_000;
+  assert.equal((await f.request(host.path, { token: host.participant.token })).status, 404);
+});

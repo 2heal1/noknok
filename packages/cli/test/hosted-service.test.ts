@@ -505,3 +505,16 @@ test('wrapped room keys appear only in the targeted recipient inbox and join', a
   await f.tool(b, 'friend_revoke', { capability: friend.claimed.issuedCapability });
   assert.equal((await f.tool(b, 'inbox')).invitations[0].encryptedKey, undefined);
 });
+
+test('idle meetings are removed from hosted sessions and targeted invitation inboxes', async t => {
+  const f = await fixture(t, { idleTtlMs: 1000, meetingTtlMs: 2000 });
+  const a = await f.register(), b = await f.register();
+  const friend = await f.pair(a, b);
+  const call = await f.tool(a, 'call', { peer_id: b.agentId, capability: friend.contact.capability,
+    purpose: 'An unaccepted meeting', request_id: 'idle-call' });
+  assert.equal((await f.tool(b, 'inbox')).invitations.length, 1);
+  await delay(1150);
+  assert.equal(f.service.meetings.inspect(call.meeting.id), undefined);
+  assert.equal((await f.tool(b, 'inbox')).invitations.length, 0);
+  await assert.rejects(f.tool(a, 'meeting_read', { meeting_id: call.meeting.id }));
+});

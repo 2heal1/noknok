@@ -4,6 +4,7 @@ import { redactInvitations } from './invitation.js';
 import { isEncryptedText } from './e2ee.js';
 import { readFile } from 'node:fs/promises';
 import { webFile } from './asset-paths.js';
+import { DEFAULT_IDLE_TTL_MS } from './service-config.js';
 
 const MAX_BODY_BYTES = 128 * 1024;
 // AES-GCM adds a 16-byte tag, a 12-byte IV and base64url framing.
@@ -134,6 +135,7 @@ async function readBody(req) {
 export function createMeetings(options: MeetingOptions) {
   if (typeof options.getUrl !== 'function') throw new TypeError('getUrl is required.');
   const meetingTtlMs = positive(options.meetingTtlMs, 7_200_000, 'meetingTtlMs');
+  const idleTtlMs = positive(options.idleTtlMs, DEFAULT_IDLE_TTL_MS, 'idleTtlMs');
   const retentionMs = positive(options.retentionMs, 600_000, 'retentionMs');
   const deliveryTtlMs = positive(options.deliveryTtlMs, 300_000, 'deliveryTtlMs');
   const maxMeetings = positive(options.maxMeetings, 1000, 'maxMeetings');
@@ -160,6 +162,7 @@ export function createMeetings(options: MeetingOptions) {
       id: room.id, encryption: room.encryption, ...(started ? { purpose: started.purpose, context: started.context } : {}), state: room.state, hostId: room.hostId,
       participants: [...room.participants.values()].map(publicParticipant), readyBy: [...room.readyBy],
       createdAt: iso(room.createdAt), expiresAt: iso(room.expiresAt),
+      lastActivityAt: iso(room.lastActivityAt), idleExpiresAt: iso(room.lastActivityAt + idleTtlMs), idleTtlMs,
       ...(room.closedAt === undefined ? {} : { closedAt: iso(room.closedAt) }),
       purgeAt: iso((room.closedAt ?? room.expiresAt) + retentionMs), retentionMs, deliveryTtlMs,
       ...(closed?.reason === undefined ? {} : { reason: closed.reason }),
@@ -220,6 +223,7 @@ export function createMeetings(options: MeetingOptions) {
     }
   }
   function append(room: MeetingRoom, type: string, from: string, data: NonNullable<MeetingEvent['data']>, at = Date.now()) {
+    if (type === 'started' || type === 'joined' || MESSAGE_TYPES.has(type) || type === 'ready' || type === 'left') room.lastActivityAt = at;
     const event: MeetingEvent = { seq: ++room.seq, type, from, at: iso(at), data, bodyState: 'pending', bodyExpiresAt: iso(at + deliveryTtlMs) };
     const recipients = [...room.participants.values()].filter(participant => participant.leftAt === undefined && options.isParticipantAvailable?.(room, participant) !== false);
     room.deliveries.set(event.seq, { expiresAt: at + deliveryTtlMs, claims: new Map(recipients.map(participant => [participant.id, 'pending'])), awaitFirstPeer: !room.hadPeer && room.state === 'active' });
@@ -255,6 +259,14 @@ export function createMeetings(options: MeetingOptions) {
   function cleanup() {
     const now = Date.now();
     for (const [id, room] of rooms) {
+      const idleDeadline = room.lastActivityAt + idleTtlMs;
+      if (room.state === 'active' && idleDeadline < room.expiresAt && now >= idleDeadline) {
+        closeRoom(room, 'expired', 'meeting_timeout', undefined, idleDeadline);
+        rooms.delete(id);
+        if (room.creationId !== undefined) creations.delete(room.creationId);
+        wake(room);
+        continue;
+      }
       expire(room, now);
       cleanDeliveries(room, now);
       if (room.closedAt !== undefined && now >= room.closedAt + retentionMs) {
@@ -343,7 +355,7 @@ export function createMeetings(options: MeetingOptions) {
       const room: MeetingRoom = {
         id: randomUUID(), encryption: payload.encryption, state: 'active', hostId: participant.id, ...(actor ? { ownerId: actor.accountId, ownerAgentId: actor.agentId } : {}),
         participants: new Map([[participant.id, participant]]), inviteToken: secret(), viewToken: secret(),
-        createdAt: now, expiresAt: now + meetingTtlMs, readyBy: new Set(),
+        createdAt: now, lastActivityAt: now, expiresAt: now + meetingTtlMs, readyBy: new Set(),
         events: [], seq: 0, bytes: Buffer.byteLength(JSON.stringify(publicParticipant(participant))), polls: new Set(), mutations: new Map(), creationId: id,
         deliveries: new Map(), receiptKey: secret(), hadPeer: false, invitationContent,
       };
@@ -430,11 +442,11 @@ export function createMeetings(options: MeetingOptions) {
       const waitDeadline = performance.now() + waitMs;
       function timeout() {
         if (!room.polls.has(poll)) return;
-        const remaining = Math.min(waitDeadline - performance.now(), room.expiresAt - Date.now());
+        const remaining = Math.min(waitDeadline - performance.now(), Math.min(room.expiresAt, room.lastActivityAt + idleTtlMs) - Date.now());
         // Timer delivery can precede the wall-clock expiry by a millisecond.
         // Keep waiting until expiry or the monotonic request deadline is reached.
         if (remaining > 0) { timer = setTimeout(timeout, Math.ceil(remaining)); return; }
-        expire(room);
+        cleanup();
         poll.finish();
       }
       timeout();
@@ -516,7 +528,7 @@ export function createMeetings(options: MeetingOptions) {
     return reply(res, 200, withReceipts(room, response, participant));
   }
 
-  const timer = setInterval(cleanup, Math.max(10, Math.min(1000, meetingTtlMs, retentionMs, deliveryTtlMs)));
+  const timer = setInterval(cleanup, Math.max(10, Math.min(1000, meetingTtlMs, idleTtlMs, retentionMs, deliveryTtlMs)));
   timer.unref();
   return {
     async handle(req, res, parsed) {

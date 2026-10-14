@@ -1,4 +1,0 @@
-{$NOKNOK_DOMAIN} {
-    # No access log: MCP URLs contain private connection credentials.
-    reverse_proxy noknok:4317
-}

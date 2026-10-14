@@ -18,10 +18,9 @@ function packageFiles(overrides = {}) {
     ['dist/bin/noknok.js', '#!/usr/bin/env node\n'],
     ['dist/src/cli.js', 'export {};\n'], ['dist/src/hosted-service.js', 'export {};\n'], ['dist/src/mcp-stdio.js', 'export {};\n'],
     ['dist/src/deploy/server.js', 'export {};\n'], ['dist/src/deploy/hosted-server.js', 'export {};\n'],
-    ['dist/poc/mcp-events/server.js', 'export {};\n'],
     ['skills/noknok/SKILL.md', '# Skill\n'], ['skills/noknok/references/hosted.md', '# Hosted\n'],
-    ['skills/noknok/references/two-party-calls.md', '# Legacy\n'],
     ['dist/web/meeting.html', '<!doctype html>\n'], ['dist/web/meeting.js', 'export {};\n'], ['dist/web/meeting-invitation.js', 'export {};\n'],
+    ['dist/web/e2ee.js', 'export {};\n'], ['dist/src/e2ee.js', 'export {};\n'],
   ]);
   const bytes = new Map([...files].map(([path, text]) => [path, Buffer.from(text)]));
   bytes.set('dist/runtime-fingerprint.json', Buffer.from(JSON.stringify(fingerprintFiles(bytes, { ...manifest, ...overrides }))));
@@ -128,8 +127,8 @@ test('scope, version, public registry and bins must match the reviewed release i
   for (const [override, code] of cases) assert.throws(() => validatePackageFiles(packageFiles(override), manifest), { code });
 });
 
-test('missing license, attribution, executable or bundled skill fails before installation', () => {
-  for (const path of ['LICENSE', 'NOTICE', 'dist/bin/noknok.js', 'skills/noknok/SKILL.md', 'dist/src/deploy/hosted-server.js', 'dist/poc/mcp-events/server.js']) {
+test('missing license, executable, encryption module or bundled skill fails before installation', () => {
+  for (const path of ['LICENSE', 'NOTICE', 'dist/bin/noknok.js', 'skills/noknok/SKILL.md', 'dist/src/deploy/hosted-server.js', 'dist/web/e2ee.js', 'dist/src/e2ee.js']) {
     const files = packageFiles();
     files.delete(path);
     assert.throws(() => validatePackageFiles(files, manifest), { code: 'MISSING_REQUIRED_PACKAGE_FILE' });
@@ -145,4 +144,12 @@ test('release-generated changelog are allowed without publishing release machine
   assert.equal(validatePackageFiles(files, manifest).fileCount, files.size);
   files.set('scripts/check-package.js', Buffer.from('test-only'));
   assert.throws(() => validatePackageFiles(files, manifest), { code: 'UNEXPECTED_PACKAGE_FILE' });
+});
+
+test('retired plaintext protocols and viewers cannot return in the published package', () => {
+  for (const path of ['dist/poc/mcp-events/server.js', 'dist/src/legacy.js', 'dist/src/store.js', 'dist/src/contacts.js', 'dist/src/contact-switch.js', 'dist/src/receiver.js', 'dist/src/receiver-control.js', 'dist/src/gateway.js', 'dist/src/gateway-client.js', 'dist/src/gateway-contract.js', 'dist/src/viewer.js', 'dist/web/app.js', 'dist/web/index.html', 'dist/web/styles.css']) {
+    const files = packageFiles();
+    files.set(path, Buffer.from('retired'));
+    assert.throws(() => validatePackageFiles(files, manifest), { code: 'UNEXPECTED_PACKAGE_FILE' });
+  }
 });

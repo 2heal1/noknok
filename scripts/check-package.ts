@@ -15,10 +15,10 @@ const EXPECTED_NAME = '@noknok/cli';
 const REGISTRY = 'https://registry.npmjs.org';
 const REQUIRED = [
   'package.json', 'README.md', 'LICENSE', 'NOTICE', 'dist/bin/noknok.js', 'dist/runtime-fingerprint.json',
-  'dist/src/cli.js', 'dist/src/mcp-stdio.js', 'dist/src/hosted-service.js',
-  'dist/src/deploy/server.js', 'dist/src/deploy/hosted-server.js', 'dist/poc/mcp-events/server.js',
+  'dist/src/cli.js', 'dist/src/mcp-stdio.js', 'dist/src/hosted-service.js', 'dist/src/e2ee.js',
+  'dist/src/deploy/server.js', 'dist/src/deploy/hosted-server.js',
   'skills/noknok/SKILL.md', 'skills/noknok/references/hosted.md',
-  'skills/noknok/references/two-party-calls.md', 'dist/web/meeting.html', 'dist/web/meeting.js', 'dist/web/meeting-invitation.js',
+  'dist/web/meeting.html', 'dist/web/meeting.js', 'dist/web/meeting-invitation.js', 'dist/web/e2ee.js',
 ];
 
 function fail(code: string): never {
@@ -88,10 +88,12 @@ export function readPackageArchive(archive: Buffer) {
 }
 
 function allowedFile(path: string): boolean {
+  if (/^dist\/src\/(?:legacy|store|contacts|contact-switch|receiver(?:-control)?|gateway(?:-client|-contract)?|viewer)\.js$/.test(path)
+    || /^dist\/web\/(?:app\.js|index\.html|styles\.css)$/.test(path)) return false;
   if (['package.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'LICENSE.md', 'NOTICE',
     'dist/runtime-fingerprint.json', 'dist/web/THIRD_PARTY_NOTICES.txt'].includes(path)) return true;
   if (path.split('/').some(part => part.startsWith('.'))) return false;
-  if (/^dist\/(?:bin|src|poc)\/[a-zA-Z0-9_/-]+\.js$/.test(path)) return true;
+  if (/^dist\/(?:bin|src)\/[a-zA-Z0-9_/-]+\.js$/.test(path)) return true;
   if (/^dist\/web\/[a-zA-Z0-9_/-]+\.(?:js|css|html|svg)$/.test(path)) return true;
   return /^(docs|skills)\/[a-zA-Z0-9_/-]+\.md$/.test(path);
 }

@@ -14,32 +14,6 @@ export function normalizeServer(value: string) {
   return url.href.replace(/\/$/, '');
 }
 
-export function decodeInvitation(invitation) {
-  try {
-    if (typeof invitation !== 'string' || invitation.length > 16384 || /[\s\\]/u.test(invitation)) throw new Error();
-    if (/^https?:\/\//i.test(invitation)) {
-      const url = new URL(invitation);
-      const match = /^\/invite\/([a-zA-Z0-9_-]{1,128})$/.exec(url.pathname);
-      const keys = [...url.searchParams.keys()];
-      const token = url.searchParams.get('key');
-      if (!match || url.username || url.password || invitation.includes('#')
-        || keys.length !== 1 || keys[0] !== 'key' || !/^[A-Za-z0-9_-]{16,512}$/.test(token ?? '')) throw new Error();
-      return { v: 1, server: normalizeServer(url.origin), callId: match[1], token };
-    }
-    const prefix = 'noknok://invite/';
-    if (!invitation.startsWith(prefix)) throw new Error();
-    const encoded = invitation.slice(prefix.length);
-    if (!/^[A-Za-z0-9_-]+$/.test(encoded)) throw new Error();
-    const data = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
-    if (data.v !== 1 || typeof data.callId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(data.callId)
-      || typeof data.token !== 'string' || !/^[A-Za-z0-9_-]{16,512}$/.test(data.token)
-      || !Number.isFinite(Date.parse(data.expiresAt))) throw new Error();
-    return { ...data, server: normalizeServer(data.server) };
-  } catch {
-    throw fail('INVALID_INVITATION', 'Expected a complete HTTP(S) invitation link or noknok://invite/... invitation.');
-  }
-}
-
 export async function api(server, path, { method = 'GET', body, token, key, signal, timeoutMs = 35000 }: ApiOptions = {}) {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';

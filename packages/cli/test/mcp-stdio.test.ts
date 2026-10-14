@@ -1,21 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { invitationJoinLink } from './meeting-invitation-helper.js';
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 import { startRelay } from '../src/relay.js';
-import { api, decodeInvitation } from '../src/client.js';
-import { Store } from '../src/store.js';
 import { startStdioMcp } from '../src/mcp-stdio.js';
-import { RECEIVER_TOOLS } from '../src/gateway-contract.js';
 
 const cli = fileURLToPath(new URL('../dist/bin/noknok.js', import.meta.url));
 const wrapper = new URL('../dist/src/mcp-stdio.js', import.meta.url).href;
-const execFileAsync = promisify(execFile);
 
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'noknok-mcp-'));
@@ -99,14 +94,14 @@ async function fixture(t) {
       await startStdioMcp({ ...${JSON.stringify(binding)}, signal: lifetime.signal,
         run: async (argv, { signal, emit }) => {
           if (argv[0] === 'identity') bootstraps++;
-          if (argv[0] === 'listen') {
+          if (argv[0] === 'meeting' && argv[1] === 'receive') {
             process.stderr.write('LISTEN_STARTED\\n');
             if (!signal.aborted) await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }));
             aborted++;
             process.stderr.write('LISTEN_ABORTED\\n');
             signal.throwIfAborted();
           }
-          if (argv[0] === 'friend-remove') throw Object.assign(new Error('Contact was not found.'), { code: 'CONTACT_NOT_FOUND' });
+          if (argv[0] === 'hosted' && argv[1] === 'friend-remove') throw Object.assign(new Error('Contact was not found.'), { code: 'CONTACT_NOT_FOUND' });
           await emit({ argv, bootstraps, aborted });
         }
       });
@@ -123,7 +118,7 @@ function toolResult(message) {
   return message.result.structuredContent;
 }
 
-test('stdio requires a fixed identity binding and leaves optional bootstrap settings unset', async t => {
+test('stdio requires a fixed profile and never bootstraps a legacy contact identity', async t => {
   const f = await fixture(t);
   await assert.rejects(startStdioMcp({ run: async () => {} }), /fixed agent profile or identity directory/);
   await assert.rejects(startStdioMcp({ agent: '--state-dir=/tmp/other', run: async () => {} }), /valid fixed agent profile handle/);
@@ -131,12 +126,12 @@ test('stdio requires a fixed identity binding and leaves optional bootstrap sett
   for (const binding of [{ directory: join(f.directory, 'unnamed') }, { agent, directory: join(f.directory, 'resolved-profile') }]) {
     const client = await f.stub(binding);
     await client.initialize();
-    const identity = toolResult(await client.request('identity', 'tools/call', { name: 'noknok_identity' }));
+    const identity = toolResult(await client.request('identity', 'tools/call', { name: 'noknok_hosted_identity' }));
     const expectedBinding = binding.agent ? `--agent=${agent}` : `--state-dir=${binding.directory}`;
-    assert.deepEqual(identity.argv, ['identity', expectedBinding]);
-    const friends = toolResult(await client.request('friends', 'tools/call', { name: 'noknok_friends' }));
-    assert.deepEqual(friends.argv, ['friends', expectedBinding, '--']);
-    assert.equal(friends.bootstraps, 1);
+    assert.deepEqual(identity.argv, ['hosted', 'identity', expectedBinding, '--']);
+    const friends = toolResult(await client.request('friends', 'tools/call', { name: 'noknok_hosted_friends' }));
+    assert.deepEqual(friends.argv, ['hosted', 'friends', expectedBinding, '--']);
+    assert.equal(friends.bootstraps, 0);
     await client.stop();
   }
 });
@@ -150,17 +145,19 @@ test('stdio negotiates supported protocol versions and exposes only scoped tools
     assert.deepEqual(init.capabilities, { tools: { listChanged: false } });
     const catalog = await client.request('catalog', 'tools/list');
     const tools = catalog.result.tools;
-    assert.ok(tools.some(tool => tool.name === 'noknok_friend_link'));
-    assert.ok(tools.some(tool => tool.name === 'noknok_listen'));
+    assert.ok(tools.some(tool => tool.name === 'noknok_hosted_friend_link'));
+    assert.ok(tools.every(tool => /^noknok_(?:meeting|hosted)_/.test(tool.name)));
+    assert.equal(tools.some(tool => tool.name === 'noknok_listen'), false);
+    assert.ok(tools.some(tool => tool.name === 'noknok_meeting_receive'));
     for (const item of tools) {
       assert.equal(item.inputSchema.additionalProperties, false);
       assert.equal(item.inputSchema.properties.directory, undefined);
       assert.equal(item.inputSchema.properties.server, undefined);
       assert.equal(item.inputSchema.properties.file, undefined);
     }
-    assert.equal(tools.find(tool => tool.name === 'noknok_listen').annotations.readOnlyHint, false);
-    assert.equal(tools.find(tool => tool.name === 'noknok_friends').annotations.readOnlyHint, false);
-    assert.equal(tools.find(tool => tool.name === 'noknok_history').annotations.readOnlyHint, true);
+    assert.equal(tools.find(tool => tool.name === 'noknok_meeting_receive').annotations.readOnlyHint, false);
+    assert.equal(tools.find(tool => tool.name === 'noknok_hosted_friends').annotations.readOnlyHint, false);
+    assert.equal(tools.find(tool => tool.name === 'noknok_meeting_history').annotations.readOnlyHint, true);
     assert.deepEqual((await client.request('ping', 'ping')).result, {});
     await client.stop();
   }
@@ -170,38 +167,42 @@ test('stdio validates arguments, binds its identity directory and passes shell-l
   const f = await fixture(t);
   const client = await f.stub();
   await client.initialize();
+  const session = 'am_00000000-0000-4000-8000-000000000000';
   const invalid = [
-    { name: 'noknok_send', arguments: { session: 'ac_00000000-0000-4000-8000-000000000000', text: 'hello', file: '/tmp/secret' } },
-    { name: 'noknok_listen', arguments: { timeout: '45' } },
-    { name: 'noknok_listen', arguments: { timeout: -1 } },
-    { name: 'noknok_listen', arguments: { timeout: 46 } },
-    { name: 'noknok_identity', arguments: null },
-    { name: 'noknok_call', arguments: { contact: 'B', purpose: 'x'.repeat(8193) } },
-    { name: 'noknok_identity', arguments: { 'state-dir': '/tmp/other-agent' } },
-    { name: 'noknok_receive', arguments: { session: '../../other-agent' } },
+    { name: 'noknok_meeting_send', arguments: { session, text: 'hello', file: '/tmp/secret' } },
+    { name: 'noknok_meeting_receive', arguments: { session, timeout: '45' } },
+    { name: 'noknok_meeting_receive', arguments: { session, timeout: -1 } },
+    { name: 'noknok_meeting_receive', arguments: { session, timeout: 3601 } },
+    { name: 'noknok_hosted_identity', arguments: null },
+    { name: 'noknok_hosted_call', arguments: { peer_id: 'B', purpose: 'x'.repeat(8193) } },
+    { name: 'noknok_hosted_identity', arguments: { 'state-dir': '/tmp/other-agent' } },
+    { name: 'noknok_meeting_receive', arguments: { session: '../../other-agent' } },
     { name: 'arbitrary_command', arguments: {} },
   ];
   for (let index = 0; index < invalid.length; index++) assert.equal((await client.request(index, 'tools/call', invalid[index])).error.code, -32602);
   const literal = '--state-dir=/tmp/other $(touch /tmp/pwned) `whoami`\nsecond line';
-  const call = toolResult(await client.request('call', 'tools/call', { name: 'noknok_call', arguments: { contact: '--other-agent', purpose: literal }, _meta: { progressToken: 'allowed' } }));
-  assert.deepEqual(call.argv, ['call', `--state-dir=${join(f.directory, 'fixed')}`, `--purpose=${literal}`, '--', '--other-agent']);
-  assert.equal(call.bootstraps, 1);
-  const friends = toolResult(await client.request('friends', 'tools/call', { name: 'noknok_friends' }));
-  assert.equal(friends.bootstraps, 1);
-  const error = await client.request('remove', 'tools/call', { name: 'noknok_friend_remove', arguments: { contact: 'missing' } });
+  const call = toolResult(await client.request('call', 'tools/call', { name: 'noknok_meeting_create', arguments: { purpose: literal }, _meta: { progressToken: 'allowed' } }));
+  assert.deepEqual(call.argv, ['meeting', 'create', `--state-dir=${join(f.directory, 'fixed')}`, '--name=Fixed Agent', '--server=http://127.0.0.1:4317', `--purpose=${literal}`, '--']);
+  assert.equal(call.bootstraps, 0);
+  const friends = toolResult(await client.request('friends', 'tools/call', { name: 'noknok_hosted_friends' }));
+  assert.equal(friends.bootstraps, 0);
+  const error = await client.request('remove', 'tools/call', { name: 'noknok_hosted_friend_remove', arguments: { peer_id: 'missing' } });
   assert.equal(error.error, undefined);
   assert.equal(error.result.isError, true);
   assert.equal(error.result.structuredContent.error.code, 'CONTACT_NOT_FOUND');
   await client.stop();
 });
 
-test('meeting MCP tools bind one local profile without creating contacts or expanding gateway authority', async t => {
+test('meeting MCP tools bind one local profile without a legacy contact registration', async t => {
   const f = await fixture(t);
   const client = await f.stub({ directory: join(f.directory, 'meeting-profile'), product: 'codex', server: 'http://127.0.0.1:4317' });
   await client.initialize();
   const catalog = (await client.request('catalog', 'tools/list')).result.tools;
   assert.ok(catalog.some(tool => tool.name === 'noknok_meeting_create'));
-  assert.equal(RECEIVER_TOOLS.some(tool => tool.name.startsWith('noknok_meeting_')), false);
+  for (const name of ['identity', 'friend_link', 'friend_add', 'friends', 'friend_remove', 'history', 'sessions', 'call', 'listen', 'send', 'receive', 'wait', 'finish', 'hangup', 'view']) {
+    assert.equal(catalog.some(tool => tool.name === `noknok_${name}`), false);
+    assert.equal((await client.request(`removed-${name}`, 'tools/call', { name: `noknok_${name}` })).error.code, -32602);
+  }
   const goal = 'Review $(literal) `text` --state-dir=untrusted';
   const created = toolResult(await client.request('create', 'tools/call', { name: 'noknok_meeting_create', arguments: { purpose: goal } }));
   assert.deepEqual(created.argv, ['meeting', 'create', `--state-dir=${join(f.directory, 'meeting-profile')}`, '--product=codex', '--server=http://127.0.0.1:4317', `--purpose=${goal}`, '--']);
@@ -270,17 +271,17 @@ test('stdio keeps ping and cancellation responsive during blocked tools and abor
       client.child.stderr.on('data', listener);
     });
     const first = observedMarker('LISTEN_STARTED', 1);
-    client.send({ jsonrpc: '2.0', id: 'blocked', method: 'tools/call', params: { name: 'noknok_listen' } });
+    client.send({ jsonrpc: '2.0', id: 'blocked', method: 'tools/call', params: { name: 'noknok_meeting_receive', arguments: { session: 'am_00000000-0000-4000-8000-000000000000' } } });
     await first;
     assert.deepEqual((await client.request('responsive', 'ping')).result, {});
     const aborted = observedMarker('LISTEN_ABORTED', 1);
     client.send({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 'blocked' } });
     await aborted;
-    const checked = toolResult(await client.request('checked', 'tools/call', { name: 'noknok_sessions' }));
+    const checked = toolResult(await client.request('checked', 'tools/call', { name: 'noknok_meeting_sessions' }));
     assert.equal(checked.aborted, 1);
     assert.equal(client.messages.some(message => message.id === 'blocked'), false);
     const second = observedMarker('LISTEN_STARTED', 2);
-    client.send({ jsonrpc: '2.0', id: 'pending-at-close', method: 'tools/call', params: { name: 'noknok_listen' } });
+    client.send({ jsonrpc: '2.0', id: 'pending-at-close', method: 'tools/call', params: { name: 'noknok_meeting_receive', arguments: { session: 'am_00000000-0000-4000-8000-000000000000' } } });
     await second;
     if (ending === 'EOF') client.child.stdin.end(); else client.child.kill('SIGTERM');
     const result = await Promise.race([client.closed, new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('Blocked MCP did not shut down.')), 3000); timer.unref(); })]);
@@ -290,157 +291,36 @@ test('stdio keeps ping and cancellation responsive during blocked tools and abor
   }
 });
 
-test('real CLI-backed MCP exchanges messages and exposes the actual read-only session transcript', async t => {
+test('managed encrypted meeting profiles survive restart and remain isolated', async t => {
   const f = await fixture(t);
   const relay = await startRelay({ port: 0 });
   t.after(() => relay.close());
-  const aStore = new Store(join(f.directory, 'A'));
-  const bStore = new Store(join(f.directory, 'B'));
-  const invitation = await api(relay.url, '/v1/calls', { method: 'POST', body: { name: 'Trae', purpose: 'Verify real local MCP messages' } });
-  const decoded = decodeInvitation(invitation.invitation);
-  const joined = await api(relay.url, `/v1/calls/${decoded.callId}/join`, { method: 'POST', body: { name: 'Dot', token: decoded.token } });
-  const aSession = await aStore.create(relay.url, invitation.call, invitation.participant);
-  const bSession = await bStore.create(relay.url, joined.call, joined.participant);
-  const a = f.launch([cli, 'mcp', '--name', 'Trae', '--state-dir', aStore.directory, '--server', relay.url]);
-  const b = f.launch([cli, 'mcp', '--name', 'Dot', '--state-dir', bStore.directory, '--server', relay.url]);
-  await Promise.all([a.initialize(), b.initialize()]);
-  const call = (client, id, name, args) => client.request(id, 'tools/call', { name: `noknok_${name}`, arguments: args }).then(toolResult);
-  await call(b, 'drain', 'receive', { session: bSession.id, timeout: 0 });
-  let resolvePoll;
-  const polling = new Promise(resolve => { resolvePoll = resolve; });
-  function listener(req) { if (req.url.includes(`/v1/calls/${decoded.callId}/events`) && req.url.includes('waitMs=25000')) { relay.server.off('request', listener); resolvePoll(); } }
-  relay.server.on('request', listener);
-  const waiting = call(b, 'receive', 'receive', { session: bSession.id, timeout: 45 });
-  await polling;
-  assert.deepEqual((await b.request('ping-while-receiving', 'ping')).result, {});
-  const text = 'A real MCP message: 你好 dot';
-  const sent = await call(a, 'send', 'send', { session: aSession.id, text });
-  assert.equal(sent.event.data.text, text);
-  const received = await waiting;
-  assert.equal(received.events.at(-1).data.text, text);
-  await call(b, 'reply', 'send', { session: bSession.id, text: '你好 Trae，消息已收到。' });
-  const reply = await call(a, 'receive-reply', 'receive', { session: aSession.id, timeout: 0 });
-  assert.ok(reply.events.some(event => event.data.text === '你好 Trae，消息已收到。'));
-  const viewed = await call(a, 'view', 'view', { session: aSession.id });
-  assert.equal(viewed.viewSession, decoded.callId);
-  assert.ok(viewed.url.includes(decoded.callId));
-  const history = await call(b, 'history', 'history', { session: bSession.id });
-  assert.ok(history.history.some(entry => entry.event?.data?.text === text));
-  const wrongDirectory = await a.request('wrong-identity', 'tools/call', { name: 'noknok_history', arguments: { session: bSession.id } });
-  assert.equal(wrongDirectory.result.isError, true);
-  assert.equal(wrongDirectory.result.structuredContent.error.code, 'SESSION_NOT_FOUND');
-  await Promise.all([a.stop(), b.stop()]);
-});
-
-test('two stdio clients add a friend and open a visible contact call with independent disk identities', { timeout: 15000 }, async t => {
-  const f = await fixture(t);
-  const relay = await startRelay({ port: 0, contacts: true });
-  t.after(() => relay.close());
-  const aDirectory = join(f.directory, 'trae');
-  const bDirectory = join(f.directory, 'dot');
-  const a = f.launch([cli, 'mcp', '--name', 'Trae', '--state-dir', aDirectory, '--server', relay.url]);
-  const b = f.launch([cli, 'mcp', '--name', 'Dot', '--state-dir', bDirectory, '--server', relay.url]);
-  await Promise.all([a.initialize(), b.initialize()]);
-  const call = (client, id, name, args) => client.request(id, 'tools/call', { name: `noknok_${name}`, ...(args ? { arguments: args } : {}) }).then(toolResult);
-  const invitation = await call(a, 'friend-link', 'friend_link');
-  assert.match(invitation.contactLink, /^noknok:\/\/contact\//);
-  const accepted = await call(b, 'friend-add', 'friend_add', { link: invitation.contactLink });
-  assert.equal(accepted.contact.id, invitation.agent.id);
-  const synced = await call(a, 'friends', 'friends');
-  assert.equal(synced.contacts.length, 1);
-  assert.equal(synced.contacts[0].id, accepted.agent.id);
-  const aProfile = JSON.parse(await readFile(join(aDirectory, 'contacts.json'), 'utf8'));
-  const bProfile = JSON.parse(await readFile(join(bDirectory, 'contacts.json'), 'utf8'));
-  assert.notEqual(aProfile.token, bProfile.token);
-  assert.equal(aProfile.contacts[0].id, bProfile.id);
-  assert.equal(bProfile.contacts[0].id, aProfile.id);
-
-  let resolvePoll;
-  const polling = new Promise(resolve => { resolvePoll = resolve; });
-  function listener(req) {
-    if (req.url !== '/v1/contacts') return;
-    const chunks = [];
-    req.on('data', chunk => chunks.push(chunk));
-    req.once('end', () => {
-      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-      if (body.op === 'poll' && body.waitMs > 0) { relay.server.off('request', listener); resolvePoll(); }
-    });
-  }
-  relay.server.on('request', listener);
-  const listening = call(b, 'listen', 'listen', { timeout: 45 });
-  await polling;
-  const outgoing = await call(a, 'call', 'call', { contact: accepted.agent.id, purpose: 'A synthetic test of the user friend workflow' });
-  assert.equal(outgoing.outcome, 'delivered');
-  assert.equal(typeof outgoing.viewSession, 'string');
-  assert.ok(outgoing.viewUrl.includes(outgoing.viewSession));
-  const incoming = await listening;
-  assert.equal(incoming.calls.length, 1);
-  assert.equal(incoming.calls[0].callId, outgoing.callId);
-  assert.notEqual(incoming.calls[0].session, outgoing.session);
-  await call(a, 'wait', 'wait', { session: outgoing.session, timeout: 0 });
-  await call(a, 'send', 'send', { session: outgoing.session, text: 'Trae MCP test: hello Dot.' });
-  const received = await call(b, 'receive', 'receive', { session: incoming.calls[0].session, timeout: 0 });
-  assert.ok(received.events.some(event => event.data.text === 'Trae MCP test: hello Dot.'));
-  await call(b, 'reply', 'send', { session: incoming.calls[0].session, text: 'Dot MCP test: hello Trae.' });
-  const response = await call(a, 'receive', 'receive', { session: outgoing.session, timeout: 0 });
-  assert.ok(response.events.some(event => event.data.text === 'Dot MCP test: hello Trae.'));
-  await call(a, 'finish', 'finish', { session: outgoing.session, text: 'Friend workflow verified by synthetic clients.' });
-  const finished = await call(b, 'finish', 'finish', { session: incoming.calls[0].session, text: 'Verified.' });
-  assert.equal(finished.call.state, 'completed');
-  await Promise.all([a.stop(), b.stop()]);
-});
-
-test('managed profile MCP binding survives restart without names, directories or relay overrides', async t => {
-  const f = await fixture(t);
-  const relay = await startRelay({ port: 0, contacts: true });
-  t.after(() => relay.close());
-  const env = { ...process.env, NOKNOK_HOME: join(f.directory, 'managed') };
-  delete env.NOKNOK_AGENT;
-  delete env.NOKNOK_PRODUCT;
-  const makeIdentity = async () => {
-    const { stdout, stderr } = await execFileAsync(process.execPath, [cli, 'identity', '--server', relay.url], { env });
-    assert.equal(stderr, '');
-    const result = JSON.parse(stdout);
-    assert.match(result.localAgent, /^ap_[a-f0-9-]{36}$/);
-    return result;
-  };
-  const [aIdentity, bIdentity, cIdentity] = await Promise.all([makeIdentity(), makeIdentity(), makeIdentity()]);
-  assert.equal(new Set([aIdentity, bIdentity, cIdentity].map(item => item.localAgent)).size, 3);
-  const launch = async (identity, product) => {
-    const client = f.launch([cli, 'mcp', '--agent', identity.localAgent, ...(product ? ['--product', product] : [])], { env });
-    await client.initialize();
-    return client;
-  };
-  const call = async (client, localAgent, id, name, args) => {
-    const result = toolResult(await client.request(id, 'tools/call', { name: `noknok_${name}`, ...(args ? { arguments: args } : {}) }));
-    assert.equal(result.localAgent, localAgent);
-    return result;
-  };
-  let a = await launch(aIdentity, 'Doubao Work');
-  const b = await launch(bIdentity, 'dot');
-  const c = await launch(cIdentity);
-  const aBefore = await call(a, aIdentity.localAgent, 'identity', 'identity');
-  const bBefore = await call(b, bIdentity.localAgent, 'identity', 'identity');
-  assert.notEqual(aBefore.agent.id, bBefore.agent.id);
-  assert.equal(aBefore.agent.name, 'agent-doubaowork');
-  assert.equal(bBefore.agent.name, 'agent-dot');
-  assert.equal(aBefore.agent.id, aIdentity.agent.id);
-  assert.equal(bBefore.agent.id, bIdentity.agent.id);
-  const invitation = await call(a, aIdentity.localAgent, 'friend-link', 'friend_link');
-  await call(b, bIdentity.localAgent, 'friend-add', 'friend_add', { link: invitation.contactLink });
-  const friends = await call(a, aIdentity.localAgent, 'friends', 'friends');
-  assert.deepEqual(friends.contacts.map(contact => contact.id), [bBefore.agent.id]);
-  const unrelated = await call(c, cIdentity.localAgent, 'friends', 'friends');
-  assert.deepEqual(unrelated.contacts, []);
-  const denied = await c.request('unrelated-call', 'tools/call', { name: 'noknok_call', arguments: { contact: aBefore.agent.id, purpose: 'No friendship permission' } });
-  assert.equal(denied.result.isError, true);
-  assert.equal(denied.result.structuredContent.localAgent, cIdentity.localAgent);
-  assert.equal(denied.result.structuredContent.error.code, 'CONTACT_NOT_FOUND');
+  const env = { ...process.env, NOKNOK_HOME: join(f.directory, 'managed'), NOKNOK_SERVER: relay.url };
+  delete env.NOKNOK_AGENT; delete env.NOKNOK_PRODUCT; delete env.NOKNOK_SERVER_KEY;
+  const a = f.launch([cli, 'mcp', '--product', 'doubaowork'], { env });
+  const b = f.launch([cli, 'mcp', '--product', 'dot'], { env });
+  const c = f.launch([cli, 'mcp'], { env });
+  await Promise.all([a.initialize(), b.initialize(), c.initialize()]);
+  const host = toolResult(await a.request('create', 'tools/call', { name: 'noknok_meeting_create', arguments: { purpose: 'Persist this encrypted meeting' } }));
+  const guest = toolResult(await b.request('join', 'tools/call', { name: 'noknok_meeting_join', arguments: { link: invitationJoinLink(host) } }));
+  assert.notEqual(host.localAgent, guest.localAgent);
+  assert.equal(host.participant.name, 'agent-doubaowork');
+  assert.equal(guest.participant.name, 'agent-dot');
+  const unrelated = toolResult(await c.request('sessions', 'tools/call', { name: 'noknok_meeting_sessions' }));
+  assert.notEqual(unrelated.localAgent, host.localAgent);
+  assert.notEqual(unrelated.localAgent, guest.localAgent);
+  assert.deepEqual(unrelated.sessions, []);
+  const denied = await c.request('legacy-call', 'tools/call', { name: 'noknok_call', arguments: { contact: host.participant.id, purpose: 'No legacy tool exists' } });
+  assert.equal(denied.error.code, -32602);
   await a.stop();
-  a = await launch(aIdentity);
-  const aAfter = await call(a, aIdentity.localAgent, 'identity', 'identity');
-  assert.deepEqual(aAfter.agent, aBefore.agent);
-  const restored = await call(a, aIdentity.localAgent, 'friends', 'friends');
-  assert.deepEqual(restored.contacts.map(contact => contact.id), [bBefore.agent.id]);
-  await Promise.all([a.stop(), b.stop(), c.stop()]);
+  const resumed = f.launch([cli, 'mcp', '--agent', host.localAgent], { env });
+  await resumed.initialize();
+  const restored = toolResult(await resumed.request('status', 'tools/call', { name: 'noknok_meeting_status', arguments: { session: host.session } }));
+  assert.equal(restored.localAgent, host.localAgent);
+  assert.equal(restored.meeting.id, host.meetingId);
+  assert.equal(restored.meeting.purpose, 'Persist this encrypted meeting');
+  const sessions = toolResult(await resumed.request('sessions', 'tools/call', { name: 'noknok_meeting_sessions' }));
+  assert.deepEqual(sessions.sessions.map(item => item.session), [host.session]);
+  assert.equal(sessions.sessions[0].participant.name, 'agent-doubaowork');
+  await Promise.all([resumed.stop(), b.stop(), c.stop()]);
 });

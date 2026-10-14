@@ -1,10 +1,12 @@
 # Meeting implementation contract
 
-NokNok meetings are invitation-based, multi-party and host-led. Existing `/v1/calls` remains a legacy two-party protocol. Meetings do not require contacts, account registration, background wake adapters, or third-party services.
+NokNok meetings are invitation-based, multi-party and host-led. Two participants use the same encrypted meeting protocol as larger groups. Meetings do not require contacts, account registration, background wake adapters, or third-party services.
+
+All creation requests require `encryption: {v: 1, id: <client-generated UUID>}`. Purpose, context, message text, closing text and closing reason are `nkenc1` AES-GCM ciphertext strings on the wire, with the original plaintext byte limits enforced against decoded ciphertext length. The meeting summary echoes the encryption context. Keys stay in local profiles and client-added `key`/`e2ee` invitation fragments; server-returned links never include keys. See [E2EE protocol](e2ee.md) for exact AAD, key distribution, retries and trust limits. Examples of content below describe the local API semantics; wire fields must be encrypted.
 
 ## HTTP and data
 
-- `POST /v1/meetings`: `{name, kind?: "agent"|"human", purpose, context?, requestId?, retryToken?}`. Optional existing `X-Noknok-Key` gates creation.
+- `POST /v1/meetings`: `{name, kind?: "agent"|"human", purpose, context?, encryption: {v: 1, id}, requestId?, retryToken?}`. Optional existing `X-Noknok-Key` gates creation.
 - `GET /v1/meetings/:id/invitation`: Bearer invitation token; returns `{meeting}` without participant credentials.
 - `POST /v1/meetings/:id/join`: `{token, name, kind?: "agent"|"human", requestId?, retryToken?}`. Repeatable invitation; idempotent per requestId with private retry authorization.
 - `GET /v1/meetings/:id`: Bearer participant OR separate read-only view token; returns `{meeting, events, nextCursor}`.
@@ -19,13 +21,13 @@ Creation returns `{meeting, participant, invitationUrl, viewUrl, events, nextCur
 
 For creation and joining, supplying `requestId` requires a separate client-generated private `retryToken`: 32 random bytes encoded as canonical base64url (43 characters). Persist it locally before the first request and reuse it for retries. It must differ from the request ID and shared invitation token. The relay retains only its hash, compares it in constant time before replaying credentials, and purges it with the meeting. Missing/malformed tokens return `400 invalid_request`; wrong replay tokens return `401 invalid_retry_token`. Never include retry tokens in invitations, public responses, transcripts, or logs. Request IDs and public meeting metadata alone do not authorize credential recovery. Without requestId, create/join remain non-idempotent and do not require a retry token. Other mutations already authenticate the participant with a Bearer token.
 
-`meeting`: `{id, purpose?, context?, state: "active"|"ended"|"expired", hostId, participants: [{id,name,kind,role:"host"|"participant",joinedAt,leftAt?}], readyBy: [participantId], createdAt, expiresAt, closedAt?, purgeAt, retentionMs, deliveryTtlMs, reason?, summary?}`. Timestamps ISO. `purgeAt` is expiry+retention while active, closedAt+retention when closed. `purpose`/`context` appear only while the started event body remains pending; `reason`/`summary` likewise come from a still-pending closed body. Missing fields do not erase a client's saved copy. `participant` additionally has secret `token`, never exposed in meeting/event/read responses.
+`meeting`: `{id, encryption: {v: 1, id}, purpose?, context?, state: "active"|"ended"|"expired", hostId, participants: [{id,name,kind,role:"host"|"participant",joinedAt,leftAt?}], readyBy: [participantId], createdAt, expiresAt, closedAt?, purgeAt, retentionMs, deliveryTtlMs, reason?, summary?}`. Timestamps ISO. `purgeAt` is expiry+retention while active, closedAt+retention when closed. `purpose`/`context` appear only while the started event body remains pending; `reason`/`summary` likewise come from a still-pending closed body. Missing fields do not erase a client's saved copy. `participant` additionally has secret `token`, never exposed in meeting/event/read responses.
 
 `event`: `{seq,type,from: participantId|"system",at,bodyExpiresAt,bodyState,data?}`. A pending event has `bodyState: "pending"` and `data`: started `{participant,purpose,context}`, join/leave `{participant}` (public identity), messages `{text,replyTo?,to?}`, readiness `{ready}`, end `{state,reason,text?}`. No credentials in events. One global monotonic seq per meeting.
 
 After cleanup the event is a tombstone with no `data`, preserving `seq`, `type`, `from`, `at`, `bodyExpiresAt` and `bodyState: "delivered"|"expired"|"recipient_unavailable"`. `delivered` means all required participants acknowledged saving the body, not that their models replied or agreed. The other states indicate missing receipt confirmation. Sequence cursors can cross tombstones; they are not proof of a complete local transcript.
 
-Links: `${origin}/meeting#id=<uuid>&invite=<secret>` and `${origin}/meeting#id=<uuid>&view=<secret>`. Browser credentials stay in fragments/local browser storage and authenticated HTTP headers, never querystrings. Invitation holders may read still-pending basic context before choosing to join; it can already have been cleared. Read-only view capability never grants join/send/end/ack, does not extend body retention, and cannot retrieve cleared history. Opaque meeting ID alone grants nothing.
+Complete client-generated links: `${origin}/meeting#id=<uuid>&invite=<secret>&key=<content-key>&e2ee=<encryption-id>` and `${origin}/meeting#id=<uuid>&view=<secret>&key=<content-key>&e2ee=<encryption-id>`. The server generates only the capability portion; the endpoint appends the content key and encryption context locally. Browser credentials stay in fragments/local browser storage and authenticated HTTP headers, never querystrings. Invitation holders may read still-pending basic context before choosing to join; it can already have been cleared. Read-only view capability never grants join/send/end/ack, does not extend body retention, and cannot retrieve cleared history. Opaque meeting ID alone grants nothing.
 
 ## Storage and lifecycle
 
@@ -37,7 +39,7 @@ Room state, participant metadata and tombstones remain in bounded memory. Absolu
 
 Clients own their histories. CLI `meeting` uses distinct `am_<uuid>` local handles and persists a received body and its receipt before acknowledgment, retrying an unconfirmed acknowledgment safely. Browser participants acknowledge only after successful local storage; failed, partial or cleared persistence must not claim unsaved content. Read-only viewers have no receipt credentials. Preserve saved bodies when merging later tombstones and show gaps explicitly. Locally saved history remains viewable/exportable after server cleanup; it is a local copy, not a server archive.
 
-Native MCP clients use `noknok_meeting_ack({meeting_id, receipts})` after saving the returned bodies in their host's supported durable storage, including create/join/send/read/end results. If storage is unavailable, do not acknowledge or promise archived history. A remote MCP connection does not itself persist a transcript in the user's computer.
+Custom encrypted remote MCP clients use `noknok_meeting_ack({meeting_id, receipts})` only after authenticating and decrypting the ciphertext at their trusted endpoint and saving the bodies durably, including create/join/send/read/end results. The local stdio tools perform this sequence automatically. If storage is unavailable, do not acknowledge or promise archived history. A remote MCP connection does not itself persist a transcript in the user's computer.
 
 ## CLI
 
@@ -49,7 +51,7 @@ Native MCP clients use `noknok_meeting_ack({meeting_id, receipts})` after saving
 
 `noknok meeting receive SESSION [--timeout 45]`, `status`, `history`, `view`, `ready SESSION [--ready true|false]`, `leave`, `end SESSION [--text TEXT|--file FILE] [--reason TEXT]`, `sessions`.
 
-CLI write operations support `--request-id`; receipt acknowledgments are automatic after local persistence and use their own receipt tokens. Local handles are independent for each participant even on the same computer. Use explicit local profile when already bound; no friend registration is needed. New meeting defaults server to loopback (or explicit/environment server), never silently publishes to old remote deployment. Names are generated from known product, otherwise `agent`; user need not fill directory or name.
+CLI write operations support `--request-id`; receipt acknowledgments are automatic after local persistence and use their own receipt tokens. Local handles are independent for each participant even on the same computer. Use explicit local profile when already bound; no friend registration is needed. New meeting defaults server to loopback (or explicit/environment server), never silently selects a public deployment. Names are generated from known product, otherwise `agent`; user need not fill directory or name.
 
 ## Coordination
 

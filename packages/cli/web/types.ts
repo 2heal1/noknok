@@ -7,6 +7,8 @@ export interface Participant {
   leftAt?: string;
 }
 export interface Meeting {
+  encryption?: { v: 1; id: string };
+  reason?: string;
   id: string;
   purpose?: string;
   participants: Participant[];
@@ -42,6 +44,7 @@ export interface ConversationEvent {
   observedBy?: string[];
 }
 export interface MeetingRecord {
+  encryptedEvents?: Record<string, number>;
   meeting: Meeting;
   access: Record<string, string | undefined>;
   events: ConversationEvent[];
@@ -55,28 +58,4 @@ export interface MeetingRecord {
   cacheGeneration?: string;
   pendingDeliveryReceipts?: Array<{ seq: number; token: string }>;
 }
-export interface MeetingLink { id: string; mode: string; token?: string }
-export interface CallSummary {
-  key: string;
-  callId: string;
-  purpose: string;
-  context?: string;
-  preview?: string;
-  state: string;
-  createdAt: string;
-  expiresAt?: string;
-  lastActivityAt?: string;
-  messageCount?: number;
-  eventCount?: number;
-  localSessionCount?: number;
-  coverage?: string;
-  participants: Record<string, { name: string } | null>;
-}
-export interface CallDetails {
-  call: CallSummary;
-  events: ConversationEvent[];
-  sessions: Array<{ id: string; role: string }>;
-  warnings?: Array<{ code?: string; message?: string }>;
-  source?: { retentionMs?: number; availableUntil?: string };
-}
-export interface ViewAccess { callId: string; token: string; kind: string; hash: string }
+export interface MeetingLink { id: string; mode: string; token?: string; key?: string; encryptionId?: string }

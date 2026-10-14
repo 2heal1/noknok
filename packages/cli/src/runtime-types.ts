@@ -27,15 +27,9 @@ export interface RelayOptions {
   port?: number;
   publicUrl?: string;
   serverKey?: string;
-  contacts?: boolean;
-  inviteTtlMs?: number;
-  idleTtlMs?: number;
   retentionMs?: number;
-  maxCalls?: number;
   meetingTtlMs?: number;
   maxMeetings?: number;
-  extension?: (req: IncomingMessage, res: ServerResponse, parsed: URL) => boolean | Promise<boolean>;
-  extensionClose?: () => void;
 }
 export interface MeetingParticipant {
   id: string;
@@ -57,6 +51,7 @@ export interface MeetingEvent {
   data?: { purpose?: string; context?: string; text?: string; reason?: string; state?: string; ready?: boolean; to?: string; replyTo?: number; participant?: Omit<MeetingParticipant, 'token' | 'authId'> };
 }
 export interface MeetingRoom {
+  encryption: { v: 1; id: string };
   id: string;
   state: string;
   hostId: string;
@@ -104,93 +99,9 @@ export interface MeetingOptions {
   beforeMutation?: (room: MeetingRoom, participant: MeetingParticipant, operation: string) => void;
   onEvent?: (room: MeetingRoom, event: MeetingEvent) => void;
 }
-export interface LocalSession {
-  v: number;
-  id: string;
-  server: string;
-  callId: string;
-  role: string;
-  token: string;
-  cursor: number;
-  createdAt: string;
-  purpose: string;
-}
-export interface GatewayConfig { v: number; origin: string; token: string }
-export interface GatewayStatus {
-  configured: boolean;
-  connected: boolean;
-  mcpUrl: string;
-  lastError: string | null;
-  lastConnectedAt?: string;
-}
-export interface GatewayOptions {
-  leaseMs?: number;
-  requestTimeoutMs?: number;
-  maxAgents?: number;
-  maxPending?: number;
-  maxBytes?: number;
-  now?: () => number;
-  serverKey?: string;
-}
-export type Response = ServerResponse;
-export interface GatewayParameters {
-  _meta?: Record<string, unknown>;
-  name: string;
-  arguments: Record<string, string | number | boolean>;
-  delivery: { mode: string; url: string; secret: string };
-  cursor?: string | null;
-  ttlMs?: number | null;
-}
-export interface GatewayJob {
-  id: string;
-  method: string;
-  params: GatewayParameters;
-  delivered: boolean;
-  finish(response: unknown): void;
-}
-export interface WebhookSubscription {
-  id: string;
-  url: string;
-  secret: string;
-  expiresAt: number | null;
-  active: boolean;
-  verifiedAt?: number;
-  previousSecret?: string;
-  rotateUntil?: number;
-}
-export interface ReceiverStatus {
-  agent?: string;
-  backgroundRunning: boolean;
-  subscribed: boolean;
-  receiving: boolean;
-  origin?: string;
-  token?: string;
-  localMcpUrl?: string;
-  mcpUrl?: string;
-  gateway?: GatewayStatus;
-}
-export interface ReceiverCommandOptions {
-  directory: string;
-  agent: string;
-  port?: number | string;
-  publicUrl?: string;
-  gateway?: string;
-  signal?: AbortSignal;
-}
-export interface ContactActivity {
-  seq: number;
-  outcome: string;
-  reason?: string;
-  from?: { id: string; name: string };
-  session?: string;
-  callId?: string;
-  viewSession?: string;
-  viewUrl?: string;
-  call?: unknown;
-  instanceId?: string;
-}
 export interface DeliveryReceipt { seq: number; token: string }
 export interface MeetingSnapshot {
+  encryption: { v: 1; id: string };
   id: string;
   purpose?: string;
   context?: string;
@@ -207,6 +118,10 @@ export interface MeetingSnapshot {
   retentionMs: number;
 }
 export interface LocalMeetingSession {
+  encryptionKey: string;
+  encryption: { v: 1; id: string };
+  encryptedEvents?: Record<string, number>;
+  outgoing?: Record<string, { fingerprint: string; body: any }>;
   v: number;
   id: string;
   server: string;

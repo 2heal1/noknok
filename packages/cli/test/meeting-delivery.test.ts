@@ -1,3 +1,4 @@
+import { encryptedMeetingFixture } from './e2ee-fixture.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -9,7 +10,8 @@ function fixture(t, options = {}) {
   const rooms = new Map();
   const meetings = createMeetings({ getUrl: () => 'http://relay.test', ...options, onEvent(room) { rooms.set(room.id, room); } });
   t.after(() => meetings.close());
-  async function request(path, { method = 'GET', token, body } = {}) {
+  const encryption = encryptedMeetingFixture();
+  async function rawRequest(path, { method = 'GET', token, body } = {}) {
     const req = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]);
     req.method = method;
     req.headers = { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) };
@@ -20,6 +22,10 @@ function fixture(t, options = {}) {
     await meetings.handle(req, res, new URL(path, 'http://relay.test'));
     assert.ok(result, 'request should complete without long polling');
     return result;
+  }
+  async function request(path, options = {}) {
+    const response = await rawRequest(path, { ...options, body: await encryption.encode(path, options.body, options.token) });
+    return { ...response, body: await encryption.decode(response.body) };
   }
   async function create(overrides = {}) {
     const payload = { name: 'Host', purpose: 'Private purpose', context: 'Private context', requestId: randomBytes(8).toString('hex'), retryToken: randomBytes(32).toString('base64url'), ...overrides };
@@ -39,7 +45,7 @@ function fixture(t, options = {}) {
     return request(`${host.path}/ack`, { method: 'POST', token: participant.participant.token, body: { receipts: receipts ?? participant.deliveryReceipts } });
   }
   async function read(host, participant = host) { return (await request(host.path, { token: participant.participant.token })).body; }
-  return { meetings, rooms, request, create, join, ack, read };
+  return { meetings, rooms, rawRequest, request, create, join, ack, read };
 }
 
 test('creation awaits its first peer and explicit participant receipts erase every metadata copy', async t => {
@@ -210,4 +216,27 @@ test('the first peer claim batch respects room and global memory limits before j
       assert.equal(f.rooms.get(host.meeting.id).participants.size, 1);
     });
   }
+});
+
+test('relay requires encrypted content and retains only opaque wire bodies and public metadata', async t => {
+  const f = fixture(t);
+  const plain = await f.rawRequest('/v1/meetings', { method: 'POST', body: { name: 'Host', purpose: 'No encryption', context: '' } });
+  assert.equal(plain.status, 400);
+  assert.equal(plain.body.error.code, 'encryption_required');
+  const host = await f.create();
+  const wire = await f.rawRequest(host.path, { token: host.participant.token });
+  assert.equal(wire.body.meeting.encryption.v, 1);
+  assert.match(wire.body.meeting.context, /^nkenc1\./);
+  assert.equal(JSON.stringify(wire.body).includes('Private purpose'), false);
+  assert.equal(JSON.stringify(wire.body).includes('Private context'), false);
+  assert.equal(new URLSearchParams(new URL(host.invitationUrl).hash.slice(1)).has('key'), false);
+  for (const operation of ['messages', 'end']) {
+    const response = await f.rawRequest(`${host.path}/${operation}`, { method: 'POST', token: host.participant.token, body: { text: 'Unencrypted confidential text', reason: 'Unencrypted reason' } });
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error.code, 'encryption_required');
+  }
+  const state = f.rooms.get(host.meeting.id);
+  assert.equal(state.events.length, 1);
+  assert.equal(state.state, 'active');
+  assert.equal(state.encryption.id, host.meeting.encryption.id);
 });

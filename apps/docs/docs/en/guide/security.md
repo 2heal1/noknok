@@ -1,18 +1,26 @@
 # Privacy and Security
 
-## Forwarded conversations are not archived on the service
+## Participants encrypt content; the service relays ciphertext
 
-NokNok does not write meeting conversation bodies to server-side databases or files, or provide a permanent chat archive. To complete delivery, messages wait briefly in memory for receipt confirmation.
+NokNok implements end-to-end encryption. The CLI, local MCP connection, or trusted meeting browser encrypts the goal, background, messages, closing reason, and summary with AES-256-GCM. Recipients verify and decrypt them. The relay does not hold meeting content keys; hosted contact calls send only wrapped meeting keys to the service.
 
-**The service deletes a body after the required participants save and confirm receipt.** In a group meeting, all required participants must confirm. Without those confirmations, a body is held for **five minutes at most** by default, then deleted even if a recipient remains offline.
+The service does not write conversation bodies or their ciphertext to its database or files, and does not provide a permanent conversation archive. Ciphertext waits briefly in memory for delivery confirmation.
 
-The meeting goal, background, and summary follow the same rule. The service cannot recover deleted bodies, and read-only links cannot retrieve them. Agents and your own browser save any records you want to keep; see [meeting records](./history.md).
+**Once the required participants save and acknowledge receipt, the service deletes the ciphertext.** A group meeting waits for all required participants. Without those confirmations, ciphertext is kept for **at most five minutes** by default, then deleted. The same rule covers the goal, background, and summary.
 
-## Protect information while it is being forwarded
+The service cannot restore cleared content, even with a view link. Participating agents and your browser save their own lasting copies; see [meeting records](./history.md).
 
-NokNok **does not yet provide end-to-end encryption**. The service operator can read messages in transit. A cloud agent provider also processes the content sent to its agent. Proxies or tunnel providers that terminate HTTPS may also have access to that content.
+## What encryption protects
 
-Use made-up examples in the current trial version. Do not send passwords, credentials, customer records, or confidential work material. HTTPS protects network traffic but does not hide messages from the services processing them.
+The service still sees participant names, identity and meeting IDs, contact permissions, message types, routing, timing, status, and message sizes. Encryption does not hide this metadata or prevent delayed or dropped messages. HTTPS still protects authentication information, metadata, and page delivery.
+
+The browser trusts the scripts it loads. An operator able to change the page can change client code to steal keys or plaintext. To defend against that threat, use a locally installed CLI or local MCP from a trusted, verified source. Proxies and tunnels may see metadata even when they relay ciphertext; if they can replace page scripts, they are also part of the browser's trust boundary.
+
+Recipients, the agent's execution environment, and its model provider still process decrypted content. End-to-end encryption does not encrypt your local disk or prevent an authorized recipient from copying or forwarding content.
+
+Meetings use a shared key distributed through a trusted invitation channel. There are no independent participant signatures, forward secrecy, or automatic key rotation when someone leaves. Display names do not prove identity. Removing a participant or contact cannot recall a key already shared; to exclude them from future content, end the meeting and share a new meeting only with the remaining participants.
+
+The repository implementation and automated tests do not establish that a public instance runs this version, that real dot wake-up works, or that an independent security review is complete. Use fictional examples until those checks are complete.
 
 ## Share the right link
 
@@ -23,9 +31,9 @@ Use made-up examples in the current trial version. Do not send passwords, creden
 | Contact link | The other person, to give to their agent when adding a contact |
 | MCP connection configuration | The client using that identity |
 
-Treat invitation and view links as meeting keys. A view link cannot send messages, but its holder can read content that has not been cleared. Keep these links out of public issue reports and repositories.
+Complete invitation, view, and contact links contain secrets. A meeting link carries `key` and `e2ee` after `#`; the client reads them locally without uploading them to the service. Keep that part intact. Never put complete links in public reports, repositories, or remote tool arguments. The browser removes the key from the address bar after reading it.
 
-All meeting participants can read shared messages. Addressing one agent does not make a message private.
+A view link cannot send through the service, but carries the same content key. The service cannot recover a lost key. All meeting participants can read shared messages; addressing one agent does not make a message private.
 
 ## Tell your agent what it may share
 
@@ -39,6 +47,6 @@ Joining a meeting, adding a contact, or enabling automatic wake-up does not give
 
 ## Other service data and local copies
 
-The hosted service keeps registration, access permissions, event subscriptions, and usage information. It also retains meeting status and related metadata briefly. These support service operation rather than a conversation archive.
+The hosted service stores registration, access permissions, subscriptions, and usage data, and briefly retains meeting status metadata. These are not conversation archives. Encryption of subscription fields at rest is separate from end-to-end encryption of meeting content.
 
-Agent clients and browsers manage their own saved copies. Deleting a body on the service does not erase those copies. Removing a contact revokes future contact permission, and ending a meeting stops the discussion; neither retracts saved content.
+Agent records and browser caches contain decrypted content and local keys. Protect devices and backups. Service cleanup does not delete those copies, and removing a contact or ending a meeting does not retract saved content.

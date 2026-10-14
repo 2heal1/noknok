@@ -4,7 +4,7 @@
 
 这篇指南按「接入 → 创建会议或加好友 → 联系 → 可选后台接听」展开。只想转交邀请时，先看[开始使用](getting-started.md)，不必配置好友或 MCP Events。
 
-**当前公共实例 `https://api.noknok.cloud` 只用于有内测码的受限合成联调。端到端加密尚未实现；服务可以看到明文，真实用户内测仍需完成[上线前 TODO](launch-checklist.md)。真实 dot 在原任务结束后自动加入并回答，也仍待原生宿主验收。**
+**当前代码已实现端到端加密：CLI／本地 stdio MCP 在参与端加解密，服务只转发密文。代码合并或客户端升级不代表公共实例 `https://api.noknok.cloud` 已部署新协议；使用前须确认客户端和服务端同时升级。公共实例的真实用户内测和 dot 自动接听仍按[上线前 TODO](launch-checklist.md)验收，不能据此宣称已上线。**
 
 ## 1. 安装并接入自己的身份
 
@@ -35,7 +35,7 @@ noknok hosted setup --server https://api.noknok.cloud --code-file /path/to/priva
 noknok hosted create --agent LOCAL_AGENT --purpose '收集登录故障的复现入口与操作步骤'
 ```
 
-立即把返回的 `invitationUrl` 给目标 agent 或人，把 `viewUrl` 给想旁观的人。自己保存 `am_…` session，继续使用 `meeting send` / `meeting receive`。
+立即将返回的完整 `invitationText` 原样放进可复制代码块，用户私下转发给对方，让对方粘贴到自己的 Agent 会话；另把完整 `viewUrl` 给获准旁观的人。邀请内已包含安装、skill 和加入命令，不缩成裸链接。链接的 `#` fragment 包含会议密钥；不要删除 `key` 或 `e2ee` 参数，也不要把链接粘贴进远程 MCP。CLI 和浏览器只在本地读取密钥，HTTP 请求不发送 fragment。自己保存 `am_…` session，继续使用 `meeting send` / `meeting receive`。
 
 **普通邀请的接收方无需内测码或托管账号：**agent 执行 `noknok meeting join '完整邀请链接'`，人直接在浏览器打开并加入。邀请码只授予这场会议的权限，不建立好友关系，也不获得创建托管会议的通用权限。访客使用量计入会议所有者的配额。
 
@@ -59,7 +59,7 @@ A 再同步接受结果：
 noknok hosted friends --agent A_HANDLE
 ```
 
-两端保存收到的 peer ID 和各自联系凭证，后续使用该 peer ID 联系。联系链接是一次授权交换，默认 1 天内有效（最长 7 天），应只交给预期联系人；联系授权有效期为 90 天，到期后需要重新交换。来自另一服务的联系链接会在已有凭证发送前被拒绝。
+CLI 将 peer ID、联系凭证和共享联系密钥保存在各自的私有 profile。好友链接中的 `#offer=…&key=…` 必须完整地经可信私密渠道交给对方；`friend-add` 在本地取出密钥后只发送 offer 给服务。发起方通过本地保存的 offer 恢复同一密钥，之后用它加密每场会议的密钥。缺少联系密钥时不能发起呼叫，需由双方重新交换完整链接。联系链接是一次授权交换，默认 1 天内有效（最长 7 天），应只交给预期联系人；联系授权有效期为 90 天，到期后需要重新交换。来自另一服务的联系链接会在已有凭证发送前被拒绝。
 
 **加好友立即返回，不会进入等待循环、订阅事件或启动模型对话。** 后台处理来信需要单独授权和配置。
 
@@ -104,7 +104,7 @@ noknok meeting end HOST_SESSION --agent HOST_HANDLE --text '复现条件已确�
 
 `meeting receive` 会先将正文保存在本地，再确认送达；浏览器参与者也仅在本地保存成功后确认。`meeting history SESSION --agent LOCAL_AGENT` 可在服务清理后读取本端实际保存的记录；后续只含元数据的响应不会覆盖已存正文。晚加入或断线可能导致正文缺失，应明确说明并请求参会者补充。
 
-原生 MCP Agent 必须先将返回的正文保存在宿主支持的持久存储，再调用 `noknok_meeting_ack`，传入 `meeting_id` 和返回的 `deliveryReceipts`（作为 `receipts`）。游标、读取成功和 Events 回调都不是保存确认。没有持久存储能力时应说明限制，不得确认已保存；未确认的正文仍会按期限清理。
+本地 stdio MCP 的 `noknok_hosted_*` 和 `noknok_meeting_*` 工具调用同一 CLI，自动完成本地加解密、持久保存及送达确认。不要让模型把自然语言正文直接提交给远程 HTTP MCP；该接口仅接受版本化密文，不持有加解密密钥。开发自定义客户端时，应在端侧验证并保存正文后再提交 `deliveryReceipts`，不能仅凭序号、HTTP 成功或 Events 回调确认保存。
 
 ## 5. 可选：连接原生 MCP Events，让宿主处理来信
 
@@ -116,7 +116,7 @@ noknok meeting end HOST_SESSION --agent HOST_HANDLE --text '复现条件已确�
 noknok hosted config --agent LOCAL_AGENT
 ```
 
-优先在宿主中连接服务 `/mcp`，用 `Authorization` header 传该 agent 的 bearer token。若宿主不支持自定义 header，可尝试命令返回的 `privateMcpUrl`（`/mcp/AGENT_TOKEN`）。**这份结果含私密凭证，需私下配置，不能粘贴到邀请、会议、Issue 或截图里，也不能给另一个 agent 复用。** 当前版本不提供通用 OAuth 登录，具体宿主能否接受上述配置需要实际验证。
+`mcpConfig` 启动绑定当前 profile 的本地 stdio MCP：用 `noknok_hosted_friend_link`、`noknok_hosted_call`、`noknok_hosted_accept` 等工具处理好友和邀请，再用 `noknok_meeting_*` 交流。`eventsMcpConfig` 是单独的远程 `/mcp` 连接，使用 `Authorization` header，供支持原生 Events 的宿主接收通知；远程会议工具只接受密文。**Events 配置包含私密凭证，必须私下配置，不得公开或给其他 agent 复用。** 当前版本没有通用 OAuth 登录。仅能连接远程 MCP、不能运行本地 CLI／stdio 或其他可信端侧加密客户端的宿主，无法直接进行加密会议；不要用服务端代为加密来绕过这个限制。
 
 插件连接后，用户明确授权宿主订阅当前身份的 NokNok 活动事件。由宿主通过原生 `events/subscribe` 提供回调 URL 和签名密钥；普通 CLI 或 MCP 工具调用不能代替宿主创建这一原生订阅。
 
@@ -128,7 +128,7 @@ noknok hosted subscription-status --agent LOCAL_AGENT
 
 验收要实际完成：建立订阅 → 原设置任务结束 → 另一个已授权好友发起新会议 → 接收方在没有新人工输入的情况下加入并做实质回复。仅 `subscribed`、回调 HTTP 200 或模拟客户端通过，都不算真实自动接听已验证。
 
-托管路线不需要给用户电脑配置 Tunnel、VPN、任意 URL 代理或 shell 入口；宿主仅通过此服务提供的通信 API 工作。收到内容的云端 agent 仍会处理这些内容，不能把它描述为信息对云端宿主也保密。
+托管路线不需要给用户电脑配置 Tunnel、VPN、任意 URL 代理或 shell 入口。事件只负责通知，后续任务仍需访问持有本身份密钥的可信客户端和原 profile。参与端的模型／宿主会处理解密后的内容，端到端加密不对这些参与端保密。
 
 ## 可复制提示词
 
@@ -152,10 +152,10 @@ noknok hosted subscription-status --agent LOCAL_AGENT
 已连接插件后，授权原生后台处理：
 
 ```text
-使用已连接的 NokNok 插件。我授权你通过宿主原生 MCP Events 订阅当前身份的来信，
+使用已连接的 NokNok 本地加密工具和独立的 Events 连接。我授权你通过宿主原生 MCP Events 订阅当前身份的来信，
 并处理我已授权好友发来的会议邀请。收到后检查目标，加入并在我已有授权范围内交流；
-需要额外信息或行动授权时问我。展示订阅状态后结束设置任务，不运行 listen 等待循环。
-如果宿主无法订阅，请准确说明缺少的能力，不要把工具可调用当作后台已开启。
+需要额外信息或行动授权时问我。展示订阅状态后结束设置任务，不启动等待循环。
+如果宿主无法订阅，或后续任务不能使用持有密钥的本地工具，请说明缺少的能力，不要把 HTTP 收件当作后台接听已开启。
 ```
 
 联系好友：
@@ -186,7 +186,7 @@ noknok beta-code --data-dir .noknok-service --public-url http://127.0.0.1:4317 -
 
 联系凭证由服务的 HMAC 密钥代表已认证授权方签发。发起联系时，服务校验调用者身份、接收方授权、服务空间、操作、有效期和撤销状态；第三方不会仅凭复制 peer ID 或展示名获得联系权限。服务和密钥属于信任边界，当前也没有公开可搜索的联系人目录。
 
-聊天正文只在有界内存中暂存，服务重启会丢失会议；SQLite 中的订阅不会恢复会议正文。部署方的反向代理和监控应避免记录正文与凭证。HTTPS 保护传输，订阅字段的加密保护落盘敏感配置，二者都不等于防止运营者看到内容的端到端加密。
+聊天目标、背景、消息、人工结束原因和总结在参与端使用 AES-256-GCM 加密；服务仅在有界内存中暂存密文，重启会丢失会议。房间密钥不进入服务；定向好友邀请只附加用联系密钥加密的会议密钥。SQLite 中的订阅不会恢复会议正文。HTTPS 仍必需保护身份凭证及元数据；订阅字段的落盘加密与正文端到端加密是两套机制。部署方仍应避免记录密文、凭证和链接。显示名、成员关系、时序、消息大小等元数据仍对服务可见；浏览器代码由服务提供，参与端及分发代码属于信任边界。详见[端到端加密](e2ee.md)。
 
 正文、目标、背景和结束总结默认仅暂存 5 分钟；发送时的活跃参与者（包括发送者）全部保存并确认后提前删除。首位其他参与者加入前的正文继续等待，但不延长期限。离开或撤销授权会释放其待确认义务，不视为成功送达。读取和通知成功不确认正文，也不延长期限。
 

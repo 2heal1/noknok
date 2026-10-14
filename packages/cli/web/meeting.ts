@@ -1,5 +1,6 @@
 import type { MeetingRecord, ConversationEvent, MeetingLink } from './types.js';
 import { meetingInvitationText } from './meeting-invitation.js';
+import { validKey, contentAAD, decryptText, encryptText, isEncryptedText } from './e2ee.js';
 interface MeetingElements {
   'notice': HTMLElement;
   'storage-warning': HTMLElement;
@@ -56,6 +57,7 @@ const MAX_LOCAL_BYTES = 4 * 1024 * 1024;
 const MAX_ROOM_EVENTS = 3000;
 const ROOM_KEY_PREFIX = `${STORAGE_KEY}.room.`;
 const CLEAR_KEY_PREFIX = `${STORAGE_KEY}.cleared.`;
+const REQUEST_KEY_PREFIX = `${STORAGE_KEY}.requests.`;
 const MESSAGE_TYPES = new Set(['message', 'request', 'result', 'progress', 'waiting_for_user']);
 const TYPE_NAMES = { request: '请协助', result: '结论', progress: '进展', waiting_for_user: '待用户确认' };
 
@@ -100,9 +102,13 @@ export class MeetingCache {
     if (this.generation(id) !== generation) return { cleared: true };
     const key = this.roomKey(id, generation);
     const latest = JSON.parse(this.backing.getItem(key) || 'null');
+    for (const [digest, sequence] of Object.entries(record.encryptedEvents || {})) {
+      if (latest?.encryptedEvents?.[digest] !== undefined && latest.encryptedEvents[digest] !== sequence) encryptionFailure();
+    }
     const copy = {
       ...latest, ...record,
       meeting: (latest?.snapshotCursor || 0) > (record.snapshotCursor || 0) ? { ...record.meeting, ...latest.meeting } : { ...latest?.meeting, ...record.meeting },
+      encryptedEvents: { ...latest?.encryptedEvents, ...record.encryptedEvents },
       access: { ...latest?.access, ...Object.fromEntries(Object.entries(record.access || {}).filter(([, value]) => value !== undefined)) },
       events: mergeEvents(latest?.events, record.events),
       cursor: Math.max(latest?.cursor || 0, record.cursor || 0),
@@ -139,6 +145,36 @@ export class MeetingCache {
     const oldKey = this.roomKey(id, this.generation(id));
     this.backing.setItem(`${CLEAR_KEY_PREFIX}${id}`, randomId());
     this.backing.removeItem(oldKey);
+    for (let index = this.backing.length - 1; index >= 0; index--) {
+      const key = this.backing.key(index);
+      if (key?.startsWith(`${REQUEST_KEY_PREFIX}${id}:`)) this.backing.removeItem(key);
+    }
+  }
+}
+
+// Save random request IDs and exact ciphertext before sending. Reloading or a
+// lost response must reuse that same wire body, including its random GCM nonce.
+export class MeetingRequestCache {
+  constructor(private backing: Storage) {}
+  async prepare(scope: string, operation: string, body, create: () => Promise<Record<string, unknown>>) {
+    const fingerprint = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([operation, body]))))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    const key = `${REQUEST_KEY_PREFIX}${scope}`;
+    let requests = JSON.parse(this.backing.getItem(key) || '{}');
+    if (!requests[fingerprint]) {
+      const wire = await create();
+      // Another tab may have prepared this request while encryption was running.
+      requests = JSON.parse(this.backing.getItem(key) || '{}');
+      if (!requests[fingerprint]) requests[fingerprint] = wire;
+      if (Object.keys(requests).length > 50) throw new Error('待确认的操作过多，请先确认已有操作的会议状态。');
+    }
+    this.backing.setItem(key, JSON.stringify(requests));
+    return { fingerprint, key, body: requests[fingerprint] };
+  }
+  complete(request: { key: string; fingerprint: string }) {
+    const requests = JSON.parse(this.backing.getItem(request.key) || '{}');
+    delete requests[request.fingerprint];
+    if (Object.keys(requests).length) this.backing.setItem(request.key, JSON.stringify(requests));
+    else this.backing.removeItem(request.key);
   }
 }
 
@@ -219,19 +255,77 @@ export async function saveAndAcknowledge(record: MeetingRecord, { save, acknowle
   return true;
 }
 
+const ENCRYPTION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 export function parseMeetingLink(hash: string): MeetingLink | null {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
   const id = params.get('id');
   if (!id || !/^[a-zA-Z0-9_-]{1,100}$/.test(id)) return null;
+  for (const field of ['id', 'view', 'invite', 'key', 'e2ee']) if (params.getAll(field).length > 1) return null;
+  if (!params.has('view') && !params.has('invite')) return params.size === 1 ? { id, mode: 'saved' } : null;
+  const key = params.get('key'), encryptionId = params.get('e2ee');
+  if (!key || !validKey(key) || !encryptionId || !ENCRYPTION_ID.test(encryptionId)) return null;
   // An explicit read-only link remains read-only even in a browser that has joined before.
-  if (params.get('view')) return { id, mode: 'view', token: params.get('view')! };
-  if (params.get('invite')) return { id, mode: 'invite', token: params.get('invite')! };
-  return { id, mode: 'saved' };
+  const mode = params.has('view') ? 'view' : 'invite';
+  const token = params.get(mode);
+  return token ? { id, mode, token, key, encryptionId } : null;
+}
+
+function encryptionFailure(): never {
+  throw Object.assign(new Error('无法验证会议的端到端加密内容。请使用包含完整密钥的原始邀请或只读链接；本次内容未保存或确认接收。'), { encryptionFailed: true });
+}
+
+// Validate and decrypt the entire response before returning anything the caller
+// could persist or acknowledge. Opaque field digests prevent cross-sequence replay.
+export async function decryptMeetingPayload(payload, { id, key, encryptionId, encryptedEvents = {} }: {
+  id: string; key?: string; encryptionId?: string; encryptedEvents?: Record<string, number>;
+}) {
+  if (!validKey(key) || typeof encryptionId !== 'string' || !ENCRYPTION_ID.test(encryptionId) || !payload.meeting || payload.meeting.id !== id
+    || payload.meeting.encryption?.v !== 1 || payload.meeting.encryption.id !== encryptionId) encryptionFailure();
+  const result = structuredClone(payload);
+  const seen = { ...encryptedEvents };
+  async function decode(value, type, from, field, to?, replyTo?) {
+    if (!isEncryptedText(value)) encryptionFailure();
+    try { return await decryptText(key!, value, contentAAD(encryptionId!, type, from, field, to, replyTo)); }
+    catch { encryptionFailure(); }
+  }
+  for (const field of ['purpose', 'context']) if (result.meeting[field] !== undefined) {
+    result.meeting[field] = await decode(result.meeting[field], 'started', 'system', field);
+  }
+  for (const [field, wireField] of [['summary', 'text'], ['reason', 'reason']]) if (result.meeting[field] !== undefined) {
+    if (field === 'reason' && result.meeting.state === 'expired' && result.meeting[field] === 'meeting_timeout') continue;
+    result.meeting[field] = await decode(result.meeting[field], 'closed', result.meeting.hostId, wireField);
+  }
+  for (const event of [...(result.events || []), ...(result.event ? [result.event] : [])]) {
+    if (!Number.isSafeInteger(event.seq) || event.seq < 1) encryptionFailure();
+    if (!event.data) continue;
+    if (MESSAGE_TYPES.has(event.type) && !isEncryptedText(event.data.text)) encryptionFailure();
+    if (event.type === 'started' && (!isEncryptedText(event.data.purpose) || !isEncryptedText(event.data.context))) encryptionFailure();
+    if (event.type === 'closed' && event.from !== 'system' && !isEncryptedText(event.data.reason)) encryptionFailure();
+    for (const field of ['purpose', 'context', 'text', 'reason']) if (event.data[field] !== undefined) {
+      if (event.type === 'closed' && event.from === 'system' && event.data.state === 'expired' && field === 'reason' && event.data[field] === 'meeting_timeout') continue;
+      const wire = event.data[field];
+      event.data[field] = await decode(wire, event.type, event.from, field, event.data.to, event.data.replyTo);
+      const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(wire)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+      if (seen[digest] !== undefined && seen[digest] !== event.seq) encryptionFailure();
+      seen[digest] = event.seq;
+    }
+  }
+  return { payload: result, encryptedEvents: seen };
 }
 
 if (typeof document !== 'undefined') startMeetingApp();
 
 function startMeetingApp() {
+  const initialHash = location.hash;
+  let parsed = parseMeetingLink(initialHash);
+  const previousInvitation = history.state?.noknokInvitation;
+  if (parsed?.mode === 'saved' && previousInvitation && previousInvitation.id === parsed.id) {
+    const recovered = parseMeetingLink(new URLSearchParams({ id: previousInvitation.id, invite: previousInvitation.token, key: previousInvitation.key, e2ee: previousInvitation.encryptionId }).toString());
+    if (recovered?.mode === 'invite') parsed = recovered;
+  }
+  // Remove key and capability fragments before any network request or rendering.
+  if (initialHash) history.replaceState(parsed?.mode === 'invite' ? { noknokInvitation: parsed } : null, '', parsed ? `/meeting#${new URLSearchParams({ id: parsed.id })}` : '/meeting');
   function $<K extends keyof MeetingElements>(id: K): MeetingElements[K];
   function $(id: string): HTMLElement;
   function $(id: string): HTMLElement {
@@ -255,15 +349,29 @@ function startMeetingApp() {
   let storageAvailable = true;
   let persistencePaused = false;
   let pendingInvitation: MeetingLink;
-  const requests = new Map();
+  let requests: MeetingRequestCache;
 
-  function requestFor(operation, body) {
-    const fingerprint = JSON.stringify([operation, body]);
-    if (!requests.has(fingerprint)) {
-      if (requests.size >= 50) requests.delete(requests.keys().next().value);
-      requests.set(fingerprint, { requestId: randomId(), ...(operation.endsWith('/join') ? { retryToken: randomRetryToken() } : {}) });
+  async function requestFor(operation, body) {
+    const joining = operation.endsWith('/join');
+    if (!requests || (!joining && persistencePaused)) throw new Error('无法保存本次操作的重试凭据，请恢复浏览器本地存储后重试。');
+    const id = joining ? pendingInvitation.id : current.meeting.id;
+    const generation = cache.generation(id);
+    const scope = `${id}:${generation}:${joining ? 'join' : current.participantId}`;
+    const request = await requests.prepare(scope, operation, body, async () => {
+      const wire = { ...body };
+      if (operation.endsWith('/messages') || operation.endsWith('/end')) {
+        const type = operation.endsWith('/messages') ? body.type || 'message' : 'closed';
+        const encryptionId = current.access.encryptionId, key = current.access.key;
+        if (!key || !encryptionId || !current.participantId) encryptionFailure();
+        for (const field of ['text', 'reason']) if (wire[field] !== undefined) wire[field] = await encryptText(key, wire[field], contentAAD(encryptionId, type, current.participantId!, field, body.to, body.replyTo));
+      }
+      return { ...wire, requestId: randomId(), ...(joining ? { retryToken: randomRetryToken() } : {}) };
+    });
+    if (cache.generation(id) !== generation || (!joining && persistencePaused)) {
+      requests.complete(request);
+      throw new Error('本地副本已清除，本次操作尚未发送。');
     }
-    return { fingerprint, body: { ...body, ...requests.get(fingerprint) } };
+    return request;
   }
 
   function make<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, value?: unknown) {
@@ -288,6 +396,7 @@ function startMeetingApp() {
 
   try {
     cache = new MeetingCache(localStorage);
+    requests = new MeetingRequestCache(localStorage);
     storage = cache.read();
   } catch {
     storageAvailable = false;
@@ -315,7 +424,8 @@ function startMeetingApp() {
       if (removed || partial) storageWarning(`${removed ? `本地空间有限，已移除 ${removed} 场较早的会议副本。` : ''}${partial ? '此会议的本地缓存仅保留最近部分记录；需要完整记录时，请在本页关闭前下载。' : ''}`);
       $('local-save-state').textContent = partial ? '最近记录已保存在此浏览器；当前页面仍可下载已读取的完整记录。' : '已保存到此浏览器。服务清除后，仍可打开本地副本。';
       return true;
-    } catch {
+    } catch (error) {
+      if (error.encryptionFailed) throw error;
       storageAvailable = false;
       storageWarning('浏览器未能保存会议记录和入会身份（可能空间不足或已禁用存储）。请下载记录；刷新或关闭页面可能丢失当前身份。');
       $('local-save-state').textContent = '本地保存失败，请下载记录。';
@@ -334,7 +444,8 @@ function startMeetingApp() {
   }
 
   function link(mode, token) {
-    return `${location.origin}/meeting#${new URLSearchParams({ id: current.meeting.id, [mode]: token })}`;
+    if (!current.access.key || !current.access.encryptionId) encryptionFailure();
+    return `${location.origin}/meeting#${new URLSearchParams({ id: current.meeting.id, [mode]: token, key: current.access.key, e2ee: current.access.encryptionId })}`;
   }
 
   function stopPolling() {
@@ -402,7 +513,7 @@ function startMeetingApp() {
     await openRoom(structuredClone(record));
   }
 
-  async function openRoom(record) {
+  async function openRoom(record, authenticated = false) {
     stopPolling();
     current = record;
     current.events ||= [];
@@ -415,14 +526,22 @@ function startMeetingApp() {
     timelineVersion = '';
     visible('room');
     history.replaceState(null, '', `/meeting#${new URLSearchParams({ id: current.meeting.id })}`);
-    persist();
     renderRoom();
+    if (authenticated && !persist()) throw new Error('入会身份未能保存，请保留邀请并重试。');
     if (!accessToken()) { archive('此浏览器只保留了会议副本，无法连接实时会议。'); return; }
     await refresh();
   }
 
   async function absorb(payload) {
     const opened = current;
+    const decrypted = await decryptMeetingPayload(payload, { id: opened.meeting.id, key: opened.access.key, encryptionId: opened.access.encryptionId, encryptedEvents: opened.encryptedEvents });
+    if (current !== opened) return false;
+    // A concurrent poll and mutation may have decrypted against an older map.
+    for (const [digest, sequence] of Object.entries(decrypted.encryptedEvents)) {
+      if (current.encryptedEvents?.[digest] !== undefined && current.encryptedEvents[digest] !== sequence) encryptionFailure();
+    }
+    current.encryptedEvents = { ...current.encryptedEvents, ...decrypted.encryptedEvents };
+    payload = decrypted.payload;
     if (payload.meeting && (payload.nextCursor || 0) >= (current.snapshotCursor || 0)) {
       current.meeting = { ...current.meeting, ...payload.meeting };
       current.snapshotCursor = payload.nextCursor || 0;
@@ -484,6 +603,7 @@ function startMeetingApp() {
 
   function handleReadFailure(error) {
     if (error.name === 'AbortError') return;
+    if (error.encryptionFailed) { stopPolling(); online = false; renderRoom(); announce(error.message, true); return; }
     if (error.status === 404 || error.status === 410) {
       archive('服务中的会议已不可用（可能到期或服务已重启）。这里显示的是此浏览器保存的本地副本。');
     } else if (error.status === 401 || error.status === 403) {
@@ -631,7 +751,7 @@ function startMeetingApp() {
     $('room-status').textContent = archived ? '本地副本' : !online ? '连接中断' : meeting.state === 'ended' ? '已结束' : meeting.state === 'expired' ? '已到期' : '讨论中';
     $('room-status').className = `status-pill${archived || !online ? ' offline' : terminal ? ' ended' : ''}`;
     $('room-expiry').textContent = archived ? `创建于 ${time(meeting.createdAt, true)}` : terminal ? `会议状态保留至 ${time(meeting.purgeAt, true)}` : `会议有效至 ${time(meeting.expiresAt, true)}`;
-    $('connection-state').textContent = archived ? '服务状态不可用 · 仅显示本地保存内容' : !online ? '正在连接服务…' : current.mode === 'view' ? '只读查看' : self()?.leftAt ? '你已离开 · 可查看记录' : '已连接';
+    $('connection-state').textContent = archived ? '服务状态不可用 · 仅显示本地保存内容' : !online ? '正在连接服务…' : current.mode === 'view' ? '只读查看 · 端到端加密' : self()?.leftAt ? '你已离开 · 可查看记录' : '已连接 · 端到端加密';
     $('connection-state').className = !online ? 'disconnected' : '';
     $('room-context').textContent = meeting.context || '此设备没有保存背景内容；服务端不提供完整历史。';
     const messageCount = current.events.filter((e) => MESSAGE_TYPES.has(e.type)).length;
@@ -657,10 +777,10 @@ function startMeetingApp() {
     const buttons = [...$('room').querySelectorAll('button'), ...$('end-dialog').querySelectorAll('button')];
     buttons.forEach((button) => { button.disabled = true; });
     try {
-      const request = requestFor(`${basePath()}/${action}`, body);
+      const request = await requestFor(`${basePath()}/${action}`, body);
       const payload = await api(`${basePath()}/${action}`, { token: accessToken(), body: request.body });
-      requests.delete(request.fingerprint);
       await absorb(payload);
+      requests.complete(request);
       return payload;
     } catch (error) {
       announce(`${error.message} 操作未确认，请保留内容并检查会议状态后重试。`, true);
@@ -697,13 +817,14 @@ function startMeetingApp() {
     $('agent-join-help').hidden = true;
     try {
       const payload = await api(`/v1/meetings/${encodeURIComponent(parsed.id)}/invitation`, { token: parsed.token });
-      const meeting = payload.meeting;
+      const { payload: decrypted } = await decryptMeetingPayload(payload, { id: parsed.id, key: parsed.key, encryptionId: parsed.encryptionId });
+      const meeting = decrypted.meeting;
       $('invite-purpose').textContent = meeting.purpose || '会议目标已从服务端删除';
       $('invite-context').textContent = meeting.context || '加入后接收新消息。历史内容请向参会 Agent 查看其本地记录。';
       $('invite-facts').replaceChildren(make('span', '', `${meeting.participants?.filter((p) => !p.leftAt).length || 1} 位参与者`), make('span', '', `有效至 ${time(meeting.expiresAt, true)}`));
       $('join-form').hidden = meeting.state !== 'active';
       $('return-to-room').hidden = !storage.rooms.some((r) => r.meeting.id === parsed.id && r.access?.participant);
-      const invitationUrl = `${location.origin}/meeting#${new URLSearchParams({ id: parsed.id, invite: parsed.token })}`;
+      const invitationUrl = `${location.origin}/meeting#${new URLSearchParams({ id: parsed.id, invite: parsed.token, key: parsed.key, e2ee: parsed.encryptionId })}`;
       $('agent-prompt').value = meetingInvitationText(invitationUrl, undefined, 'zh');
       $('agent-join-help').hidden = meeting.state !== 'active';
       if (meeting.state !== 'active') announce('这场会议已经结束，不能再加入。', true);
@@ -721,11 +842,12 @@ function startMeetingApp() {
     try {
       storage.name = $('join-name').value.trim() || storage.name;
       const joinPath = `/v1/meetings/${encodeURIComponent(pendingInvitation.id)}/join`;
-      const request = requestFor(joinPath, { token: pendingInvitation.token, name: storage.name, kind: 'human' });
+      const request = await requestFor(joinPath, { token: pendingInvitation.token, name: storage.name, kind: 'human' });
       const payload = await api(joinPath, { body: request.body });
-      requests.delete(request.fingerprint);
-      const view = parseMeetingLink(new URL(payload.viewUrl, location.origin).hash)?.token;
-      await openRoom({ meeting: payload.meeting, participantId: payload.participant.id, mode: 'participant', access: { participant: payload.participant.token, invite: pendingInvitation.token, view }, events: payload.events || [], pendingDeliveryReceipts: payload.deliveryReceipts || [], cursor: 0 });
+      const decrypted = await decryptMeetingPayload(payload, { id: pendingInvitation.id, key: pendingInvitation.key, encryptionId: pendingInvitation.encryptionId });
+      const view = new URLSearchParams(new URL(payload.viewUrl, location.origin).hash.slice(1)).get('view');
+      await openRoom({ meeting: decrypted.payload.meeting, participantId: payload.participant.id, mode: 'participant', access: { participant: payload.participant.token, invite: pendingInvitation.token, view, key: pendingInvitation.key, encryptionId: pendingInvitation.encryptionId }, encryptedEvents: decrypted.encryptedEvents, events: decrypted.payload.events || [], pendingDeliveryReceipts: payload.deliveryReceipts || [], cursor: 0 }, true);
+      requests.complete(request);
       announce('已加入会议。你可以随时补充信息。');
     } catch (error) { announce(error.message, true); }
     finally { button.disabled = false; }
@@ -767,6 +889,7 @@ function startMeetingApp() {
     if (!confirm('清除此浏览器保存的会议记录及入会身份？当前页面仍可继续使用，刷新后不会恢复。其他参与者和服务上的记录不受影响。')) return;
     try {
       cache.clear(current.meeting.id);
+      history.replaceState(null, '', `/meeting#${new URLSearchParams({ id: current.meeting.id })}`);
       storage.rooms = cache.read().rooms;
       persistencePaused = true;
       persist();
@@ -791,12 +914,11 @@ function startMeetingApp() {
     } catch { storageWarning('浏览器未能同步其他页面保存的会议记录。请下载当前记录。'); }
   });
 
-  const parsed = parseMeetingLink(location.hash);
-  if (!parsed) renderLanding();
+  if (!parsed) { renderLanding(); if (initialHash) announce('会议链接缺少有效的端到端加密密钥或访问凭证，请获取完整链接。', true); }
   else if (parsed.mode === 'invite') previewInvitation(parsed);
   else if (parsed.mode === 'saved') openSaved(parsed.id);
   else {
     const existing = storage.rooms.find((r) => r.meeting.id === parsed.id);
-    openRoom({ ...(existing ? structuredClone(existing) : {}), meeting: existing?.meeting || { id: parsed.id, participants: [], state: 'active' }, events: existing?.events || [], mode: 'view', access: { ...(existing?.access || {}), view: parsed.token }, cursor: 0 });
+    openRoom({ ...(existing ? structuredClone(existing) : {}), meeting: existing?.meeting || { id: parsed.id, participants: [], state: 'active' }, events: existing?.events || [], mode: 'view', access: { ...(existing?.access || {}), view: parsed.token, key: parsed.key, encryptionId: parsed.encryptionId }, cursor: 0 });
   }
 }

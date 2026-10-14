@@ -7,6 +7,9 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { api, fail, normalizeServer } from './client.js';
 import { meetingInvitationText } from '../web/meeting-invitation.js';
+import { contentAAD, encryptText, generateKey, validKey } from './e2ee.js';
+import { checkMeetingEncryption, decryptMeetingResult, prepareMeetingCreation, requireMeetingKey, withMeetingKey, type MeetingKey } from './meeting-crypto.js';
+export { prepareMeetingCreation, withMeetingKey } from './meeting-crypto.js';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const HANDLE = /^am_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -56,15 +59,17 @@ export async function acknowledgeMeeting(store: MeetingStore, session: LocalMeet
   return session;
 }
 
-export function decodeMeetingLink(value, capability = 'invite') {
+export function decodeMeetingLink(value, capability = 'invite', requireEncryption = true) {
   try {
     if (typeof value !== 'string' || value.length > 16384 || /[\s\\]/u.test(value)) throw new Error();
     const url = new URL(value), params = new URLSearchParams(url.hash.slice(1));
     const id = params.get('id'), token = params.get(capability);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/meeting' || url.search
       || !UUID.test(id || '') || !/^[A-Za-z0-9_-]{16,512}$/.test(token || '')
-      || params.size !== 2 || !params.has('id')) throw new Error();
-    return { server: url.origin, id, token };
+      || params.size !== (requireEncryption ? 4 : 2) || !params.has('id')) throw new Error();
+    const key = params.get('key'), encryptionId = params.get('e2ee');
+    if (requireEncryption && (!validKey(key) || !UUID.test(encryptionId || ''))) throw new Error();
+    return { server: url.origin, id, token, ...(requireEncryption ? { key: key!, encryptionId: encryptionId! } : {}) };
   } catch { throw fail('INVALID_INVITATION', `Expected a complete meeting link with an ${capability} capability in its fragment.`); }
 }
 
@@ -141,7 +146,7 @@ export class MeetingStore {
       return session;
     } finally { await unlock(); }
   }
-  async receipt(identity, name, explicitId, signal, { reuseName = false } = {}) {
+  async receipt(identity, name, explicitId, signal, { reuseName = false, e2ee }: { reuseName?: boolean; e2ee?: MeetingKey } = {}) {
     await this.init();
     const path = join(this.directory, `.request-${createHash('sha256').update(identity).digest('hex')}.json`);
     const release = await this.lock(`${path}.lock`, signal);
@@ -156,35 +161,68 @@ export class MeetingStore {
       // Persist an independent recovery capability before sending any request.
       value.retryToken ??= randomBytes(32).toString('base64url');
       if (!/^[A-Za-z0-9_-]{43}$/.test(value.retryToken) || Buffer.from(value.retryToken, 'base64url').toString('base64url') !== value.retryToken) throw fail('INVALID_LOCAL_RECEIPT', 'The saved meeting retry capability is invalid. Restore this profile from its trusted local backup.');
+      if (e2ee) {
+        requireMeetingKey(e2ee);
+        if (value.encryptionKey && (value.encryptionKey !== e2ee.key || value.encryption?.id !== e2ee.encryptionId)) throw fail('E2EE_KEY_CONFLICT', 'This invitation conflicts with the saved encryption key.');
+      }
+      value.encryptionKey ??= e2ee?.key || generateKey();
+      value.encryption ??= { v: 1, id: e2ee?.encryptionId || randomUUID() };
+      requireMeetingKey({ key: value.encryptionKey, encryptionId: value.encryption.id });
       await atomicWrite(path, value);
-      return { ...value, release };
+      return { ...value, release, prepare: async (input, transform) => {
+        const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+        if (value.prepared && value.prepared.fingerprint !== fingerprint) throw fail('IDEMPOTENCY_CONFLICT', 'This request ID was already used with different meeting content.');
+        if (!value.prepared) { value.prepared = { fingerprint, wire: await transform(input) }; await atomicWrite(path, value); }
+        return value.prepared.wire;
+      } };
     } catch (error) { await release(); throw error; }
   }
-  async create(id, server, result, signal) {
+  async create(id, server, result, signal, e2ee: MeetingKey) {
+    checkMeetingEncryption(result.meeting, e2ee);
+    // Never attach a local key to a service-supplied URL on another origin.
+    for (const [field, capability] of [['viewUrl', 'view'], ['invitationUrl', 'invite']]) {
+      if (field === 'invitationUrl' && result[field] === undefined) continue;
+      const link = decodeMeetingLink(result[field], capability, false);
+      if (link.server !== server || link.id !== result.meeting.id) throw fail('INVALID_RESPONSE', 'Relay returned an inconsistent meeting access link.');
+    }
+    const decoded = await decryptMeetingResult(result, e2ee);
     const unlock = await this.lock(`${this.path(id)}.lock`, signal);
     try {
       let saved;
       try { saved = await this.load(id); } catch (error) { if (error.code !== 'SESSION_NOT_FOUND') throw error; }
       if (saved) {
-        if (saved.server !== server || saved.meetingId !== result.meeting.id || saved.participant.id !== result.participant.id || saved.token !== result.participant.token) throw fail('SESSION_CONFLICT', 'Saved meeting participant does not match the relay response.');
+        if (saved.server !== server || saved.meetingId !== result.meeting.id || saved.participant.id !== result.participant.id || saved.token !== result.participant.token
+          || saved.encryptionKey !== e2ee.key || saved.encryption?.id !== e2ee.encryptionId) throw fail('SESSION_CONFLICT', 'Saved meeting participant does not match the relay response.');
         return { saved, restored: true };
       }
-      const session = { v: 1, id, server, meetingId: result.meeting.id, participant: publicParticipant(result.participant), token: result.participant.token,
-        meeting: result.meeting, viewUrl: result.viewUrl, ...(result.invitationUrl ? { invitationUrl: result.invitationUrl } : {}),
+      const session = { v: 2, id, server, meetingId: result.meeting.id, participant: publicParticipant(result.participant), token: result.participant.token,
+        encryptionKey: e2ee.key, encryption: { v: 1 as const, id: e2ee.encryptionId },
+        meeting: decoded.meeting, viewUrl: withMeetingKey(result.viewUrl, e2ee.key, e2ee.encryptionId), ...(result.invitationUrl ? { invitationUrl: withMeetingKey(result.invitationUrl, e2ee.key, e2ee.encryptionId) } : {}),
         archiveCursor: 0, readCursor: 0, events: [], createdAt: new Date().toISOString() };
       await atomicWrite(this.path(id), session);
       return { saved: session, restored: false };
     } finally { await unlock(); }
   }
   async archive(id, result, { delivered = false, signal }: { delivered?: boolean; signal?: AbortSignal } = {}) {
-    return this.update(id, session => {
+    return this.update(id, async session => {
       if (result.meeting?.id !== session.meetingId || !Array.isArray(result.events) || result.events.length > MAX_EVENTS) throw fail('INVALID_RESPONSE', 'Relay returned an invalid meeting event batch.');
+      const wireResult = result;
+      result = await decryptMeetingResult(result, { key: session.encryptionKey, encryptionId: session.encryption.id });
+      const encryptedEvents = { ...session.encryptedEvents };
+      for (const event of wireResult.events) for (const field of ['purpose', 'context', 'text', 'reason']) {
+        const wire = event.data?.[field];
+        if (typeof wire !== 'string' || !wire.startsWith('nkenc1.')) continue;
+        const digest = createHash('sha256').update(wire).digest('hex');
+        if (encryptedEvents[digest] !== undefined && encryptedEvents[digest] !== event.seq) throw fail('E2EE_REPLAY', 'The relay replayed encrypted content at another event sequence.');
+        encryptedEvents[digest] = event.seq;
+      }
       const bySequence = new Map<number, MeetingEvent>(session.events.map(event => [event.seq, event]));
       for (const event of result.events) {
         bySequence.set(event.seq, mergeArchivedEvent(bySequence.get(event.seq), event));
       }
       if (bySequence.size > MAX_EVENTS) throw fail('ARCHIVE_LIMIT', 'Meeting exceeds the local event archive limit.');
       session.events = [...bySequence.values()].sort((a, b) => a.seq - b.seq);
+      session.encryptedEvents = encryptedEvents;
       let cursor = 0;
       for (const event of session.events) { if (event.seq !== cursor + 1) break; cursor = event.seq; }
       session.archiveCursor = cursor;
@@ -210,6 +248,26 @@ export class MeetingStore {
       session.archivedAt = new Date().toISOString();
     }, signal);
   }
+  async mutation(id, body, signal) {
+    let wire;
+    await this.update(id, async session => {
+      requireMeetingKey({ key: session.encryptionKey, encryptionId: session.encryption?.id });
+      const fingerprint = createHash('sha256').update(JSON.stringify(body)).digest('hex');
+      const saved = session.outgoing && Object.hasOwn(session.outgoing, body.requestId) ? session.outgoing[body.requestId] : undefined;
+      if (saved && saved.fingerprint !== fingerprint) throw fail('IDEMPOTENCY_CONFLICT', 'This request ID was already used with different content.');
+      if (saved) { wire = saved.body; return; }
+      if (Object.keys(session.outgoing || {}).length >= 4096) throw fail('LOCAL_REQUEST_LIMIT', 'This meeting has reached its local request limit.');
+      wire = { ...body };
+      for (const field of ['text', 'reason']) if (body[field] !== undefined) {
+        const max = field === 'reason' ? 4096 : 32768;
+        if (typeof body[field] !== 'string' || Buffer.byteLength(body[field]) > max) throw fail('INVALID_ARGUMENT', `${field} exceeds its ${max}-byte limit.`);
+        wire[field] = await encryptText(session.encryptionKey, body[field], contentAAD(session.encryption.id,
+          body.type || 'closed', session.participant.id, field, body.to, body.replyTo));
+      }
+      session.outgoing = { ...session.outgoing, [body.requestId]: { fingerprint, body: wire } };
+    }, signal);
+    return wire;
+  }
   async list() {
     await this.init();
     const sessions: Array<{ session: string; meetingId: string; participant: LocalMeetingSession['participant']; purpose?: string; lastKnownState: string; server: string; createdAt: string }> = [];
@@ -225,10 +283,10 @@ export class MeetingStore {
 function checkResult(result, server, expectedId, creation) {
   if (!result.meeting || !UUID.test(result.meeting.id || '') || (expectedId && result.meeting.id !== expectedId)
     || !result.participant || typeof result.participant.id !== 'string' || !/^[A-Za-z0-9_-]{16,512}$/.test(result.participant.token || '')) throw fail('INVALID_RESPONSE', 'Relay returned an invalid meeting participant.');
-  const view = decodeMeetingLink(result.viewUrl, 'view');
+  const view = decodeMeetingLink(result.viewUrl, 'view', false);
   if (view.server !== server || view.id !== result.meeting.id) throw fail('INVALID_RESPONSE', 'Relay returned an inconsistent meeting view link.');
-  if (creation) {
-    const invitation = decodeMeetingLink(result.invitationUrl);
+  if (creation || result.invitationUrl !== undefined) {
+    const invitation = decodeMeetingLink(result.invitationUrl, 'invite', false);
     if (invitation.server !== server || invitation.id !== result.meeting.id) throw fail('INVALID_RESPONSE', 'Relay returned an inconsistent invitation link.');
   }
 }
@@ -250,12 +308,17 @@ export async function meetingCommand(command: string, args: string[], options: C
     const context = command === 'create' ? await textInput(options, 'context', 'context-file', false, signal) : undefined;
     const creationId = suppliedId || randomUUID();
     const identity = invitation ? JSON.stringify(['join', server, invitation.id, invitation.token]) : JSON.stringify(['create', server, creationId]);
-    const pending = await store.receipt(identity, name, invitation ? suppliedId : creationId, signal, { reuseName: options.name === undefined && options.product === undefined && process.env.NOKNOK_PRODUCT === undefined });
+    const pending = await store.receipt(identity, name, invitation ? suppliedId : creationId, signal, {
+      reuseName: options.name === undefined && options.product === undefined && process.env.NOKNOK_PRODUCT === undefined,
+      ...(invitation ? { e2ee: { key: invitation.key!, encryptionId: invitation.encryptionId! } } : {}),
+    });
     try {
-      const body = invitation ? { token: invitation.token, name: pending.name, kind: 'agent', requestId: pending.requestId, retryToken: pending.retryToken } : { name: pending.name, kind: 'agent', purpose, context, requestId: pending.requestId, retryToken: pending.retryToken };
+      const body = invitation ? { token: invitation.token, name: pending.name, kind: 'agent', requestId: pending.requestId, retryToken: pending.retryToken } : {
+        name: pending.name, kind: 'agent', ...await prepareMeetingCreation(pending, purpose!, context), requestId: pending.requestId, retryToken: pending.retryToken,
+      };
       const result = await api(server, invitation ? `/v1/meetings/${invitation.id}/join` : '/v1/meetings', { method: 'POST', body, signal, ...(invitation ? {} : { key: process.env.NOKNOK_SERVER_KEY }) });
       checkResult(result, server, invitation?.id, !invitation);
-      const { saved, restored } = await store.create(pending.session, server, result, signal);
+      const { saved, restored } = await store.create(pending.session, server, result, signal, { key: pending.encryptionKey, encryptionId: pending.encryption.id });
       // Creation/join responses also carry content; commit those receipts with
       // the content before allowing the relay to discard it.
       await acknowledgeMeeting(store, await store.archive(saved.id, { ...result, events: result.events || [] }, { signal }), { signal });
@@ -263,8 +326,8 @@ export async function meetingCommand(command: string, args: string[], options: C
       const local = await acknowledgeMeeting(store, await store.archive(saved.id, initial, { signal }), { signal });
       const archived = archivedMeetingResult(initial, local);
       return { session: saved.id, meetingId: saved.meetingId, requestId: pending.requestId, restored, participant: saved.participant,
-        meeting: archived.meeting, invitationUrl: result.invitationUrl, viewUrl: result.viewUrl, events: archived.events,
-        ...(result.invitationUrl ? { invitationText: meetingInvitationText(result.invitationUrl, result.viewUrl) } : {}),
+        meeting: archived.meeting, invitationUrl: saved.invitationUrl, viewUrl: saved.viewUrl, events: archived.events,
+        ...(saved.invitationUrl ? { invitationText: meetingInvitationText(saved.invitationUrl, saved.viewUrl) } : {}),
         next: invitation ? 'Read the locally archived goal and messages, contribute within owner authorization, then receive updates. Only the host ends the meeting.' : 'Display invitationText and the session/view link now. Share the invitation with intended participants. History is stored by each participant; the relay deletes acknowledged content.' };
     } catch (error) { throw Object.assign(error, { requestId: pending.requestId, session: pending.session }); }
     finally { await pending.release(); }
@@ -274,6 +337,7 @@ export async function meetingCommand(command: string, args: string[], options: C
   if (command === 'history') return { session: id, source: 'local', meeting: session.meeting, participant: session.participant, events: session.events, archivedAt: session.archivedAt, lastArchivedSequence: session.archiveCursor,
     historyComplete: session.historyComplete === true, missingContentSequences: session.missingContentSequences || [], liveStateUnknown: true };
   if (command === 'view') return { session: id, viewUrl: session.viewUrl, url: session.viewUrl, source: 'local', next: 'This read-only view cannot recover deleted content. Use meeting history for this participant’s local record.' };
+  requireMeetingKey({ key: session.encryptionKey, encryptionId: session.encryption?.id });
   session = await acknowledgeMeeting(store, session, { signal });
   const base = `/v1/meetings/${session.meetingId}`;
   const request = (path, extra = {}) => api(session.server, base + path, { token: session.token, signal, ...extra });
@@ -319,10 +383,10 @@ export async function meetingCommand(command: string, args: string[], options: C
   } else if (command === 'end') {
     const text = await textInput(options, 'text', 'file', false, signal);
     if (text !== undefined) body.text = text;
-    if (options.reason !== undefined) body.reason = options.reason;
+    body.reason = options.reason || 'host_ended';
   }
   try {
-    const result = await request(path, { method: 'POST', body });
+    const result = await request(path, { method: 'POST', body: await store.mutation(id, body, signal) });
     // Save the acknowledged action before fetching intervening events. Never
     // advance past gaps; concurrent senders' events are merged by sequence.
     session = await acknowledgeMeeting(store, await store.archive(id, { ...result, events: result.event ? [result.event] : [] }, { signal }), { signal });

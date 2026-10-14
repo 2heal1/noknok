@@ -12,20 +12,20 @@
 
 - A / B 各有一个随机 256 位 capability URL，身份由 URL 绑定，不能靠参数冒充对方。
 - `whoami`、`read_inbox`、`send_message` 三个工具。
-- `agentcall.message.created` 事件，每个身份只能订阅自己的收件箱。
+- `noknok.message.created` 事件，每个身份只能订阅自己的收件箱。
 - `server/discover` 声明 `2026-07-28` 版本和 `tools/events` 能力；保留 `initialize` 入口。
 - 回调 challenge 验证、Standard Webhooks HMAC 签名、订阅过期与取消、有限重试。
 - 原子保存消息、订阅和投递状态；发送使用 `request_id` 幂等键。
-- 只允许 `agentcall-poc: ping`、`agentcall-poc: pong`、`agentcall-poc: ack`，单条消息只能有一个回复，最多三条组成回复链，总消息数最多 100。
+- 只允许 `noknok-poc: ping`、`noknok-poc: pong`、`noknok-poc: ack`，单条消息只能有一个回复，最多三条组成回复链，总消息数最多 100。
 
 这两个 URL 都是凭据，保存在权限为 0600 的本地状态文件里，不应提交到 Git、日志、工单或截图。PoC 可在 ChatGPT 中使用 **No authentication** 配置，因为访问能力已经在随机 URL 内；这不是经过验证的用户身份，也不能用于真实业务。正式版应采用 OAuth 与明确的联系人授权。
 
 ## 启动和本地检查
 
-Node.js 22+，无额外依赖：
+源码验证需要先在仓库根目录执行 `pnpm install --frozen-lockfile` 和 `pnpm build:cli`：
 
 ```sh
-npm run poc:mcp-events -- --state .agentcall-mcp-poc/live/state.json --port 8788
+pnpm exec tsx packages/cli/poc/mcp-events/server.ts --state .noknok-mcp-poc/live/state.json --port 8788
 ```
 
 默认只监听 `127.0.0.1`。状态目录符合现有 `.gitignore` 规则。启动日志不包含身份 URL、回调 URL 或签名密钥。
@@ -33,27 +33,27 @@ npm run poc:mcp-events -- --state .agentcall-mcp-poc/live/state.json --port 8788
 在另一终端验证工具与事件发现：
 
 ```sh
-node scripts/probe-mcp-events.mjs \
-  --state .agentcall-mcp-poc/live/state.json \
+pnpm probe:mcp-events \
+  --state .noknok-mcp-poc/live/state.json \
   --server http://127.0.0.1:8788
 
-node poc/mcp-events/status.mjs .agentcall-mcp-poc/live/state.json
+pnpm exec tsx packages/cli/poc/mcp-events/status.ts .noknok-mcp-poc/live/state.json
 
-node --test test/mcp-events-poc.test.mjs
+pnpm --filter @noknok/cli exec tsx --test test/mcp-events-poc.test.ts
 ```
 
 probe 是普通合成测试客户端，输出始终标注 `dot_execution_verified: false`。它不自动回复消息，也不会把模拟器伪装成 dot。
 
 ## 接入通用部署入口
 
-通用 `deploy/server.mjs` 入口可同时提供 relay/viewer 和实验 `/mcp/<token>`。仅在隔离测试环境启用，使用自己部署且宿主可达的 HTTPS origin。
+通用 `packages/cli/dist/src/deploy/server.js` 入口可同时提供 relay/viewer 和实验 `/mcp/<token>`。仅在隔离测试环境启用，使用自己部署且宿主可达的 HTTPS origin。
 
 | 环境变量 | 含义 |
 | --- | --- |
-| `AGENTCALL_MCP_POC_ENABLED=1` | 启用实验 MCP 路由；默认关闭 |
-| `AGENTCALL_MCP_AGENT_A_TOKEN` | A 的 32 随机字节 base64url 凭据，43 字符 |
-| `AGENTCALL_MCP_AGENT_B_TOKEN` | B 的独立凭据，格式同上，两者必须不同 |
-| `AGENTCALL_MCP_STATE_PATH` | 状态文件路径，默认 `/tmp/agentcall-mcp-poc/state.json` |
+| `NOKNOK_MCP_POC_ENABLED=1` | 启用实验 MCP 路由；默认关闭 |
+| `NOKNOK_MCP_AGENT_A_TOKEN` | A 的 32 随机字节 base64url 凭据，43 字符 |
+| `NOKNOK_MCP_AGENT_B_TOKEN` | B 的独立凭据，格式同上，两者必须不同 |
+| `NOKNOK_MCP_STATE_PATH` | 状态文件路径，默认 `/tmp/noknok-mcp-poc/state.json` |
 
 两份凭据通过平台环境变量注入，不加入构建产物；已有状态与配置的身份不一致时启动失败，避免悄悄切换身份。临时盘重建时，环境变量可保留身份地址，但订阅和消息会丢失，需重新订阅。这是单实例开发验证配置，不能当作长期可靠存储。
 
@@ -63,7 +63,7 @@ probe 是普通合成测试客户端，输出始终标注 `dot_execution_verifie
 
 1. 使用自己部署且宿主可访问的 HTTPS MCP 入口，不把 localhost 当成云端可达，不自行安装 Tunnel。仅访问成功不能证明 Events 已接通。
 2. 在可信本机从 `state.json` 取得 `agents.A.token` / `agents.B.token`，分别组成 `https://<入口>/mcp/<对应 token>`。使用个人或工作区的 **Add custom MCP server** 创建测试插件，不需要公开上架。不要把状态文件本身上传。
-3. 确认 ChatGPT 实际发现三个工具与 `agentcall.message.created`。本地发现测试不能证明 MCP 2.0 与当前 ChatGPT 客户端的完整兼容性。
+3. 确认 ChatGPT 实际发现三个工具与 `noknok.message.created`。本地发现测试不能证明 MCP 2.0 与当前 ChatGPT 客户端的完整兼容性。
 4. 给 B 的 dot 安装身份 B 插件，然后发送下面的测试指令。确认服务端收到 `events/subscribe`，完成 callback verification，且状态检查显示 B 的订阅有效。
 5. 先让测试客户端 A 发一个 ping，等待 B 的 dot 自动回 pong。之后才做两个独立 agent 的双向验证。
 
@@ -71,20 +71,20 @@ B 的测试指令：
 
 ```text
 使用 NokNok PoC B 插件，先调用 whoami 确认你是 B。
-订阅 agentcall.message.created，recipient_id 为 B。
+订阅 noknok.message.created，recipient_id 为 B。
 只进行这个合成测试，不读取任何其他聊天、项目或个人资料。
-收到来自 A 的 agentcall-poc: ping 后，用 read_inbox 读取消息，
-调用 send_message 向 A 回复 agentcall-poc: pong；reply_to 使用原消息 ID，
+收到来自 A 的 noknok-poc: ping 后，用 read_inbox 读取消息，
+调用 send_message 向 A 回复 noknok-poc: pong；reply_to 使用原消息 ID，
 request_id 固定为 reply_ 加原消息 ID，重试时保持一致。
-每个 ping 只回复一次，收到 agentcall-poc: ack 后不要回复。
+每个 ping 只回复一次，收到 noknok-poc: ack 后不要回复。
 本次授权仅覆盖上述测试回复；测试结束后取消订阅。
 ```
 
 在 **B 订阅成功后**，测试客户端 A 发起一次请求：
 
 ```sh
-node scripts/probe-mcp-events.mjs \
-  --state .agentcall-mcp-poc/live/state.json \
+pnpm probe:mcp-events \
+  --state .noknok-mcp-poc/live/state.json \
   --server https://<入口> \
   --send-ping
 ```

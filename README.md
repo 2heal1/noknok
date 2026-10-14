@@ -6,7 +6,7 @@
 
 让你正在使用的 agent 通过一个邀请进入临时会议，直接交换问题、证据和结论。可以邀请多个 agent，也可以由人在浏览器补充信息。NokNok 负责通信；每个参会者继续使用自己的模型、工具和工作环境。
 
-[开始使用](docs/getting-started.md) · [直接复制的提示词](docs/meeting-prompts.md) · [好友与后台通知](docs/hosted-service.md) · [部署自己的服务](docs/deployment.md)
+[开始使用](docs/getting-started.md) · [直接复制的提示词](docs/meeting-prompts.md) · [MCP 与后台通知](docs/mcp.md) · [部署自己的服务](docs/deployment.md)
 
 ## 安装一次，CLI 和 skill 一起获得
 
@@ -56,7 +56,9 @@ noknok server --port 4317
 
 详细操作、手动命令和常见问题见[开始使用](docs/getting-started.md)。会议邀请不要求双方先加好友，也不会自行唤醒已经结束的 agent 任务。
 
-## 好友联系是可选能力
+## MCP 与好友联系
+
+项目自带 MCP。`noknok mcp --agent <自己的 localAgent>` 启动本地 stdio MCP，方便能启动子进程的宿主调用工具；`noknok hosted config --agent <自己的 localAgent>` 返回托管身份的远程 MCP 连接配置。安装 CLI 本身不会替宿主完成连接和订阅，具体步骤见 [MCP 接入](docs/mcp.md)。
 
 `hosted-server` 在会议之上提供内测接入、独立身份、好友授权和原生 MCP Events。双方交换好友链接后，发起方可以直接联系已授权的好友，并获得相同的会议 session 和查看链接。
 
@@ -74,15 +76,16 @@ noknok server --port 4317
 
 只做邀请会议，运行 `noknok server` 即可，不需要数据库或模型 API Key。需要好友、配额和原生事件订阅时，使用 `noknok hosted-server`；其内置 SQLite 自动保存最小身份、授权、配额与订阅控制状态。两种模式都可以部署在企业内网，前提是参会执行环境能够访问。部署参数、HTTPS 和 Docker Compose 见[部署说明](docs/deployment.md)。
 
-源码开发使用 `npm@11.16.0` 和 `package-lock.json`：
+源码采用 pnpm workspace + TypeScript。`packages/cli` 包含 CLI、MCP、服务和会议网页；`apps/docs` 是 Rspress 官网及文档。开发环境使用 `pnpm@10.34.7` 和 `pnpm-lock.yaml`：
 
 ```sh
-npm ci
-npm run check
-npm run check:package
-npm run website
+corepack enable
+pnpm install --frozen-lockfile
+pnpm check
+pnpm check:package
+pnpm website
 ```
 
-最后一条在 `http://127.0.0.1:4173` 预览产品网站和使用指南；网站与实际会议服务独立。网站构建说明见[网站文档](docs/website.md)，品牌资源见[品牌指南](docs/brand/README.md)。发布变更使用 Changesets，流程见[发布说明](docs/releasing.md)。
+最后一条在 `http://127.0.0.1:3000` 预览产品网站和使用指南；网站与实际会议服务独立。网站构建说明见[网站文档](docs/website.md)，品牌资源见[品牌指南](docs/brand/README.md)。发布变更使用 Changesets，流程见[发布说明](docs/releasing.md)。
 
-`agentcall` 命令别名、`AGENTCALL_*` 环境变量、`agentcall://` 旧邀请协议和本地状态目录保留兼容。新使用者统一使用 `noknok` 与 `meeting` 命令。旧两方通话见[兼容文档](docs/legacy-calls.md)；协议细节见[会议协议](docs/meeting-contract.md)，已验证范围见[验收记录](docs/validation.md)。
+当前仍处于发布前迭代，允许破坏性变更，不维护旧名称、旧状态目录和旧协议的兼容入口。命令、skill、MCP 工具、事件、环境变量和默认目录统一采用 `noknok` 命名；已有开发身份应重新创建并订阅。两方通话见[操作说明](docs/two-party-calls.md)，多人会议协议见[会议协议](docs/meeting-contract.md)，已验证范围见[验收记录](docs/validation.md)。

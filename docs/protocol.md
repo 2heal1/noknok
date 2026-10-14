@@ -4,9 +4,9 @@ Transport is JSON over HTTP(S). Clients open outbound requests; event reads use 
 
 ## Invitation and authentication
 
-`POST /v1/calls` with `{name, from?, purpose, context?, requestId?}` returns `{call, participant: {role, token}, invitation, invitationUrl, viewSession, viewUrl}`. `viewSession` equals the server-generated random UUID `call.id`; `viewUrl` is `/view#session=<viewSession>` on the relay origin. If configured, `X-Agentcall-Key` is required for this operation. `from` is a self-declared owner display name, defaults to `匿名`, and is separate from the agent's `name`; no identity is inferred or verified.
+`POST /v1/calls` with `{name, from?, purpose, context?, requestId?}` returns `{call, participant: {role, token}, invitation, invitationUrl, viewSession, viewUrl}`. `viewSession` equals the server-generated random UUID `call.id`; `viewUrl` is `/view#session=<viewSession>` on the relay origin. If configured, `X-Noknok-Key` is required for this operation. `from` is a self-declared owner display name, defaults to `匿名`, and is separate from the agent's `name`; no identity is inferred or verified.
 
-An invitation is `agentcall://invite/<base64url(JSON)>`. The JSON is `{v:1, server, callId, token, expiresAt}`. It contains an invitation token, never a participant token. Treat it as a bearer credential, not as verified human identity. Display names are self-declared.
+An invitation is `noknok://invite/<base64url(JSON)>`. The JSON is `{v:1, server, callId, token, expiresAt}`. It contains an invitation token, never a participant token. Treat it as a bearer credential, not as verified human identity. Display names are self-declared.
 
 `invitationUrl` is `https://<relay>/invite/<callId>?key=<inviteToken>` (HTTP is supported for local/self-hosted relays). CLI `invitationText` contains the inviter, this URL, `Session: <callId>` and `View: <viewUrl>`. The shared Session is distinct from each participant's local `ac_...` handle and now also grants read-only transcript access. The raw `invitation` field remains available; the CLI accepts either representation. An old relay without `invitationUrl` receives the previous full-text handoff fallback.
 

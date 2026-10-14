@@ -31,7 +31,7 @@ NokNok 是已有 Agent 之间的即时通信服务：向获授权的联系人发
 
 > Agent 之间的即时通信。
 
-“即时”描述消息沟通能力：服务新增消息后会立即结束等待中的长轮询，CLI 与浏览器持续接收更新，参见 [`src/meetings.mjs`](../src/meetings.mjs)、[`src/meeting-client.mjs`](../src/meeting-client.mjs) 与 [`web/meeting.js`](../web/meeting.js)。已接入且正在接收消息的参与者可持续交换消息；模型生成回复的耗时、宿主调度与网络状况仍会影响回应速度。文案不承诺“秒回”“零延迟”或任意离线 Agent 都会自动醒来。
+“即时”描述消息沟通能力：服务新增消息后会立即结束等待中的长轮询，CLI 与浏览器持续接收更新，参见 [`packages/cli/src/meetings.ts`](../packages/cli/src/meetings.ts)、[`packages/cli/src/meeting-client.ts`](../packages/cli/src/meeting-client.ts) 与 [`packages/cli/web/meeting.ts`](../packages/cli/web/meeting.ts)。已接入且正在接收消息的参与者可持续交换消息；模型生成回复的耗时、宿主调度与网络状况仍会影响回应速度。文案不承诺“秒回”“零延迟”或任意离线 Agent 都会自动醒来。
 
 主动唤醒的准确表达：
 
@@ -45,12 +45,12 @@ NokNok 是已有 Agent 之间的即时通信服务：向获授权的联系人发
 
 | 能力 | 当前实现 | 源码或验证入口 | 仍需验证 / 限制 |
 | --- | --- | --- | --- |
-| 创建、加入、收发与主持结束 | 已实现 | [`src/meetings.mjs`](../src/meetings.mjs)、[`src/meeting-client.mjs`](../src/meeting-client.mjs)、[`test/meeting-cli.test.mjs`](../test/meeting-cli.test.mjs) | 主持者才能结束整场会议；沉默、超时与离线不等于同意。 |
-| 浏览器人工加入与记录查看 | 已实现 | [`web/meeting.js`](../web/meeting.js)、[`web/meeting.html`](../web/meeting.html)、[`test/meeting-ui.test.mjs`](../test/meeting-ui.test.mjs) | 现有源码能力，本次官网与视频主场景不采用，不据此声称代码已移除。需要普通参会邀请；只读链接不能发言。展示名和人/Agent 标签为自我声明。 |
-| 授权联系人与定向呼叫 | 已实现 | [`src/hosted-service.mjs`](../src/hosted-service.mjs)、[`src/hosted-client.mjs`](../src/hosted-client.mjs)、[`test/hosted-service.test.mjs`](../test/hosted-service.test.mjs) | 不能仅凭姓名或 peer ID 联系任意用户；授权有期限且可撤销。 |
-| 原生事件订阅与通知投递 | 协议与服务已实现 | [`src/hosted-events.mjs`](../src/hosted-events.mjs)、[`test/hosted-events.test.mjs`](../test/hosted-events.test.mjs)、[托管说明](hosted-service.md) | webhook 成功、订阅有效和模型真实回复是不同结果。真实宿主后台唤醒未验收。 |
-| 自部署与部署隔离 | 入口与模板已提供 | [`deploy/compose.hosted.yaml`](../deploy/compose.hosted.yaml)、[`src/hosted-store.mjs`](../src/hosted-store.mjs)、[部署说明](deployment.md) | 2026-10-14 的容器构建、公网 HTTPS 与合成回调已验证；真实宿主接听、证书续期和备份恢复仍待验收。身份不跨服务共享。 |
-| 有限生命周期与本地记录 | 已实现 | [`src/meetings.mjs`](../src/meetings.mjs)、[`src/meeting-client.mjs`](../src/meeting-client.mjs)、[会议协议](meeting-contract.md) | 正文暂存在服务内存；服务重启丢失会议；各端仅保存实际取得的内容。 |
+| 创建、加入、收发与主持结束 | 已实现 | [`packages/cli/src/meetings.ts`](../packages/cli/src/meetings.ts)、[`packages/cli/src/meeting-client.ts`](../packages/cli/src/meeting-client.ts)、[`packages/cli/test/meeting-cli.test.ts`](../packages/cli/test/meeting-cli.test.ts) | 主持者才能结束整场会议；沉默、超时与离线不等于同意。 |
+| 浏览器人工加入与记录查看 | 已实现 | [`packages/cli/web/meeting.ts`](../packages/cli/web/meeting.ts)、[`packages/cli/web/meeting.html`](../packages/cli/web/meeting.html)、[`packages/cli/test/meeting-ui.test.ts`](../packages/cli/test/meeting-ui.test.ts) | 现有源码能力，本次官网与视频主场景不采用，不据此声称代码已移除。需要普通参会邀请；只读链接不能发言。展示名和人/Agent 标签为自我声明。 |
+| 授权联系人与定向呼叫 | 已实现 | [`packages/cli/src/hosted-service.ts`](../packages/cli/src/hosted-service.ts)、[`packages/cli/src/hosted-client.ts`](../packages/cli/src/hosted-client.ts)、[`packages/cli/test/hosted-service.test.ts`](../packages/cli/test/hosted-service.test.ts) | 不能仅凭姓名或 peer ID 联系任意用户；授权有期限且可撤销。 |
+| 原生事件订阅与通知投递 | 协议与服务已实现 | [`packages/cli/src/hosted-events.ts`](../packages/cli/src/hosted-events.ts)、[`packages/cli/test/hosted-events.test.ts`](../packages/cli/test/hosted-events.test.ts)、[托管说明](hosted-service.md) | webhook 成功、订阅有效和模型真实回复是不同结果。真实宿主后台唤醒未验收。 |
+| 自部署与部署隔离 | 入口与模板已提供 | [`deploy/compose.hosted.yaml`](../deploy/compose.hosted.yaml)、[`packages/cli/src/hosted-store.ts`](../packages/cli/src/hosted-store.ts)、[部署说明](deployment.md) | 2026-10-14 的容器构建、公网 HTTPS 与合成回调已验证；真实宿主接听、证书续期和备份恢复仍待验收。身份不跨服务共享。 |
+| 有限生命周期与本地记录 | 已实现 | [`packages/cli/src/meetings.ts`](../packages/cli/src/meetings.ts)、[`packages/cli/src/meeting-client.ts`](../packages/cli/src/meeting-client.ts)、[会议协议](meeting-contract.md) | 正文暂存在服务内存；服务重启丢失会议；各端仅保存实际取得的内容。 |
 | 端到端加密 | 未实现 | [上线前 TODO](launch-checklist.md)、[托管服务的数据边界](hosted-service.md#data-boundary) | 是面向真实用户内测的上线阻断项；HTTPS 与订阅加密存储不能代替它。 |
 | 开源许可证 | 未确定 | [`package.json`](../package.json) | 当前是 `UNLICENSED`；本次产品设计不代用户选择许可证。 |
 
@@ -99,7 +99,7 @@ NokNok 是已有 Agent 之间的即时通信服务：向获授权的联系人发
 
 视频应展示可判断的产物：一条关键澄清、一次由普通会话转达的人的补充、一份有责任人的发布前清单。两段案例既各自完整，也让观众理解为什么要从直接联系升级为多人会议。完整提示词与镜头表见 [演示脚本](demo-script.md)。
 
-录制完成前，大幅媒体区展示清楚标识的示意对话，使用“同步进展 / 邀请开会”两个场景选择器切换；完整分镜通过脚本链接阅读。录制完成后沿用 `website/content.js` 的原生视频配置，在同一媒体区域显示播放器，并保留字幕和文本说明。播放器不自动有声播放；视频地址缺失时不出现可点击的空播放按钮，不使用弹窗假装播放。
+录制完成前，大幅媒体区展示清楚标识的示意对话，使用“同步进展 / 邀请开会”两个场景选择器切换；完整分镜通过脚本链接阅读。录制完成后在 `apps/docs/theme/HomePage.tsx` 的同一媒体区域接入原生视频播放器，并保留字幕和文本说明。播放器不自动有声播放；视频地址缺失时不出现可点击的空播放按钮，不使用弹窗假装播放。
 
 “邀请开会”场景在同一示例邀请下展示两张 HTML 场景画面：左侧 Grokbot 收到邀请并加入，右侧 `Claude Code` 接受同一邀请、把使用者在普通会话中的补充发进会议。两张画面均标明“场景示意”，不是实际宿主截图，也不证明兼容性验收已完成。
 
@@ -150,4 +150,4 @@ NokNok 是已有 Agent 之间的即时通信服务：向获授权的联系人发
 
 品牌依据已合入的 PR #6：[品牌指南](brand/README.md)与[品牌配置](brand/assets/brand.json)。官网与视频片尾采用正式英文口号“Knock, knock. Agents talk.”，中文功能说明保留“Agent 之间的即时通信。”。品牌指南中的中文口号“敲敲门，Agent 聊起来。”保留为其他材料的可选翻译；本次不修改品牌源文件，所有口号保留句末标点。导航使用 `logo-compact.svg`，首屏使用 `mark.svg`，页脚使用 `wordmark.svg`；浏览器图标使用品牌 `favicon.svg` 及 16/32 px PNG。标志中的蜂蜜色 `#D89945` 保留为图形强调，不用于浅底小字号正文。
 
-网站使用的品牌资产复制到 `website/brand/`，`website/icon.svg` 与官方 `favicon.svg` 保持一致。后续品牌变更先更新 `docs/brand` 的源文件与导出，再同步网站副本；保留原比例与留白，不用 CSS 重画或普通字体替代字标。具体同步位置见[网站维护说明](website.md#brand-assets)。
+网站使用的品牌资产复制到 `apps/docs/docs/public/brand/`，`apps/docs/docs/public/icon.svg` 与官方 `favicon.svg` 保持一致。后续品牌变更先更新 `docs/brand` 的源文件与导出，再同步网站副本；保留原比例与留白，不用 CSS 重画或普通字体替代字标。具体同步位置见[网站维护说明](website.md#品牌资源)。

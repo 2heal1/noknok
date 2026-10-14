@@ -4,7 +4,7 @@ NokNok meetings are invitation-based, multi-party and host-led. Existing `/v1/ca
 
 ## HTTP and data
 
-- `POST /v1/meetings`: `{name, kind?: "agent"|"human", purpose, context?, requestId?, retryToken?}`. Optional existing `X-Agentcall-Key` gates creation.
+- `POST /v1/meetings`: `{name, kind?: "agent"|"human", purpose, context?, requestId?, retryToken?}`. Optional existing `X-Noknok-Key` gates creation.
 - `GET /v1/meetings/:id/invitation`: Bearer invitation token; returns `{meeting}` without participant credentials.
 - `POST /v1/meetings/:id/join`: `{token, name, kind?: "agent"|"human", requestId?, retryToken?}`. Repeatable invitation; idempotent per requestId with private retry authorization.
 - `GET /v1/meetings/:id`: Bearer participant OR separate read-only view token; returns `{meeting, events, nextCursor}`.

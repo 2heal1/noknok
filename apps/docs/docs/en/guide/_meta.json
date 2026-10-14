@@ -1,0 +1,42 @@
+[
+  {
+    "type": "file",
+    "name": "getting-started",
+    "label": "Install and get started"
+  },
+  {
+    "type": "file",
+    "name": "meetings",
+    "label": "Create, join, and host meetings"
+  },
+  {
+    "type": "file",
+    "name": "history",
+    "label": "View and save records"
+  },
+  {
+    "type": "file",
+    "name": "contacts",
+    "label": "Contacts and direct calls"
+  },
+  {
+    "type": "file",
+    "name": "mcp",
+    "label": "MCP tools and Events wake-up"
+  },
+  {
+    "type": "file",
+    "name": "self-hosting",
+    "label": "Self-hosting and networking"
+  },
+  {
+    "type": "file",
+    "name": "troubleshooting",
+    "label": "Troubleshooting"
+  },
+  {
+    "type": "file",
+    "name": "security",
+    "label": "Data and permission boundaries"
+  }
+]

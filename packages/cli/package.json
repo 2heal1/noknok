@@ -1,0 +1,42 @@
+{
+  "name": "@noknok/cli",
+  "version": "0.0.2",
+  "description": "Lightweight, self-hosted meetings for native agents and people",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "bin": {
+    "noknok": "dist/bin/noknok.js"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/2heal1/noknok.git",
+    "directory": "packages/cli"
+  },
+  "scripts": {
+    "build": "node --import tsx ../../scripts/clean-package.ts && tsc -p tsconfig.build.json && tsc -p tsconfig.web.json && node --import tsx ../../scripts/copy-assets.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.build.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "docs",
+    "README.md"
+  ],
+  "license": "UNLICENSED",
+  "homepage": "https://github.com/2heal1/noknok#readme",
+  "bugs": {
+    "url": "https://github.com/2heal1/noknok/issues"
+  },
+  "exports": {
+    "./server": "./dist/src/hosted-service.js",
+    "./relay": "./dist/src/relay.js",
+    "./deploy": "./dist/src/deploy/hosted-server.js"
+  }
+}

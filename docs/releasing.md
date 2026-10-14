@@ -1,162 +1,62 @@
 # Releasing NokNok
 
-The npm package is **`@noknok/cli`**; its executable remains **`noknok`**
-(`agentcall` is a compatibility alias). It is a public package on
-`https://registry.npmjs.org`, released from `2heal1/noknok` through
-`.github/workflows/release.yml`. The first public CLI version is **0.0.1**.
-Earlier versions in historical validation notes describe unpublished development
-milestones, not npm releases. Public npm distribution does not open the hosted
-service to real users: end-to-end encryption remains a launch requirement, and
-hosted testing still uses synthetic content. See the [launch checklist](launch-checklist.md).
+Publish **`@noknok/cli`** from `packages/cli`. Its only executable is **`noknok`**; the root workspace and the Rspress site are private. The CLI tarball contains compiled JavaScript, meeting UI assets, the `noknok` skill and its references. Users need Node.js 22.13+ and npm; they do not need pnpm or TypeScript.
 
-## Contributor flow
+## Contributor workflow
 
-1. Run `npm run changeset`, describe a publishable change, and commit the generated
-   `.changeset/*.md` file with the change.
-2. To test an unpublished branch, push it and run **Release → Run workflow** on
-   that branch. This publishes an isolated version under the `preview` dist-tag;
-   the run summary contains an exact `npm exec` command. A non-empty changeset
-   for this package is required. Snapshot changes stay in the runner and are not
-   committed or tagged.
-3. Merge the normal pull request into `main`. The stable workflow creates or
-   updates the **release pull request**, which bumps the version and lockfile and
-   consumes the changesets.
-4. Review and merge that release pull request. The next push to `main` publishes
-   the version through npm OIDC and verifies the version and `latest` tag online.
+```sh
+corepack enable
+pnpm install --frozen-lockfile
+pnpm check
+pnpm --filter @noknok/docs build
+pnpm check:package
+pnpm changeset
+```
 
-The initial patch changeset prepares **0.0.2** after the **0.0.1** bootstrap; it
-must not silently change the version selected for the first publication.
-Subsequent pushes without a new version are safe: Changesets skips versions
-already on npm. The workflow verifies registry state rather than claiming every
-run uploaded a new version. Registry metadata can lag behind a successful upload;
-verification retries transient failures and delayed tags for up to five minutes.
-A verification timeout does not mean the upload failed: inspect npm before
-retrying publication. No GitHub Release is created by this workflow.
+Commit the changeset with the implementation. After merging into `main`, `.github/workflows/release.yml` creates or updates a version PR. Review and merge that PR to publish the selected version through npm OIDC and update `latest`. This never auto-merges a PR. The version PR updates `packages/cli/package.json`, its changelog and `pnpm-lock.yaml`.
 
-For consumer use after the selected version is published:
+For an unpublished branch, run **Release → Run workflow**, selecting that branch. A pending changeset for `@noknok/cli` is required. The workflow creates a `-preview-` snapshot, rebuilds and inspects it, then publishes under `preview`. `latest` remains unchanged. The run summary gives an exact install command. Snapshot edits stay in the runner; no snapshot commit or tag is created.
 
 ```sh
 npm install --global @noknok/cli
-noknok --help
-
-# Explicitly choose the binary because the package includes two CLI aliases.
-npm exec --yes --package=@noknok/cli@0.0.1 -- noknok --help
+noknok skill
+# Or use the exact preview version from the workflow summary:
+npm exec --yes --package=@noknok/cli@VERSION -- noknok --help
 ```
 
-## Repository and npm setup
+Before the product's formal launch, breaking changes are allowed. State them in the changeset and update installation/setup instructions. Existing test identities or subscriptions may need recreation; no compatibility aliases or automatic historical-state migration are promised. The [launch checklist](launch-checklist.md) tracks the version/upgrade policy required before launch.
 
-The pinned release toolchain is Node.js **24.18.1**, npm **11.16.0**, and
-`@changesets/cli` **2.31.1**. The workflow pins reviewed action commits, including
-Changesets action v1.9.0. Keep the Changesets CLI on the compatible v2 line when
-using action v1; an upgrade to CLI v3 also requires reviewing the action and its
-input/output contract. This repository uses only `package-lock.json` and `npm ci`.
+## Toolchain and trusted publishing
 
-Before the first automated release:
+The repository pins pnpm 10.34.7 in `packageManager` and uses only `pnpm-lock.yaml`. CI pins Node.js 24.18.1 and npm 11.16.0. Changesets CLI remains on v2, compatible with the pinned Changesets action v1.9.0.
 
-- Enable GitHub Actions and **Allow GitHub Actions to create and approve pull
-  requests** in the repository's Actions settings. This is permission to create
-  the release PR, not an instruction to auto-merge it.
-- Merge `release.yml` onto the default branch before relying on **Run workflow**.
-  An unmerged workflow file on a feature branch does not establish the manual
-  dispatch entry point. After that, select the intended branch in the UI.
-- Bootstrap `@noknok/cli@0.0.1` as described below, then configure its npm
-  trusted publisher with GitHub owner **`2heal1`**, repository **`noknok`**,
-  workflow filename **`release.yml`**, **no environment**, and direct publishing
-  allowed. The filename is not `.github/workflows/release.yml`.
-- Verify an actual OIDC preview or stable publish soon after configuring trust.
-  Current npm policy requires the first successful publish within two days of
-  creating a publisher; saving the configuration alone does not prove it works.
+**pnpm manages dependencies, builds and versions; npm performs the upload.** `scripts/publish.ts` queries the exact version, stops on registry errors other than E404, and invokes `npm publish` from `packages/cli`. An already published version is skipped. `scripts/verify-npm-release.ts` then checks the exact version and requested dist-tag, allowing up to five minutes for registry propagation. A verification timeout does not prove upload failure; inspect npm before retrying.
 
-The release jobs run only in `2heal1/noknok`, on GitHub-hosted runners. Forks can
-run CI but must choose their own npm package and trust configuration before
-publishing. Only publishing jobs receive `id-token: write`; CI has read access.
-No npm automation token or long-lived npm credential belongs in workflow files,
-repository secrets, `.npmrc`, or commits. `GITHUB_TOKEN` is used only for GitHub
-operations. The stable and preview runs share a concurrency group and never
-cancel an active release.
+The existing npm trusted publisher is GitHub owner `2heal1`, repository `noknok`, workflow filename `release.yml`, without an environment. Changing the workspace directory does not change that trust identity. GitHub-hosted release jobs receive `id-token: write`; no long-lived npm token belongs in repository secrets, workflow files or `.npmrc`. `GITHUB_TOKEN` is used only to create/update the version PR. Stable and preview releases share one non-cancelling concurrency group.
 
-GitHub may require a maintainer to approve CI runs on a release PR created or
-updated with `GITHUB_TOKEN`. Inspect the PR's check/approval state; use
-**Approve workflows to run** when offered. The **CI → Run workflow** entry point
-can also check the release branch explicitly. Confirm that the checked commit
-matches the current PR before merging; do not assume that a bot-created PR has
-already run CI. See [GitHub's workflow-trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
+GitHub must allow Actions to create pull requests. A release PR generated with `GITHUB_TOKEN` may require an explicit workflow run/approval; confirm CI checked its current commit before merging. See [GitHub workflow-trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
 
-## First publication only
+`@noknok/cli` already exists and has completed its one-time bootstrap. Do not bootstrap it again, request an OTP for ordinary releases, overwrite a version, or unpublish to reuse a number. A fork must select its own package name and trusted publisher. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
 
-npm trust attaches to an existing package. An npm organization/scope alone does
-not create `@noknok/cli`, authenticate this machine, or configure a publisher.
-Use a logged-in npm maintainer with permission to publish into `@noknok` for the
-one-time bootstrap. If `npm whoami` returns 401, complete `npm login` locally
-before proceeding; do not substitute an automation token.
+## Archive and version verification
 
-Prepare and inspect the exact archive before requesting the fresh OTP used for
-the actual publish:
+`pnpm check:package` inspects an actual npm tarball, rejects unexpected files and credential patterns, then installs those exact bytes offline in a temporary directory. It verifies the compiled `noknok` executable, `npm exec`, bundled skill and references without creating agent state. The package has no runtime dependencies or install hooks. Always build before packing; no source-only package is supported.
+
+To inspect an existing tarball:
 
 ```sh
-node --version
-npm --version
-npm whoami --registry=https://registry.npmjs.org
-npm view @noknok/cli versions dist-tags --json --registry=https://registry.npmjs.org
-npm ci
-npm run check
-npm run check:package
-npm pack --dry-run
-mkdir -p /tmp/noknok-npm-bootstrap
-npm pack --pack-destination /tmp/noknok-npm-bootstrap
-node scripts/check-package.mjs --archive /tmp/noknok-npm-bootstrap/noknok-cli-0.0.1.tgz
+pnpm exec tsx scripts/check-package.ts --archive /path/to/noknok-cli-VERSION.tgz
 ```
 
-A registry `E404` means the package was not visible to that request; an
-unauthenticated check cannot rule out a private package. Confirm the logged-in
-maintainer and scope access before treating the name as available. Network
-failures do not establish availability. Verify the archive's file list,
-package name, and version. Publish that inspected archive as public with the
-`latest` tag, using the maintainer's interactive authentication/OTP. Never store
-or paste an OTP into repository files or logs. Do not run the version script
-before this bootstrap: **0.0.1** is the intended initial version.
-
-After successful publication, configure trust using the npm package settings or
-the supported CLI command (interactive proof of presence may be required):
+Test stable and snapshot versioning separately in disposable copies:
 
 ```sh
-npm trust github @noknok/cli --repo 2heal1/noknok --file release.yml --allow-publish --yes
-npm view @noknok/cli@0.0.1 version repository --json --registry=https://registry.npmjs.org
-npm view @noknok/cli dist-tags --json --registry=https://registry.npmjs.org
+pnpm version-packages
+# Separate disposable copy:
+pnpm exec changeset version --snapshot preview
+pnpm install --lockfile-only --ignore-scripts
+pnpm build:cli
+pnpm check:package
 ```
 
-Verify the trusted publisher settings online and run an OIDC release. A local
-bootstrap does not prove OIDC works and need not have Actions provenance.
-Trusted publishing supports a private GitHub repository as well. Automatic
-npm provenance additionally requires both the repository and package to be
-public; do not promise provenance while this repository is private. Do not add
-a separate provenance flag to make OIDC work. See the [npm trusted publishing guide](https://docs.npmjs.com/trusted-publishers/)
-and [npm trust reference](https://docs.npmjs.com/cli/v11/commands/npm-trust/).
-
-Package versions are immutable. If the initial version is already present,
-verify ownership and contents before choosing a new release; do not overwrite
-or unpublish it to reuse the number. Normal releases use the workflow, not a
-manual stable publish command.
-
-## Checks before merging release infrastructure
-
-Run the pinned toolchain with a frozen install, then repository tests and
-package inspection:
-
-```sh
-npm ci
-npm run check
-npm run check:package
-npm pack --dry-run
-```
-
-The package has no build step. Package inspection must cover the actual archive
-and both CLI entry points, exclude local identities/test codes, and ensure the
-lockfile agrees with the package metadata. In disposable copies, exercise
-`npm run version` and `npm exec -- changeset version --snapshot preview`
-separately; update the snapshot lockfile with
-`npm install --package-lock-only --ignore-scripts`. Confirm stable versioning
-consumes the changeset and snapshot versioning yields a `-preview-` version.
-Also check that preview dispatch without a pending package changeset fails
-before publication. These simulations do not publish anything and must not
-change the contributor's branch.
+Neither simulation publishes. Verify that only the public CLI gets a release and that preview requires a pending changeset. Public package publication does not authorize opening the hosted service to real user data: end-to-end encryption and native-host verification remain explicit [launch requirements](launch-checklist.md).

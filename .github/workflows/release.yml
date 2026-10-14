@@ -36,19 +36,23 @@ jobs:
           package-manager-cache: false
       - name: Pin npm
         run: npm install --global npm@11.16.0
+      - name: Set up pnpm
+        run: corepack enable && corepack prepare pnpm@10.34.7 --activate
       - name: Install locked dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Run tests
-        run: npm run check
+        run: pnpm check
+      - name: Build documentation
+        run: pnpm --filter @noknok/docs build
       - name: Inspect distributable package
-        run: npm run check:package
+        run: pnpm check:package
       - name: Show package contents
-        run: npm pack --dry-run
+        run: npm pack ./packages/cli --dry-run
       - name: Create or update the release pull request
         id: changesets
         uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # changesets/action@v1 (v1.9.0)
         with:
-          version: npm run version
+          version: pnpm version-packages
           title: 'chore: release @noknok/cli'
           commit: 'chore: release @noknok/cli'
           createGithubReleases: false
@@ -60,7 +64,7 @@ jobs:
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import fs from 'node:fs';
-          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const pkg = JSON.parse(fs.readFileSync('packages/cli/package.json', 'utf8'));
           assert.equal(pkg.name, '@noknok/cli');
           assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
           NODE
@@ -68,9 +72,9 @@ jobs:
             echo '::error::Bootstrap the first npm version and configure the release.yml trusted publisher before running an OIDC release.'
             exit 1
           fi
-          npm run release
-          version="$(node -p "require('./package.json').version")"
-          node scripts/verify-npm-release.mjs latest
+          pnpm release
+          version="$(node -p "require('./packages/cli/package.json').version")"
+          pnpm exec tsx scripts/verify-npm-release.ts latest
           printf 'Verified stable package: `@noknok/cli@%s`\n' "$version" >> "$GITHUB_STEP_SUMMARY"
 
   preview:
@@ -94,13 +98,17 @@ jobs:
           package-manager-cache: false
       - name: Pin npm
         run: npm install --global npm@11.16.0
+      - name: Set up pnpm
+        run: corepack enable && corepack prepare pnpm@10.34.7 --activate
       - name: Install locked dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Run tests
-        run: npm run check
+        run: pnpm check
+      - name: Build documentation
+        run: pnpm --filter @noknok/docs build
       - name: Require a pending package release
         run: |
-          npm exec -- changeset status --output="$RUNNER_TEMP/noknok-release-plan.json"
+          pnpm exec changeset status --output="$RUNNER_TEMP/noknok-release-plan.json"
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import fs from 'node:fs';
@@ -111,27 +119,29 @@ jobs:
           NODE
       - name: Create an isolated preview version
         run: |
-          npm exec -- changeset version --snapshot preview
-          npm install --package-lock-only --ignore-scripts
+          pnpm exec changeset version --snapshot preview
+          pnpm install --lockfile-only --ignore-scripts
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import fs from 'node:fs';
-          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const pkg = JSON.parse(fs.readFileSync('packages/cli/package.json', 'utf8'));
           assert.equal(pkg.name, '@noknok/cli');
           assert.match(pkg.version, /^\d+\.\d+\.\d+-preview-/);
           NODE
+      - name: Rebuild preview artifacts
+        run: pnpm build:cli
       - name: Inspect preview package
-        run: npm run check:package
+        run: pnpm check:package
       - name: Show preview package contents
-        run: npm pack --dry-run
+        run: npm pack ./packages/cli --dry-run
       - name: Publish preview through npm OIDC
         run: |
           if ! npm view @noknok/cli name --registry=https://registry.npmjs.org; then
             echo '::error::Bootstrap the first npm version and configure the release.yml trusted publisher before running an OIDC preview.'
             exit 1
           fi
-          npm exec -- changeset publish --tag preview --no-git-tag
-          version="$(node -p "require('./package.json').version")"
-          node scripts/verify-npm-release.mjs preview
+          pnpm release preview
+          version="$(node -p "require('./packages/cli/package.json').version")"
+          pnpm exec tsx scripts/verify-npm-release.ts preview
           printf 'Verified preview: `@noknok/cli@%s`\n\n' "$version" >> "$GITHUB_STEP_SUMMARY"
           printf 'Try this exact version:\n\n```sh\nnpm exec --yes --package=@noknok/cli@%s -- noknok --help\n```\n' "$version" >> "$GITHUB_STEP_SUMMARY"

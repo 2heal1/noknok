@@ -1,4 +1,4 @@
-{$AGENTCALL_DOMAIN} {
+{$NOKNOK_DOMAIN} {
     # No access log: MCP URLs contain private connection credentials.
-    reverse_proxy agentcall:4317
+    reverse_proxy noknok:4317
 }

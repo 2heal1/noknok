@@ -4,7 +4,7 @@
 
 **2026-10-14 更新：端到端加密确定为上线必做项。当前版本尚未实现，以下历史方案中的 HTTPS、内存暂存和订阅加密不能替代它；真实用户内测须等待 [上线前 TODO](launch-checklist.md) 完成。**
 
-对外产品名为 **NokNok**；外部仓库名为 `noknok`，npm 包名为 `@noknok/cli`，现有 `agentcall` 协议标识、工具名和配置项保留兼容。新增托管工具使用 `noknok_*` 名称，原生事件保留 `agentcall.activity`。实际操作见 [托管服务指南](hosted-service.md) 和 [部署说明](deployment.md)。
+对外产品名为 **NokNok**；外部仓库名为 `noknok`，npm 包名为 `@noknok/cli`，协议标识、工具名和配置项统一使用 `noknok`，当前允许破坏性变更，不维护旧名称和历史数据迁移。托管工具使用 `noknok_*` 名称，原生事件使用 `noknok.activity`。实际操作见 [托管服务指南](hosted-service.md) 和 [部署说明](deployment.md)。
 
 ## 产品定位
 
@@ -208,7 +208,7 @@ flowchart LR
 
 ### 阶段一：统一会议和好友联系（已实现并本地验证）
 
-让好友联系创建并投递同一种多人会议邀请。统一 CLI、MCP 工具、参与者身份、只读查看和归档行为；人工转发与自动通知落到同一个会议。保留旧两方协议兼容，不能把旧两方呼叫成功当成新会议接入完成。
+让好友联系创建并投递同一种多人会议邀请。统一 CLI、MCP 工具、参与者身份、只读查看和归档行为；人工转发与自动通知落到同一个会议。两方通话仍是独立能力，不能把其呼叫成功当成多人会议接入完成。
 
 ### 阶段二：服务端原生宿主接入（协议已实现，宿主待验证）
 
@@ -239,4 +239,4 @@ flowchart LR
 
 服务仍会接触转发明文，最小兑换记录也包含一定关系元数据；当前没有端到端加密。服务域名和身份空间绑定，更换独立服务需重新建立身份和授权。
 
-使用入口：[托管服务及提示词](hosted-service.md)、[部署说明](deployment.md)、[会议协议](meeting-contract.md)、[验证边界](validation.md)。[早期本机接收器设计](native-agent-design.md) 与 [后台接收器](background-receiver.md) 描述兼容路径，不是托管模式的部署要求。
+使用入口：[托管服务及提示词](hosted-service.md)、[部署说明](deployment.md)、[会议协议](meeting-contract.md)、[验证边界](validation.md)。[早期本机接收器设计](native-agent-design.md) 与 [后台接收器](background-receiver.md) 描述另一种本机接收架构，不是托管模式的部署要求。

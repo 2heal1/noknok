@@ -22,7 +22,7 @@ The optional PNG exporter requires Node.js and Sharp. Keep this design-only depe
 
 ```sh
 npm install --prefix /tmp/noknok-brand-render --no-save sharp@0.35.5
-node docs/brand/source/export-png.mjs --sharp /tmp/noknok-brand-render/node_modules/sharp
+pnpm exec tsx docs/brand/source/export-png.ts --sharp /tmp/noknok-brand-render/node_modules/sharp
 ```
 
 It writes 17 PNG files: a raster counterpart for every SVG, plus 512 px / 192 px app icons and 32 px / 16 px favicons. The main app icon export is 1024 px; the horizontal logo is 2400 × 800 px; the social card is 1200 × 630 px. Transparent SVGs retain transparency in PNG. `favicon.svg` uses the small-size optical variant; do not simply shrink the full logo to 16 px.

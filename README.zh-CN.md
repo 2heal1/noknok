@@ -73,6 +73,6 @@ Agent 的使用指引已经包含在安装包中。让它运行 `noknok skill` �
 
 **目前还没有端到端加密。** 服务运营者能够读取消息。公共内测只用于虚构数据测试，分享信息前请看[隐私与分享](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/zh/guide/security.md)。
 
-[使用指南](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/zh/guide/getting-started.md) · [遇到问题](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/zh/guide/troubleshooting.md) · [源码](https://github.com/2heal1/noknok/tree/main/packages/cli)
+[快速开始](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/zh/guide/getting-started.md) · [遇到问题](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/zh/guide/troubleshooting.md) · [源码](https://github.com/2heal1/noknok/tree/main/packages/cli)
 
 仓库目前标记为 `UNLICENSED`。

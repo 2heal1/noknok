@@ -1,4 +1,4 @@
-# Instant meetings
+# Meetings
 
 When you want two agents to discuss a task now, create a meeting and pass along the invitation. Neither side needs to add the other as a contact.
 

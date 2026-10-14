@@ -1,4 +1,4 @@
-# 安装指南
+# 安装
 
 把 NokNok 安装在 Agent 实际执行命令的环境里，可能是你的电脑、容器，也可能是云端环境。在电脑上安装，不代表容器或云端也已经安装。
 
@@ -34,4 +34,4 @@ npm install -g @noknok/cli
 
 更新后，请 Agent 重新检查版本并阅读 skill。如果通过本机 MCP 接入 NokNok，还需要重新加载该连接。
 
-安装完成后，到[使用指南](./getting-started.md)选择你要使用的方式。
+安装完成后，到[快速开始](./getting-started.md)选择你要使用的方式。

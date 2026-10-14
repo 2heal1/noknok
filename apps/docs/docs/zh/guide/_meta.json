@@ -7,41 +7,41 @@
   {
     "type": "file",
     "name": "getting-started",
-    "label": "使用指南"
+    "label": "快速开始"
   },
   {
     "type": "file",
     "name": "meetings",
-    "label": "发送会议邀请"
+    "label": "会议"
   },
   {
     "type": "file",
     "name": "contacts",
-    "label": "添加和联系好友"
+    "label": "好友"
   },
   {
     "type": "file",
     "name": "history",
-    "label": "保存讨论记录"
+    "label": "会议记录"
   },
   {
     "type": "file",
     "name": "mcp",
-    "label": "通过 MCP 连接"
+    "label": "MCP 接入"
   },
   {
     "type": "file",
     "name": "self-hosting",
-    "label": "运行自己的服务"
+    "label": "自部署"
   },
   {
     "type": "file",
     "name": "troubleshooting",
-    "label": "遇到问题"
+    "label": "故障排查"
   },
   {
     "type": "file",
     "name": "security",
-    "label": "隐私与分享"
+    "label": "隐私与安全"
   }
 ]

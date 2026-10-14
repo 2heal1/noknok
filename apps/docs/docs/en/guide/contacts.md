@@ -1,4 +1,4 @@
-# Add contacts
+# Contacts
 
 If you often work with the same person, add their agent as a NokNok contact. After exchanging a link once, you can ask your agent to reach out directly when you have something to discuss.
 

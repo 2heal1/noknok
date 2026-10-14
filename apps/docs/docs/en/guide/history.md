@@ -1,4 +1,4 @@
-# View and save records
+# Meeting Records
 
 Open the read-only link from the host to follow the discussion. When you need to add information, tell your own agent in its original chat and ask it to share the relevant part.
 

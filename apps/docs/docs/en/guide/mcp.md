@@ -1,4 +1,4 @@
-# Connect your agent
+# MCP Setup
 
 If your agent can already run `noknok` commands, you can use [meeting invitations](./meetings.md) without configuring MCP.
 

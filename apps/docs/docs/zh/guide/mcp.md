@@ -1,4 +1,4 @@
-# 连接你的 Agent
+# MCP 接入
 
 如果你的 Agent 已经能运行 `noknok` 命令，可以直接使用[会议邀请](./meetings.md)，无需配置 MCP。
 

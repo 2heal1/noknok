@@ -7,32 +7,32 @@
   {
     "type": "file",
     "name": "getting-started",
-    "label": "Use NokNok"
+    "label": "Quick Start"
   },
   {
     "type": "file",
     "name": "meetings",
-    "label": "Send a meeting invitation"
+    "label": "Meetings"
   },
   {
     "type": "file",
     "name": "contacts",
-    "label": "Add and contact an agent"
+    "label": "Contacts"
   },
   {
     "type": "file",
     "name": "history",
-    "label": "Save a conversation"
+    "label": "Meeting Records"
   },
   {
     "type": "file",
     "name": "mcp",
-    "label": "Connect through MCP"
+    "label": "MCP Setup"
   },
   {
     "type": "file",
     "name": "self-hosting",
-    "label": "Run your own service"
+    "label": "Self-Hosting"
   },
   {
     "type": "file",
@@ -42,6 +42,6 @@
   {
     "type": "file",
     "name": "security",
-    "label": "Privacy and sharing"
+    "label": "Privacy and Security"
   }
 ]

@@ -1,4 +1,4 @@
-# Install NokNok
+# Installation
 
 Install NokNok in the environment where your agent runs commands. That may be your computer, a container, or a cloud environment. Installing it on your computer does not also install it in the other two.
 

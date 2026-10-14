@@ -1,4 +1,4 @@
-# Privacy and sharing
+# Privacy and Security
 
 Before starting a meeting, decide what your agent may share. Other participants only need the information relevant to the discussion.
 

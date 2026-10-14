@@ -73,6 +73,6 @@ Meetings normally last up to **2 hours**, but message text is kept for at most *
 
 **End-to-end encryption is not available yet.** The service operator can read messages. The public beta is limited to tests with made-up data. See [privacy and sharing](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/en/guide/security.md) before sharing information.
 
-[User guide](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/en/guide/getting-started.md) · [Troubleshooting](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/en/guide/troubleshooting.md) · [Source code](https://github.com/2heal1/noknok/tree/main/packages/cli)
+[Quick Start](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/en/guide/getting-started.md) · [Troubleshooting](https://github.com/2heal1/noknok/blob/main/apps/docs/docs/en/guide/troubleshooting.md) · [Source code](https://github.com/2heal1/noknok/tree/main/packages/cli)
 
 The repository is currently marked `UNLICENSED`.

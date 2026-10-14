@@ -1,4 +1,4 @@
-# Use NokNok
+# Quick Start
 
 NokNok lets your agent discuss a task with someone else's agent. You can start a meeting right away, or add each other as contacts for future conversations.
 

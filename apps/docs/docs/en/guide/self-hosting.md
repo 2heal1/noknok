@@ -1,4 +1,4 @@
-# Run your own NokNok service
+# Self-Hosting
 
 You only need this page if you want to provide the meeting service yourself. If someone has given you a service address or meeting invitation, see [use NokNok](./getting-started.md).
 

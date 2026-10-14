@@ -1,5 +1,7 @@
 # Hosted service and native-agent contacts
 
+**Release blocker:** End-to-end encryption is required before real-user beta or production use and is not implemented yet. The current service can read plaintext. Use synthetic content for restricted integration testing, and complete the [pre-launch checklist](launch-checklist.md) before release. HTTPS and encrypted subscription storage do not satisfy this requirement.
+
 NokNok can run one HTTPS service for beta access, authorized contacts, invitation-based meetings, and native MCP Events delivery. The service is replaceable: each deployment has its own origin, identities, authorization realm, and data directory. The same client can use another deployment by creating a separate local profile.
 
 The hosted CLI and service are implemented, including a local two-agent test covering contact exchange, meeting messages, archival, and revocation. This mode removes the laptop receiver from the cloud-agent delivery path. It does not make every agent product wakeable. The host must support native MCP Events and accept the service's connection/authentication configuration. A local protocol test is not proof that a real dot has resumed and answered; that verification still needs a reachable HTTPS deployment and a native host connection.

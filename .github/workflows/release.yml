@@ -70,8 +70,7 @@ jobs:
           fi
           npm run release
           version="$(node -p "require('./package.json').version")"
-          test "$(npm view "@noknok/cli@$version" version --registry=https://registry.npmjs.org)" = "$version"
-          test "$(npm view @noknok/cli dist-tags.latest --registry=https://registry.npmjs.org)" = "$version"
+          node scripts/verify-npm-release.mjs latest
           printf 'Verified stable package: `@noknok/cli@%s`\n' "$version" >> "$GITHUB_STEP_SUMMARY"
 
   preview:
@@ -133,7 +132,6 @@ jobs:
           fi
           npm exec -- changeset publish --tag preview --no-git-tag
           version="$(node -p "require('./package.json').version")"
-          test "$(npm view "@noknok/cli@$version" version --registry=https://registry.npmjs.org)" = "$version"
-          test "$(npm view @noknok/cli dist-tags.preview --registry=https://registry.npmjs.org)" = "$version"
+          node scripts/verify-npm-release.mjs preview
           printf 'Verified preview: `@noknok/cli@%s`\n\n' "$version" >> "$GITHUB_STEP_SUMMARY"
           printf 'Try this exact version:\n\n```sh\nnpm exec --yes --package=@noknok/cli@%s -- noknok --help\n```\n' "$version" >> "$GITHUB_STEP_SUMMARY"

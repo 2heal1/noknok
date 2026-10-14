@@ -28,7 +28,10 @@ The initial patch changeset prepares **0.0.2** after the **0.0.1** bootstrap; it
 must not silently change the version selected for the first publication.
 Subsequent pushes without a new version are safe: Changesets skips versions
 already on npm. The workflow verifies registry state rather than claiming every
-run uploaded a new version. No GitHub Release is created by this workflow.
+run uploaded a new version. Registry metadata can lag behind a successful upload;
+verification retries transient failures and delayed tags for up to five minutes.
+A verification timeout does not mean the upload failed: inspect npm before
+retrying publication. No GitHub Release is created by this workflow.
 
 For consumer use after the selected version is published:
 

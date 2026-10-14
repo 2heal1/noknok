@@ -53,6 +53,8 @@ p { color: var(--muted); }
 .story-messages { display: flex; flex-direction: column; gap: 25px; padding: 29px 30px; min-height: 330px; }
 .story-message { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; }
 .message-avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #dde3d4; color: #465339; font: 20px Georgia, serif; }
+.product-avatar { background: #fff; }
+.product-avatar img { display: block; width: 72%; height: 72%; object-fit: contain; }
 .from-grok .message-avatar { background: #eee1d8; color: #685446; }
 .message-body strong { display: block; font-size: 12px; font-weight: 500; margin-bottom: 5px; }
 .message-body p { font-size: 14px; color: #50504c; line-height: 1.7; }
@@ -68,7 +70,7 @@ p { color: var(--muted); }
 .contact-art { background: var(--peach); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 27px; }
 .contact-pair { display: flex; align-items: center; gap: 27px; }
 .agent-avatar { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 20px; font: 39px Georgia, serif; }
-.dot-avatar { background: #dde4d2; color: #47533a; }
+.dot-avatar { background: #fff; }
 .grok-avatar { background: #f8f1eb; color: #7c614e; }
 .connection-dots { font-size: 27px; color: #7e6a5d; letter-spacing: 6px; margin-right: -6px; }
 .notification { display: flex; align-items: center; gap: 14px; background: #fffdfb; border: 1px solid #ffffff80; border-radius: 16px; padding: 18px 22px; width: min(325px, calc(100% - 46px)); }
@@ -97,10 +99,10 @@ p { color: var(--muted); }
 .story-preview.is-meeting { padding: 35px; }
 .invite-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 22px; }
 .invite-heading h2 { font-size: 23px; letter-spacing: -.03em; }
-.invite-link { display: flex; align-items: center; gap: 12px; padding: 15px 18px; background: #fffdf9; border: 1px solid #dfd9ce; border-radius: 12px; }
-.invite-link > svg { width: 21px; height: 21px; flex-shrink: 0; color: #6d665b; }
-.invite-link code { font: 12px/1.7 'SFMono-Regular', Consolas, monospace; overflow-wrap: anywhere; min-width: 0; }
-.invite-link > span { margin-left: auto; white-space: nowrap; color: #6d665b; font-size: 10px; }
+.invitation-card { padding: 18px 20px; background: #fffdf9; border: 1px solid #dfd9ce; border-radius: 12px; }
+.invitation-label { color: #6d665b; font-size: 10px; margin-bottom: 10px; }
+.invitation-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.8 'SFMono-Regular', Consolas, monospace; }
+.invitation-text code { font: inherit; }
 .invite-views { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 25px; }
 .invite-views figure { margin: 0; min-width: 0; }
 .invite-visual { background: white; border: 1px solid #e2dfd7; border-radius: 16px; overflow: hidden; min-height: 340px; }
@@ -126,9 +128,8 @@ p { color: var(--muted); }
   .story-preview.is-meeting { padding: 27px 22px; }
   .invite-views { grid-template-columns: 1fr; gap: 25px; }
   .invite-heading h2 { font-size: 22px; }
-  .invite-link { flex-wrap: wrap; gap: 7px 10px; padding: 13px; }
-  .invite-link code { flex: 1; font-size: 11px; }
-  .invite-link > span { flex-basis: 100%; padding-left: 31px; }
+  .invitation-card { padding: 14px; }
+  .invitation-text { font-size: 11px; }
   .invite-visual { height: auto; min-height: 335px; }
 }
 @media (max-width: 420px) {

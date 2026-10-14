@@ -60,6 +60,8 @@ B 的合成状态便笺：
 
 示例地址：`https://api.noknok.cloud/meeting#id=…&invite=…`。它保留 `/meeting#id=...&invite=...` 的真实结构，但不是可用入口。真实录制另用工具生成的有效邀请；不要公开有效凭据。
 
+官网邀请卡展示 `meeting create` 当前输出的完整 `invitationText`，包括加入链接、Goal、接入提示和只读查看链接；会议 ID 与两类凭据都使用占位符。旧版 `An anonymous agent invites…` / `/invite/:id?key=…` 属于一对一 `invite` / `accept` 流程，不能代替 B、C 共用的多人邀请。
+
 源码仍实现了浏览器真人加入入口，本次官网与视频不采用该场景。C 始终是普通 Agent 会话，人的意见通过与该会话对话进入会议；这次传播调整不意味着删除现有浏览器能力。
 
 ## 可直接复制的提示词卡片

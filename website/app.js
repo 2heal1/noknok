@@ -53,6 +53,15 @@ function updateSceneCopy() {
     const row = make('div', undefined, `story-message ${avatar === 'd' ? 'from-dot' : avatar === 'g' ? 'from-grok' : 'from-session'}`);
     const mark = make('span', avatar, 'message-avatar');
     mark.setAttribute('aria-hidden', 'true');
+    if (avatar === 'd') {
+      const icon = make('img');
+      icon.src = './brand/dot.svg';
+      icon.alt = '';
+      icon.width = 81;
+      icon.height = 81;
+      mark.classList.add('product-avatar');
+      mark.replaceChildren(icon);
+    }
     const body = make('div', undefined, 'message-body');
     body.append(make('strong', name), make('p', t(content)));
     row.append(mark, body);

@@ -18,9 +18,9 @@ The homepage has no FAQ, long deployment section, repeated call-to-action blocks
 
 ## Meeting invitation scene
 
-“邀请开会” shows one illustrative invitation and two HTML scene panels: Grokbot joins on the left; an ordinary Trae conversation joins as **Trae · Session** on the right. The second panel shows a person giving their session an acceptance condition, followed by Trae relaying it into the shared meeting. C is this session, not a person joining through the meeting browser UI. A connected ordinary Trae / Codex session is sufficient for this flow; a persistent personal agent is not required.
+“邀请开会” keeps the meeting title “周五发布前的最后一次对齐” and shows one illustrative invitation and two HTML scene panels: Grokbot joins on the left; an ordinary Trae conversation joins as **Trae · Session** on the right. The second panel shows a person giving their session an acceptance condition, followed by Trae relaying it into the shared meeting. C is this session, not a person joining through the meeting browser UI. A connected ordinary Trae / Codex session is sufficient for this flow; a persistent personal agent is not required.
 
-Show the deployment address with its real invitation URL shape and redacted meeting ID and token: `https://api.noknok.cloud/meeting#id=…&invite=…`. Both panels refer to the same example meeting. The link `?scene=meeting#demo` opens this scene directly, including when a recording is configured. Label the address as an example and the panels as illustrations; they are neither functioning meeting entries nor screenshots of verified host integrations. Do not embed live invitation credentials or turn the redacted address into a join link.
+Show the full `invitationText` template from `src/meeting-client.mjs`: the join link, goal, agent/browser instructions, and read-only view link. Redact the meeting ID and both credentials, using `https://api.noknok.cloud/meeting#id=…&invite=…` and `https://api.noknok.cloud/meeting#id=…&view=…`. Keep the actual English CLI instructions in both website languages; only the illustrative meeting goal follows the page language. The older `An anonymous agent invites…`, `/invite/<callId>?key=…`, `Session:` and `/view#session=…` format belongs to the two-party `invite` / `accept` flow and must not stand in for a reusable group-meeting invitation. Both panels refer to the same example meeting. The link `?scene=meeting#demo` opens this scene directly, including when a recording is configured. Label the address as an example and the panels as illustrations; they are neither functioning meeting entries nor screenshots of verified host integrations. Do not embed live invitation credentials or turn the redacted address into a join link.
 
 The repository still implements browser-based human participation. That is an existing implementation capability, not the C role or the public story used here; this content change does not remove or deny it.
 
@@ -69,6 +69,12 @@ The website uses the identity from merged PR #6. The [brand guide](brand/README.
 Body text and primary buttons use charcoal `#252823` (`--ink`); the demo background uses ivory `#F7F3EA` (`--panel`). The page stays near-white and the demo illustrations retain their soft colors. Honey `#D89945` is preserved in the brand artwork; do not use it for small text on a light background.
 
 Keep these as real copies inside `website/`, with relative asset URLs. The preview server does not serve `docs/brand/` or follow symlinks. When the identity changes, regenerate the canonical assets through `docs/brand/source/` first, then copy the selected exports to the paths above and update the visible copy from `brand.json`. Do not independently redraw the website logo or typeset the lowercase wordmark. Preserve each asset's aspect ratio, clear space, and accessible alternative text; check the header and 16/32 px favicons at their actual display size. The supplied SVGs contain outlined text and require no external fonts.
+
+## Third-party product marks
+
+The small dot avatars use OpenAI’s original [dot SVG](https://images.ctfassets.net/8su2tbn87fck/PulStHeDuz5begF06sEwk/c2080ae53243122046ba61074a5f0bd2/dots-o-updated.svg), as used by the [official dot page](https://chatgpt.com/zh-Hans-CN/features/dots/), copied without changes to `website/brand/dot.svg`. It belongs to OpenAI and is used only to identify dot in illustrative product interactions, subject to [OpenAI’s brand guidelines](https://openai.com/brand/). Preserve the original proportions and colors. Do not imply partnership, endorsement, or verified integration. Attribution is included in the guide.
+
+Grokbot retains its text/letter avatar: a verifiable Grok Bot icon could not be retrieved from the official public sources. Do not substitute an unverified drawing or claim a general Grok mark is a Bot-specific icon. Any future official asset must follow the [Grok brand guidelines](https://x.ai/legal/brand-guidelines).
 
 ## Add the recording
 

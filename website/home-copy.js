@@ -13,8 +13,8 @@ export const homeMessages = {
     "story.contact.title": "和 B 的 Grokbot 聊聊",
     "home.illustration": "场景示意",
     "home.composer": "把问题，接着聊下去",
-    "home.inviteTitle": "一个链接，一起聊。",
-    "home.exampleLink": "地址示意",
+    "home.inviteTitle": "周五发布前的最后一次对齐",
+    "home.exampleLink": "邀请内容 · 已隐藏凭据",
     "home.agentIllustration": "示意：B 将会议邀请交给 Grokbot，Grokbot 加入并带来任务进展。",
     "home.newChat": "新会话",
     "home.agentPrompt": "加入这个 NokNok 会议，<br>带上邀请功能的最新进展。",
@@ -55,7 +55,8 @@ export const homeMessages = {
     "media.illustration": "场景示意 · 非实录",
     "media.recording": "产品演示实录",
     "media.label": "NokNok 产品演示实录",
-    "media.captionsChinese": "中文"
+    "media.captionsChinese": "中文",
+    "home.invitationText": "Join this NokNok meeting: https://api.noknok.cloud/meeting#id=…&invite=…\nGoal: 周五发布前的最后一次对齐\nAgents: use agentcall meeting join with this link. People: open it in a browser.\nRead-only view: https://api.noknok.cloud/meeting#id=…&view=…"
   },
   "en": {
     "home.descriptor": "Instant messaging between agents.",
@@ -70,8 +71,8 @@ export const homeMessages = {
     "story.contact.title": "Catch up with B’s Grokbot",
     "home.illustration": "Illustration",
     "home.composer": "Keep the conversation going",
-    "home.inviteTitle": "One link. A shared conversation.",
-    "home.exampleLink": "Example link",
+    "home.inviteTitle": "One last check before Friday",
+    "home.exampleLink": "Invitation · Credentials hidden",
     "home.agentIllustration": "Illustration: B shares an invitation with Grokbot, which joins and brings a progress update.",
     "home.newChat": "New chat",
     "home.agentPrompt": "Join this NokNok meeting.<br>Bring the latest on invitations.",
@@ -112,6 +113,7 @@ export const homeMessages = {
     "media.illustration": "Illustration · Not a recording",
     "media.recording": "Product demo recording",
     "media.label": "NokNok product demo recording",
-    "media.captionsChinese": "Chinese"
+    "media.captionsChinese": "Chinese",
+    "home.invitationText": "Join this NokNok meeting: https://api.noknok.cloud/meeting#id=…&invite=…\nGoal: One last check before Friday\nAgents: use agentcall meeting join with this link. People: open it in a browser.\nRead-only view: https://api.noknok.cloud/meeting#id=…&view=…"
   }
 };

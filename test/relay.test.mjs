@@ -87,7 +87,7 @@ test('invitation details are plain text, include pinned setup and remain inert u
   assert.ok(details.includes(`Session：${call.call.id}`));
   assert.ok(details.includes(`只读查看：${call.viewUrl}`));
   assert.ok(details.includes(call.call.expiresAt));
-  assert.ok(details.includes(`npx --yes --registry=https://registry.npmjs.org ${PACKAGE.name}@${PACKAGE.version} skill`));
+  assert.ok(details.includes(`npm exec --yes --registry=https://registry.npmjs.org --package=${PACKAGE.name}@${PACKAGE.version} -- noknok skill`));
   assert.equal(details.includes(call.callerToken), false);
   const task = JSON.parse(details.slice(details.indexOf('{\n  "purpose"')));
   assert.deepEqual(task, { purpose: call.call.purpose, context });
@@ -103,7 +103,7 @@ test('invitation details are plain text, include pinned setup and remain inert u
   assert.deepEqual(untouched.body.events, []);
   assert.equal(untouched.body.call.participants.callee, null);
 
-  const match = details.match(/^npx .* accept '([^']+)' --name 'Agent B'$/m);
+  const match = details.match(/^npm exec .* -- noknok accept '([^']+)' --name 'Agent B'$/m);
   assert.ok(match, 'details provide an executable HTTPS accept command');
   const accepted = new URL(match[1]);
   assert.equal(accepted.origin, f.url);
@@ -143,7 +143,7 @@ test('joined, completed and cancelled invitation pages reveal status only', asyn
     assert.equal(response.status, 200);
     const body = await response.text();
     assert.ok(body.includes(expected));
-    for (const forbidden of ['private-owner', 'private-purpose', 'private-context', 'npx', '?key=', call.call.id]) assert.equal(body.includes(forbidden), false, forbidden);
+    for (const forbidden of ['private-owner', 'private-purpose', 'private-context', 'npm exec', '?key=', call.call.id]) assert.equal(body.includes(forbidden), false, forbidden);
   }
   await statusOnly(call.invitationUrl, '已接听');
   for (const token of [call.callerToken, calleeToken]) await f.request(`${call.path}/finish`, { method: 'POST', token, body: {} });
@@ -166,7 +166,7 @@ test('reading an invitation or shared session does not extend the invitation dea
   const details = await response.text();
   assert.match(details, /已过期/);
   assert.equal(details.includes(call.call.context), false);
-  assert.equal(details.includes('npx'), false);
+  assert.equal(details.includes('npm exec'), false);
   const state = await f.request(call.path, { token: call.callerToken });
   assert.equal(state.body.call.expiresAt, call.call.expiresAt);
   assert.equal(state.body.call.state, 'expired');

@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Stable and preview share the registry. Never interrupt an active publish.
+concurrency:
+  group: noknok-npm-release
+  cancel-in-progress: false
+
+jobs:
+  stable:
+    if: github.repository == '2heal1/noknok' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js and npm registry
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.18.1
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Pin npm
+        run: npm install --global npm@11.16.0
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm run check
+      - name: Inspect distributable package
+        run: npm run check:package
+      - name: Show package contents
+        run: npm pack --dry-run
+      - name: Create or update the release pull request
+        id: changesets
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # changesets/action@v1 (v1.9.0)
+        with:
+          version: npm run version
+          title: 'chore: release @noknok/cli'
+          commit: 'chore: release @noknok/cli'
+          createGithubReleases: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish stable version through npm OIDC
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          assert.equal(pkg.name, '@noknok/cli');
+          assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
+          NODE
+          if ! npm view @noknok/cli name --registry=https://registry.npmjs.org; then
+            echo '::error::Bootstrap the first npm version and configure the release.yml trusted publisher before running an OIDC release.'
+            exit 1
+          fi
+          npm run release
+          version="$(node -p "require('./package.json').version")"
+          test "$(npm view "@noknok/cli@$version" version --registry=https://registry.npmjs.org)" = "$version"
+          test "$(npm view @noknok/cli dist-tags.latest --registry=https://registry.npmjs.org)" = "$version"
+          printf 'Verified stable package: `@noknok/cli@%s`\n' "$version" >> "$GITHUB_STEP_SUMMARY"
+
+  preview:
+    if: github.repository == '2heal1/noknok' && github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out selected branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node.js and npm registry
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.18.1
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Pin npm
+        run: npm install --global npm@11.16.0
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm run check
+      - name: Require a pending package release
+        run: |
+          npm exec -- changeset status --output="$RUNNER_TEMP/noknok-release-plan.json"
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const plan = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'noknok-release-plan.json'), 'utf8'));
+          assert.ok(plan.releases.some(release => release.name === '@noknok/cli' && release.type !== 'none'),
+            'Preview requires a committed non-empty changeset for @noknok/cli. Add one before dispatching.');
+          NODE
+      - name: Create an isolated preview version
+        run: |
+          npm exec -- changeset version --snapshot preview
+          npm install --package-lock-only --ignore-scripts
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          assert.equal(pkg.name, '@noknok/cli');
+          assert.match(pkg.version, /^\d+\.\d+\.\d+-preview-/);
+          NODE
+      - name: Inspect preview package
+        run: npm run check:package
+      - name: Show preview package contents
+        run: npm pack --dry-run
+      - name: Publish preview through npm OIDC
+        run: |
+          if ! npm view @noknok/cli name --registry=https://registry.npmjs.org; then
+            echo '::error::Bootstrap the first npm version and configure the release.yml trusted publisher before running an OIDC preview.'
+            exit 1
+          fi
+          npm exec -- changeset publish --tag preview --no-git-tag
+          version="$(node -p "require('./package.json').version")"
+          test "$(npm view "@noknok/cli@$version" version --registry=https://registry.npmjs.org)" = "$version"
+          test "$(npm view @noknok/cli dist-tags.preview --registry=https://registry.npmjs.org)" = "$version"
+          printf 'Verified preview: `@noknok/cli@%s`\n\n' "$version" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Try this exact version:\n\n```sh\nnpm exec --yes --package=@noknok/cli@%s -- noknok --help\n```\n' "$version" >> "$GITHUB_STEP_SUMMARY"

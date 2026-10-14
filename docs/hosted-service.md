@@ -10,7 +10,7 @@ For a Node.js 24/Caddy/SQLite deployment, use [the hosted deployment guide](depl
 
 ## Local development before a domain is ready
 
-Use the checked-out source. These instructions do not assume this version is published to npm.
+Install a published version with `npm install --global @noknok/cli`, or use the checked-out source for an unpublished branch. The examples below use `node bin/noknok.mjs`; an installed CLI can use `noknok` instead.
 
 ```sh
 node bin/noknok.mjs hosted-server --data-dir .noknok-service --public-url http://127.0.0.1:4317

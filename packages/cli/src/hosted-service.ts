@@ -9,6 +9,8 @@ import { Readable } from 'node:stream';
 import { EventEmitter } from 'node:events';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { createAdmin, validateAdminKeyHash } from './admin.js';
+import { createAdminMetrics } from './admin-metrics.js';
 import { createMeetings } from './meetings.js';
 import { openHostedStore } from './hosted-store.js';
 import { createHostedEvents } from './hosted-events.js';
@@ -88,7 +90,7 @@ export function clientRateKey(req: Pick<http.IncomingMessage, 'socket' | 'header
 }
 
 export interface HostedServiceOptions {
-  dataDir?: string; publicUrl?: string; port?: number; host?: string;
+  dataDir?: string; publicUrl?: string; port?: number; host?: string; adminKeyHash?: string;
   maxAccounts?: number; maxAgentsPerAccount?: number; maxMeetings?: number; maxOwnerMeetings?: number;
   maxParticipants?: number; maxRoomBytes?: number; maxTotalBytes?: number;
   meetingTtlMs?: number; idleTtlMs?: number; retentionMs?: number; deliveryTtlMs?: number; maxEvents?: number;
@@ -125,14 +127,17 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
   idleTtlMs, meetingTtlMs = 7_200_000, retentionMs = 600_000, deliveryTtlMs = 300_000, maxEvents = 500,
   maxDailyEgressBytes = 512 * 1024 * 1024, maxAccountDailyEgressBytes = 50 * 1024 * 1024,
   maxDailyPublicEgressBytes = 64 * 1024 * 1024, trustProxy = false,
-  webhookPost, eventOptions = {}, store: suppliedStore }: HostedServiceOptions = {}) {
+  adminKeyHash, webhookPost, eventOptions = {}, store: suppliedStore }: HostedServiceOptions = {}) {
   if (typeof trustProxy !== 'boolean') throw new TypeError('trustProxy must be a boolean.');
   if (!Number.isSafeInteger(maxDailyPublicEgressBytes) || maxDailyPublicEgressBytes < 1) throw new TypeError('maxDailyPublicEgressBytes must be positive.');
   if (!dataDir && !suppliedStore) throw new TypeError('A persistent dataDir is required.');
   if (!publicUrl) throw new TypeError('publicUrl is required.');
+  validateAdminKeyHash(adminKeyHash);
   const realm = validOrigin(publicUrl);
   const store = suppliedStore || openHostedStore({ dataDir, realm, maxAccounts, maxAgentsPerAccount });
   if (store.realm !== realm) throw new TypeError('Store belongs to a different service space.');
+  const metrics = adminKeyHash ? createAdminMetrics(store.dataDir) : undefined;
+  function authenticate(token) { const actor = store.authenticate(token); metrics?.remember(actor); return actor; }
   const processKey = randomBytes(32);
   const sessions = new Map(), invitations = new Map<string, MeetingInvitation>(), operations = new Map<string, PendingOperation>(), rates = new Map();
   const activeRequests = new Map(), notificationFailures = new Map();
@@ -178,6 +183,18 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
   }
   function sessionKey(agent, meetingId) { return `${agent}:${meetingId}`; }
   function onMeetingEvent(room, event) {
+    if (metrics) {
+      if (event.type === 'started') metrics.record('meetings');
+      else if (event.type === 'joined') {
+        metrics.record('joins');
+        if (!room.participants.get(event.data?.participant?.id)?.authId) metrics.record('guestJoins');
+      } else if (['message', 'request', 'result', 'progress', 'waiting_for_user'].includes(event.type)) metrics.record('messages');
+      else if (event.type === 'closed') metrics.record('closed');
+      if (event.type === 'started' || event.type === 'joined' || ['message', 'request', 'result', 'progress', 'waiting_for_user'].includes(event.type)) {
+        const id = event.type === 'started' ? room.hostId : event.type === 'joined' ? event.data?.participant?.id : event.from;
+        metrics.activity(room.participants.get(id)?.authId);
+      }
+    }
     if (!['message', 'request', 'result', 'progress', 'waiting_for_user', 'closed', 'joined', 'ready', 'left'].includes(event.type)) return;
     for (const invite of invitations.values()) if (invite.meetingId === room.id && event.from === sessions.get(sessionKey(invite.recipient, room.id))?.result.participant.id && ['message', 'request', 'result'].includes(event.type)) invite.replied = true;
     // Run after the mutation is committed. The queue holds only IDs, never message data.
@@ -195,9 +212,10 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
   }
   const meetings = createMeetings({ getUrl: () => realm, maxMeetings, maxOwnerMeetings, maxParticipants,
     maxRoomBytes, maxTotalBytes, meetingTtlMs, idleTtlMs, retentionMs, deliveryTtlMs, maxEvents, onEvent: onMeetingEvent,
+    onBodyState(state) { metrics?.record(state === 'recipient_unavailable' ? 'unavailable' : state); },
     isParticipantAvailable(room, participant) { return activeAgent(room.ownerAgentId) && (!participant.authId || activeAgent(participant.authId)); },
     authorizeCreate(req) {
-      const actor = req.noknokActor || store.authenticate(bearer(req));
+      const actor = req.noknokActor || authenticate(bearer(req));
       if (!activeAgent(actor.agentId)) throw failure(403, 'agent_revoked', 'Agent access was revoked.');
       return actor;
     },
@@ -404,6 +422,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
       try { const value = await callTool(actor, params); return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, isError: false }; }
       catch (error) {
         if (error instanceof RpcError) throw error;
+        metrics?.record('businessErrors');
         const value = { error: { code: typeof error.code === 'string' ? error.code : 'operation_failed', message: error.status ? error.message : 'Operation failed.' } };
         return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, isError: true };
       }
@@ -411,15 +430,35 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
     throw new RpcError(-32601, 'Method not found.');
   }
 
+  const admin = createAdmin({ keyHash: adminKeyHash, realm, snapshot: () => {
+    const usage = metrics?.snapshot();
+    return { version: PACKAGE.version, identities: store.operatorSummary(), runtime: { ...meetings.stats(),
+      uptimeSeconds: Math.floor(process.uptime()), memoryBytes: process.memoryUsage().rss,
+      maxMeetings, maxTotalBytes, maxAccounts }, metrics: usage ? { ...usage, days: usage.days.slice(-30) } : undefined };
+  } });
   const server = http.createServer(async (req, res) => {
-    let actorKey;
-    let responseBudget: 'egress_bytes' | 'public_egress_bytes' | undefined = 'public_egress_bytes';
+    let actorKey, adminRequest = false, measured = false, latencySample = false, responseBytes = 0;
+    const requestStarted = metrics ? performance.now() : 0;
+    if (metrics) res.once('finish', () => {
+      if (!measured) return;
+      metrics.record('requests'); metrics.record('responseBytes', responseBytes);
+      if (res.statusCode >= 500) metrics.record('errors5xx');
+      else if (res.statusCode >= 400) metrics.record('errors4xx');
+      if (res.statusCode === 429) metrics.record('limited');
+      if (latencySample) {
+        const ms = Math.round(performance.now() - requestStarted);
+        metrics.record('latencyMs', ms); metrics.record('latencySamples');
+        metrics.record(ms < 100 ? 'latencyUnder100' : ms < 1000 ? 'latencyUnder1000' : 'latencyOver1000');
+      }
+    });
+    let responseBudget: 'egress_bytes' | 'public_egress_bytes' | 'admin_egress_bytes' | undefined = 'public_egress_bytes';
     const originalEnd = res.end.bind(res), originalHead = res.writeHead.bind(res);
     let pendingHead;
     res.writeHead = (...args) => { pendingHead = args; return res; };
     res.end = (data, ...rest) => {
       if (businessResponses.has(res)) responseBudget = 'egress_bytes';
       const bytes = data === undefined ? 0 : Buffer.byteLength(data);
+      responseBytes = bytes;
       // Authenticated metadata/discovery responses also need an account cap;
       // otherwise one registered client could drain the whole business budget.
       if (actorKey && bytes && pendingHead?.[0] < 400) {
@@ -430,11 +469,11 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
           return originalEnd(JSON.stringify({ error: { code: 'account_egress_limit', message: 'Daily account response budget reached.' } }));
         }
       }
-      try { if (bytes && responseBudget) store.consumeServiceQuota(responseBudget, { limit: responseBudget === 'egress_bytes' ? maxDailyEgressBytes : maxDailyPublicEgressBytes, windowMs: DAY, amount: bytes }); }
+      try { if (bytes && responseBudget) store.consumeServiceQuota(responseBudget, { limit: responseBudget === 'egress_bytes' ? maxDailyEgressBytes : responseBudget === 'admin_egress_bytes' ? 64 * 1024 * 1024 : maxDailyPublicEgressBytes, windowMs: DAY, amount: bytes }); }
       catch {
         if (res.headersSent) { res.destroy(); return res; }
         originalHead(429, HEADERS);
-        return originalEnd(JSON.stringify({ error: { code: responseBudget === 'egress_bytes' ? 'service_egress_limit' : 'public_egress_limit', message: 'Daily response budget reached.' } }));
+        return originalEnd(JSON.stringify({ error: { code: responseBudget === 'egress_bytes' ? 'service_egress_limit' : responseBudget === 'admin_egress_bytes' ? 'admin_egress_limit' : 'public_egress_limit', message: 'Daily response budget reached.' } }));
       }
       if (pendingHead) Reflect.apply(originalHead, res, pendingHead);
       return originalEnd(data, ...rest);
@@ -448,6 +487,10 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
       if (typeof req.url !== 'string' || req.url.length > 2048 || req.url.includes('#')) throw failure(400, 'invalid_url', 'Invalid request URL.');
       const url = new URL(req.url, realm);
       if (url.origin !== realm) throw failure(400, 'invalid_url', 'Absolute upstream URLs are not supported.');
+      adminRequest = url.pathname === '/admin' || url.pathname.startsWith('/admin/');
+      if (adminRequest) { responseBudget = 'admin_egress_bytes'; if (await admin.handle(req, res, url)) return; }
+      measured = url.pathname.startsWith('/v1/') || url.pathname === '/mcp' || url.pathname.startsWith('/mcp/');
+      latencySample = measured && !(req.method === 'GET' && url.pathname.endsWith('/events'));
       const hosted = url.pathname.startsWith('/v1/hosted') || url.pathname.startsWith('/mcp');
       if (req.headers.origin !== undefined && (hosted || req.headers.origin !== realm)) throw failure(403, 'origin_denied', 'Origin not allowed.');
       cleanup();
@@ -474,7 +517,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
       if (url.pathname === '/mcp' || /^\/mcp\/[^/]+$/.test(url.pathname)) {
         const pathToken = url.pathname === '/mcp' ? undefined : url.pathname.slice(5);
         if (pathToken && bearer(req) && pathToken !== bearer(req)) throw failure(401, 'credential_mismatch', 'Conflicting credentials.');
-        const actor = store.authenticate(pathToken || bearer(req)); actorKey = actor.agentId;
+        const actor = authenticate(pathToken || bearer(req)); actorKey = actor.agentId;
         responseBudget = 'egress_bytes';
         limit(`agent:${actorKey}`, 240);
         activeRequests.set(actorKey, (activeRequests.get(actorKey) || 0) + 1);
@@ -482,7 +525,7 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
         const input = await body(req);
         if (closing) throw failure(503, 'closing', 'Service is stopping.');
         // Credentials may have been revoked while a slow request was uploading.
-        store.authenticate(pathToken || bearer(req));
+        authenticate(pathToken || bearer(req));
         if (input.id === undefined) {
           if (input.jsonrpc !== '2.0' || !['notifications/initialized', 'notifications/cancelled'].includes(input.method)) throw failure(400, 'invalid_notification', 'Unsupported notification.');
           return send(res, 202);
@@ -506,12 +549,12 @@ export async function startHostedService({ dataDir, publicUrl, port = 4317, host
   let maintenanceTicks = 0;
   const timer = setInterval(() => { cleanup(); if (++maintenanceTicks % 60 === 0) store.cleanup(); }, 1000); timer.unref();
   try { await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, host, () => { server.off('error', reject); resolve(); }); }); }
-  catch (error) { clearInterval(timer); events.close(); meetings.close(); if (!suppliedStore) store.close(); throw error; }
+  catch (error) { clearInterval(timer); admin.close(); await metrics?.close(); events.close(); meetings.close(); if (!suppliedStore) store.close(); throw error; }
   const address = server.address() as AddressInfo, accessibleHost = ['::', '0.0.0.0'].includes(host) ? '127.0.0.1' : host.includes(':') ? `[${host}]` : host;
   return { server, store, events, url: realm, origin: `http://${accessibleHost}:${address.port}`, meetings,
     async close() {
       if (closing) return; closing = true; clearInterval(timer);
-      await events.close(); meetings.close();
+      admin.close(); await events.close(); meetings.close(); await metrics?.close();
       sessions.clear(); invitations.clear(); operations.clear(); rates.clear(); notificationFailures.clear();
       await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); });
       if (!suppliedStore) store.close();

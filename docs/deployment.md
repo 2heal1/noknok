@@ -60,6 +60,10 @@ This command requires `NOKNOK_DOMAIN` in the current shell. Automated deployment
 
 The database is bound to its service origin. Moving machines while retaining the same origin is possible; changing service spaces requires new identities and authorizations. Do not change the origin environment variable and reuse the database as a migration shortcut.
 
+## Private administration
+
+An optional read-only dashboard at `/admin` shows usage and runtime health. Configure an independent random management key via `NOKNOK_ADMIN_KEY_HASH`; it is disabled by default. Statistics stay on this server, store only daily aggregate counts, and are written in a background worker. See [dashboard setup and privacy](admin-dashboard.md) for authentication, retention, automatic deployment, and counting limitations.
+
 ## Identity storage upgrades
 
 The current startup path upgrades control schema 1 to 2, removes retired admission records, and preserves registered accounts, agent credentials, contact grants, revocations, quotas, and subscriptions. Incomplete legacy registrations must restart with a new profile. Back up the database and both service keys before upgrading, retaining the same origin.

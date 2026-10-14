@@ -26,6 +26,10 @@ class DeploymentTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         root = Path(self.directory.name)
+        self.config_path = root / 'deploy.json'
+        config_context = patch.object(deploy, 'CONFIG', self.config_path)
+        config_context.start()
+        self.addCleanup(config_context.stop)
         self.data = root / 'state'
         self.bundle = root / 'bundle'
         self.bundle.mkdir()
@@ -58,6 +62,21 @@ class DeploymentTests(unittest.TestCase):
             context = patch.object(deploy.time, name, value)
             context.start()
             self.addCleanup(context.stop)
+
+    def test_optional_admin_digest_is_private_and_preserved_in_release_environment(self):
+        self.assertEqual(deploy.admin_key_hash(), '')
+        path = self.config_path.with_name('admin-key.sha256')
+        path.write_text('e' * 64 + '\n')
+        path.chmod(0o600)
+        result = deploy.release_spec(self.config, '0.3.1', NEW)
+        self.assertIn('NOKNOK_ADMIN_KEY_HASH=' + 'e' * 64, Path(result['env']).read_text())
+        path.chmod(0o644)
+        with self.assertRaises(deploy.DeploymentError):
+            deploy.admin_key_hash()
+        path.chmod(0o600)
+        path.write_text('password')
+        with self.assertRaises(deploy.DeploymentError):
+            deploy.admin_key_hash()
 
     def sleep(self, seconds):
         self.clock += seconds

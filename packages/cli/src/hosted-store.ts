@@ -367,6 +367,18 @@ export class HostedStore {
       ? this.db.prepare('DELETE FROM subscriptions WHERE agent_id=?').run(agentId).changes
       : this.db.prepare('DELETE FROM subscriptions WHERE agent_id=? AND subscription_id=?').run(agentId, text(subscriptionId, 'subscriptionId')).changes);
   }
+  operatorSummary() {
+    const now = this.now();
+    const count = (sql: string, ...values: SQLInputValue[]) => this._requiredRow(sql, ...values).n;
+    return {
+      accounts: count('SELECT COUNT(*) n FROM accounts'),
+      enabledAccounts: count('SELECT COUNT(*) n FROM accounts WHERE active=1'),
+      agents: count('SELECT COUNT(*) n FROM agents'),
+      enabledAgents: count('SELECT COUNT(*) n FROM agents a JOIN accounts u ON u.id=a.account_id WHERE a.active=1 AND u.active=1'),
+      subscriptions: count('SELECT COUNT(*) n FROM subscriptions s JOIN agents a ON a.id=s.agent_id JOIN accounts u ON u.id=a.account_id WHERE s.expires_at>? AND a.active=1 AND u.active=1', now),
+      serviceResponseBytesToday: count("SELECT COALESCE(SUM(count),0) n FROM quotas WHERE owner='service' AND bucket='egress_bytes' AND expires_at>?", now),
+    };
+  }
   cleanup() {
     const now = this.now();
     for (const table of ['offer_claims', 'revocations', 'quotas', 'subscriptions']) this.db.prepare(`DELETE FROM ${table} WHERE expires_at<=?`).run(now);

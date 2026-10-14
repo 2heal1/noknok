@@ -198,6 +198,7 @@ export function createMeetings(options: MeetingOptions) {
     const before = Buffer.byteLength(JSON.stringify(event));
     delete event.data;
     event.bodyState = state;
+    options.onBodyState?.(state);
     room.bytes += Buffer.byteLength(JSON.stringify(event)) - before;
     room.deliveries.get(event.seq).awaitFirstPeer = false;
   }
@@ -551,7 +552,7 @@ export function createMeetings(options: MeetingOptions) {
       return true;
     },
     inspect(id) { cleanup(); const room = rooms.get(id); return room ? { ...summary(room), ownerId: room.ownerId, ownerAgentId: room.ownerAgentId } : undefined; },
-    stats() { cleanup(); return { rooms: rooms.size, bytes: [...rooms.values()].reduce((n, room) => n + room.bytes, 0) }; },
+    stats() { cleanup(); return { rooms: rooms.size, activeRooms: [...rooms.values()].filter(room => room.state === 'active').length, bytes: [...rooms.values()].reduce((n, room) => n + room.bytes, 0), pendingBytes: [...rooms.values()].reduce((n, room) => n + room.events.reduce((sum, event) => sum + (event.data === undefined ? 0 : Buffer.byteLength(JSON.stringify(event.data))), 0), 0) }; },
     close() {
       if (closing) return;
       closing = true;

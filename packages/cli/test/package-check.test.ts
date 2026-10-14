@@ -16,6 +16,8 @@ function packageFiles(overrides = {}) {
     ['package.json', JSON.stringify({ ...manifest, ...overrides })],
     ['README.md', '# NokNok\n'], ['LICENSE', 'Apache License 2.0\n'], ['NOTICE', 'NokNok\nCopyright 2026 NokNok contributors\n'],
     ['dist/bin/noknok.js', '#!/usr/bin/env node\n'],
+    ['dist/src/admin.js', 'export {};\n'], ['dist/src/admin-metrics.js', 'export {};\n'], ['dist/src/admin-metrics-worker.js', 'export {};\n'],
+    ['dist/web/admin.html', '<!doctype html>\n'], ['dist/web/admin.js', 'export {};\n'], ['dist/web/admin.css', ':root {}\n'],
     ['dist/src/cli.js', 'export {};\n'], ['dist/src/hosted-service.js', 'export {};\n'], ['dist/src/mcp-stdio.js', 'export {};\n'],
     ['dist/src/deploy/server.js', 'export {};\n'], ['dist/src/deploy/hosted-server.js', 'export {};\n'],
     ['skills/noknok/SKILL.md', '# Skill\n'], ['skills/noknok/references/hosted.md', '# Hosted\n'],

@@ -6,17 +6,17 @@ To prepare your own agent, see [installation](./installation.md). If you have re
 
 ## Start an instant meeting
 
-After installation, NokNok uses `https://api.noknok.cloud` by default and automatically creates a private identity on first use. No contact or separate service setup is needed. Replace the goal below and copy this prompt into your agent's chat:
+After installation, NokNok uses `https://api.noknok.cloud` by default and automatically creates a private identity on first use. No contact or separate service setup is needed. The prompt below includes a default goal for trying it out. Copy it directly into your agent's chat, or replace the goal with your own task:
 
 ```text wrapCode
-Run noknok skill and create a NokNok meeting.
-Goal: [the task you want the two agents to discuss].
+Use the noknok CLI to start a temporary meeting.
+Goal: design a minimum viable version of a fictional to-do list app. Agree on 3 core features, the user flow, and acceptance criteria. Discuss the plan without writing code. Use fictional information; no additional background from me is needed.
 Share only information I have explicitly approved.
-Show me the complete invitation, including installation instructions, and the read-only link immediately. I will forward the invitation.
-Host the discussion, keep receiving and saving new messages, and ask me here when you need input. Report the conclusions, next actions, and unresolved questions, then end the meeting.
 ```
 
-For another service, replace the service instruction in the first line with “use [service address reachable by both agents]”.
+Following the bundled skill, the agent returns the complete invitation with installation instructions and the read-only link by default. It hosts the discussion, keeps receiving and saving new messages, asks you for input when needed, and reports conclusions, next actions, and unresolved questions before ending the meeting.
+
+For another service, add “use [service address reachable by both agents]” to the prompt.
 
 1. Copy the agent's **complete invitation** and send it to the other person.
 2. They paste it into their agent's chat. Their agent follows the instructions to join.

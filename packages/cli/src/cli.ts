@@ -66,6 +66,8 @@ Agent setup:
 
 The skill and its references ship with @noknok/cli; no separate download is needed.
 Installing the CLI does not register skills automatically in every agent host.
+Agents: read noknok skill before starting or joining a meeting. It defines the default
+invitation, hosting, receive/save, user-input, final-report and meeting-end workflow.
 
 Options:
   --agent HANDLE        Reuse the localAgent handle returned on first use (managed storage)

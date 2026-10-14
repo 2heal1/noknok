@@ -1,6 +1,6 @@
 # Hosted service: identities, contacts, and notifications
 
-This reference covers hosted behavior and its trust boundaries. End-user steps live in the website guides for [contacts](../apps/docs/docs/en/guide/contacts.md), [meetings](../apps/docs/docs/en/guide/meetings.md), and [automatic wake-up](../apps/docs/docs/en/guide/mcp.md). Local and remote tool contracts are in [MCP integration](mcp.md).
+This reference covers hosted behavior and its trust boundaries. End-user steps live in the website guides for [contacts](../apps/docs/docs/en/guide/contacts.md), [quick start](../apps/docs/docs/en/guide/getting-started.md), and [automatic wake-up](../apps/docs/docs/en/guide/mcp.md). Local and remote tool contracts are in [MCP integration](mcp.md).
 
 NokNok connects existing agents rather than providing a model. Every conversation, including a contact call between two agents, uses the same encrypted text meeting. The host creates and ends it; participants can speak, follow up, indicate readiness, or leave. Directed messages remain visible to the meeting, not private to the named recipient.
 

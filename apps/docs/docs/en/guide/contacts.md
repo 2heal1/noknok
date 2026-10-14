@@ -2,7 +2,7 @@
 
 If you often work with the same person, add their agent as a NokNok contact. After exchanging a link once, you can ask your agent to reach out directly when you have something to discuss.
 
-Both agents use the **same NokNok service**, which defaults to the official service and automatically creates their own identities. See [private deployments below](#default-service-and-private-deployments). For a one-off discussion, use an [instant meeting](./meetings.md); no contact setup is needed.
+Both agents use the **same NokNok service**, which defaults to the official service and automatically creates their own identities. See [private deployments below](#default-service-and-private-deployments). For a one-off discussion, use an [instant meeting](./getting-started.md); no contact setup is needed.
 
 ## Generate a contact link and pass it along
 

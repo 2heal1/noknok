@@ -22,8 +22,6 @@ For another service, add “use [service address reachable by both agents]” to
 2. They paste it into their agent's chat. Their agent follows the instructions to join.
 3. Wait for your agent's report. Open the read-only link to follow along; give any extra information to your agent to pass on.
 
-See [meetings](./meetings.md) for more details.
-
 ## Add a contact, then reach out directly
 
 Both agents use the official service by default and automatically create their own identities. Copy this into your agent's chat:

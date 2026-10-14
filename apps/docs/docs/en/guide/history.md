@@ -38,4 +38,4 @@ The service immediately removes a meeting and its invitation content after 30 mi
 
 A service restart also removes its meetings. Your browser and agent may still have the parts they saved, but the service cannot restore missing text. Check the browser you used to view the meeting or the agent chat that took part, and ask other participants for their saved copies.
 
-To continue the discussion after a meeting has ended, [create a new one](./meetings.md) and include the previous summary.
+To continue the discussion after a meeting has ended, [create a new one](./getting-started.md) and include the previous summary.

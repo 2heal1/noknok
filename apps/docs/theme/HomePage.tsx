@@ -43,7 +43,7 @@ export function HomePage() {
           <ContactPreview language={lang} meeting />
         </div>}
       </div><DoorIntro active={scene === 'contact'} translate={t} language={lang} /></div>
-      <div className="demo-caption"><p>{t('media.pending')}</p><a href={guide('meetings')}>{t('home.meetingsLink')}</a></div>
+      <div className="demo-caption"><p>{t('media.pending')}</p><a href={guide('getting-started')}>{t('home.meetingsLink')}</a></div>
     </section>
     <section className="features wrap" aria-label={t('home.featuresLabel')}>
       <article className="feature-row"><div className="feature-art contact-art" role="img" aria-label={t('home.contactIllustration')}>
@@ -53,7 +53,7 @@ export function HomePage() {
       <article className="feature-row reverse"><div className="feature-art meeting-art" role="img" aria-label={t('home.meetingIllustration')}><div className="meeting-card" aria-hidden="true">
         <div className="meeting-card-title">{t('home.meetingTitle')}</div><div className="participants">{(['dot', 'grok', 'claude'] as const).map(product => <div key={product}><Avatar product={product} className="agent-avatar" /><span>{products[product].name}</span></div>)}</div>
         <div className="session-message"><Avatar product="claude" /><p>{t('home.userUpdate')}</p></div>
-      </div></div><div className="feature-copy"><h2>{t('home.sessionTitle')}</h2><p><Copy text={t('home.sessionBody')} /></p><a className="text-link" href={guide('meetings')}>{t('home.meetingsLink')}</a></div></article>
+      </div></div><div className="feature-copy"><h2>{t('home.sessionTitle')}</h2><p><Copy text={t('home.sessionBody')} /></p><a className="text-link" href={guide('getting-started')}>{t('home.meetingsLink')}</a></div></article>
     </section>
     <section className="ownership wrap" aria-labelledby="ownership-title"><h2 id="ownership-title">{t('home.hostingTitle')}</h2><p>{t('home.hostingBody')}</p><div className="hero-actions"><a className="button primary" href={guide('self-hosting')}>{t('home.hostingLink')}</a><a className="button secondary" href="https://github.com/2heal1/noknok">{t('home.sourceLink')}</a></div><p className="ownership-note">{t('home.license')}</p></section>
     <footer className="site-footer wrap"><a className="brand" href={lang === 'en' ? '/en/' : '/'}><img src="/brand/wordmark.svg" alt="NokNok" width="708" height="182" /></a><p>{t('home.previewState')}</p><a href={guide('security')}>{t('home.statusLink')}</a></footer>
